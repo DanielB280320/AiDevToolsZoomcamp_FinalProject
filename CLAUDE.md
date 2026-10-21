@@ -10,7 +10,7 @@ It is the final project of the AI Dev Tools Zoomcamp 2026 and is built by a team
 |---|---|---|
 | [docs/spec.md](docs/spec.md) | **Source of truth.** Requirements F1–F18 with acceptance criteria, formulas, data model, API outline, testing, deployment, CI/CD, observability, on-call, delivery order, decisions log | ✅ |
 | [docs/process.md](docs/process.md) | Workflow: issue lifecycle, status labels ↔ board, branches/worktrees, PRs, QA, releases, incidents | ✅ |
-| [docs/team.md](docs/team.md) | Agent team: PM, Engineer, QA, DevOps/SRE — responsibilities and hand-offs | planned (M0) |
+| [docs/team.md](docs/team.md) | Agent team: orchestrator, PM, Engineer, QA, DevOps/SRE — responsibilities and hand-offs. Definitions in `.claude/agents/` | ✅ |
 | [docs/architecture.md](docs/architecture.md) | Components, data flow, key design decisions | planned (M0) |
 | `docs/adr/` | Architecture decision records | planned |
 | `docs/runbooks/` | Incident runbooks used by the on-call agent | planned (M1) |
