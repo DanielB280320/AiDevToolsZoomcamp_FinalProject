@@ -29,7 +29,7 @@ How work moves from an idea to production in FitWise. Who does each step is defi
 |---|---|---|---|
 | `status:backlog` | Backlog | Issue created but not yet groomed, or dependencies still open | PM |
 | `status:ready` | Ready | Groomed (§3) and every dependency is closed | PM |
-| `status:in-progress` | In progress | An implementer starts work | Engineer / DevOps |
+| `status:in-progress` | In progress | An implementer starts work, or QA reports FAIL | Engineer / DevOps; QA on FAIL |
 | `status:in-qa` | In QA | PR open, CI green, implementer's self-check done | Engineer / DevOps |
 | `status:blocked` | *(card stays in its column)* | Waiting on another issue or a decision; the reason is commented | Anyone |
 | *(no label, issue closed)* | Done | PR merged after QA pass | Closed automatically by `Closes #N` |

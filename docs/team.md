@@ -38,7 +38,7 @@ Agent definitions live in [`.claude/agents/`](../.claude/agents/). Each runs as 
 ### PM — [`pm.md`](../.claude/agents/pm.md)
 - **Owns:** the backlog and the spec's consistency.
 - **Does:** turns spec sections into issues with testable AC; applies the Definition of Ready; splits large issues; moves issues Backlog → Ready when dependencies close; proposes spec changes as `docs/` PRs; keeps the decisions log current.
-- **Writes:** issues, issue comments, `docs/` only. Never production code or tests.
+- **Writes:** issues, issue comments, `docs/` and `.github/ISSUE_TEMPLATE/` only. Never production code or tests.
 
 ### Engineer — [`engineer.md`](../.claude/agents/engineer.md)
 - **Owns:** implementation of `role:engineer` issues (backend, frontend, engines).
