@@ -20,7 +20,7 @@ When a requirement is unclear, check `docs/spec.md` first; if it doesn't answer 
 
 ## Task tracker
 
-All work is tracked in **GitHub Issues** on this repo, grouped by milestone (`M0`…`M6`, see spec §16.2) and labelled by area, role and priority. Every issue has acceptance criteria; an issue is done only when all of them are verified.
+All work is tracked in **GitHub Issues** on this repo and on the public [FitWise Backlog board](https://github.com/users/DanielB280320/projects/1) (columns Backlog → Ready → In progress → In QA → Done mirror the `status:*` labels), grouped by milestone (`M0`…`M6`, see spec §16.2) and labelled by area, role and priority. Every issue has acceptance criteria; an issue is done only when all of them are verified.
 
 - Pick work with `gh issue list --milestone "<milestone>" --label "status:ready"`.
 - Comment on the issue when you start, when you hand off, and with QA results.
