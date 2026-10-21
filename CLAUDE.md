@@ -9,7 +9,7 @@ It is the final project of the AI Dev Tools Zoomcamp 2026 and is built by a team
 | Doc | What it holds | Status |
 |---|---|---|
 | [docs/spec.md](docs/spec.md) | **Source of truth.** Requirements F1–F18 with acceptance criteria, formulas, data model, API outline, testing, deployment, CI/CD, observability, on-call, delivery order, decisions log | ✅ |
-| [docs/process.md](docs/process.md) | Workflow: issue lifecycle, branches/worktrees, PRs, review and definition of done | planned (M0) |
+| [docs/process.md](docs/process.md) | Workflow: issue lifecycle, status labels ↔ board, branches/worktrees, PRs, QA, releases, incidents | ✅ |
 | [docs/team.md](docs/team.md) | Agent team: PM, Engineer, QA, DevOps/SRE — responsibilities and hand-offs | planned (M0) |
 | [docs/architecture.md](docs/architecture.md) | Components, data flow, key design decisions | planned (M0) |
 | `docs/adr/` | Architecture decision records | planned |
@@ -23,6 +23,7 @@ When a requirement is unclear, check `docs/spec.md` first; if it doesn't answer 
 All work is tracked in **GitHub Issues** on this repo and on the public [FitWise Backlog board](https://github.com/users/DanielB280320/projects/1) (columns Backlog → Ready → In progress → In QA → Done mirror the `status:*` labels), grouped by milestone (`M0`…`M6`, see spec §16.2) and labelled by area, role and priority. Every issue has acceptance criteria; an issue is done only when all of them are verified.
 
 - Pick work with `gh issue list --milestone "<milestone>" --label "status:ready"`.
+- Change status only with `scripts/issue-status.sh <issue> <status>` (updates label and board together).
 - Comment on the issue when you start, when you hand off, and with QA results.
 - Every PR references its issue with `Closes #N`.
 
