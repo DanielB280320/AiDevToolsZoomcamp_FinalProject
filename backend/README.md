@@ -59,8 +59,10 @@ integration tests fail (they do not skip) when it is missing.
   `local_today(now, user.timezone)` for "today". Tests swap `app.state.clock` for
   `tests.fakes.FakeClock`; `tests/integration/auth_helpers.py` has an `api` fixture with a
   fake clock and sign-up/sign-in helpers.
-* Never log emails, names, passwords, tokens or health data (spec §6.5); the engine is created
-  with `hide_parameters=True` so SQL parameters stay out of logs and exception messages.
+* Never log emails, names, passwords, tokens or health data (spec §6.5). The engine is created
+  with `hide_parameters=True`, which keeps bound SQL parameters out of SQLAlchemy's logs and
+  messages, but Postgres error text (e.g. a duplicate-key violation) can still quote values:
+  never log a database exception's message, only its type.
 
 ## Telemetry (spec §14, §6.5)
 

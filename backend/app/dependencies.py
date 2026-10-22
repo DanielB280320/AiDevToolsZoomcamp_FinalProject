@@ -1,7 +1,8 @@
 """Reusable FastAPI dependencies for authentication and role checks (spec F1.5).
 
 * `CurrentUser` -> the signed-in `User`, or 401 `not_authenticated` for a missing, tampered or
-  expired session (or a user that no longer exists).
+  expired session (or a user that no longer exists). It also binds the user to the request's
+  telemetry as `user_hash`.
 * `Depends(require_role("coach"))` -> 403 `wrong_role` for users with another role.
 """
 
@@ -19,6 +20,7 @@ from app.models import User
 from app.schemas.users import Role
 from app.services.clock import ClockDep
 from app.services.sessions import SESSION_COOKIE, read_token
+from app.telemetry import bind_user
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
@@ -52,6 +54,7 @@ def current_user(
     user = session.get(User, user_id)
     if user is None:
         raise _not_authenticated()
+    bind_user(user.id)  # logs and the server span of this request carry user_hash, never the id
     return user
 
 

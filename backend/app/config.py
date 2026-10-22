@@ -18,7 +18,11 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 class DatabaseSettings(BaseSettings):
     """The database connection only. Alembic migrations need nothing else (no JWT secret)."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore", frozen=True)
+    # hide_input_in_errors: a rejected value (a too-short JWT_SECRET or USER_HASH_SALT, a DB URL
+    # with a password) is never echoed in the startup ValidationError. Inherited by `Settings`.
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", frozen=True, hide_input_in_errors=True
+    )
 
     # Secrets are `SecretStr`: they print as `**********` in reprs, logs and tracebacks.
     database_url: SecretStr = Field(

@@ -96,7 +96,10 @@ def test_429_does_not_reveal_whether_the_account_exists(api: Api) -> None:
     known = api.login(EMAIL, PASSWORD)
     unknown = api.login("nobody.here@x.test", PASSWORD)
     assert known.status_code == unknown.status_code == 429
-    assert known.content == unknown.content
+    # Identical bodies apart from request_id (#16), which is each request's own trace id.
+    known_body, unknown_body = known.json(), unknown.json()
+    assert len(known_body.pop("request_id")) == len(unknown_body.pop("request_id")) == 32
+    assert known_body == unknown_body
     assert known.headers["Retry-After"] == unknown.headers["Retry-After"]
     assert "set-cookie" not in known.headers and "set-cookie" not in unknown.headers
 

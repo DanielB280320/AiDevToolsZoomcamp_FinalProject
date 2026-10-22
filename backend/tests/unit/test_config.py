@@ -113,3 +113,24 @@ def test_invalid_choices_are_rejected(field: str) -> None:
             {"database_url": "postgresql://h/d", "jwt_secret": JWT_SECRET, field: "nonsense"}
         )
 
+
+@pytest.mark.parametrize(
+    ("values", "secret"),
+    [
+        ({"jwt_secret": "short-jwt-secret-XYZ"}, "short-jwt-secret-XYZ"),
+        # Model-level check: the whole input dict is the error input. JWT_SECRET comes from the
+        # environment so the salt is last in it, where an unhidden (truncated) repr shows it.
+        ({"app_env": "prod", "user_hash_salt": "salt-XYZ"}, "salt-XYZ"),
+    ],
+)
+def test_startup_errors_never_echo_the_rejected_values(
+    values: dict[str, Any], secret: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """hide_input_in_errors: the message printed when startup fails names the field but never
+    echoes the rejected value. (`errors()` keeps `input` by design; nothing logs it.)"""
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    with pytest.raises(ValidationError) as excinfo:
+        _settings(database_url="postgresql://fitwise:db-password-XYZ@h/d", _env_file=None, **values)
+    rendered = f"{excinfo.value}\n{excinfo.value!r}"
+    assert secret not in rendered
+    assert "XYZ" not in rendered

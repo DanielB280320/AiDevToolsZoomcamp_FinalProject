@@ -13,8 +13,11 @@ def make_engine(settings: DatabaseSettings) -> Engine:
     return create_engine(
         settings.database_url.get_secret_value(),
         pool_pre_ping=True,
-        # Bound parameters (emails, password hashes, body metrics) never reach SQL logs or
-        # exception messages (spec §6.5).
+        # Keeps bound parameters (emails, password hashes, body metrics) out of SQLAlchemy's SQL
+        # logs and out of the "[parameters: ...]" part of its exception messages. It does NOT
+        # cover the database's own error text: a Postgres error such as a duplicate-key violation
+        # can still quote values ("Key (lower(email))=(...) already exists"), so exception
+        # messages from the database must never be logged (spec §6.5); log `error_type` only.
         hide_parameters=True,
         connect_args={"connect_timeout": settings.database_connect_timeout_seconds},
     )
