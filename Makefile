@@ -64,6 +64,10 @@ up-obs: ## Start the observability stack (not yet: #17)
 	@echo "make up-obs: the observability stack is not implemented yet (#17)." >&2
 	@exit 1
 
+.PHONY: check-log-privacy
+check-log-privacy: ## Smoke: no query/IP/referrer/token in logs, backend up AND down (stack running)
+	COMPOSE="$(COMPOSE)" scripts/check-log-privacy.sh
+
 .PHONY: seed-demo
 seed-demo: ## Load the demo athlete + coach (not yet: #51)
 	@echo "make seed-demo: demo data is not implemented yet (#51)." >&2
@@ -156,6 +160,8 @@ check-node:
 	@command -v node >/dev/null || { echo "Node.js 24 is required (frontend/.nvmrc)." >&2; exit 1; }
 	@node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)' || \
 	  { echo "Node.js 24 is required (frontend/.nvmrc); found $$(node --version)." >&2; exit 1; }
+	@npm --version | awk -F. '{ exit !($$1 > 9 || ($$1 == 9 && $$2 >= 5)) }' || \
+	  { echo "npm >= 9.5 is required (Node 24 ships npm 11); found $$(npm --version)." >&2; exit 1; }
 
 # Reinstall frontend dependencies whenever the lockfile changes.
 $(NPM_STAMP): $(FRONTEND)/package-lock.json | check-node
