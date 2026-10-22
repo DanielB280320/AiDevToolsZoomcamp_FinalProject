@@ -1,0 +1,4977 @@
+openapi: 3.1.0
+info:
+  title: FitWise API
+  version: 1.0.0
+  summary: Training and nutrition single source of truth for athletes and their coaches.
+  description: |
+    Contract for the FitWise MVP backend (see `docs/spec.md`). It is the source of truth for the
+    FastAPI implementation and for the generated frontend client. API changes start here.
+
+    ## Conventions
+
+    * **Base path**: every path is relative to `/api/v1`.
+    * **JSON**: `snake_case` property names. Unknown properties in requests are rejected (422).
+    * **Units** (spec §6.2): the API always uses metric units. Field names carry the unit:
+      `_kg`, `_cm`, `_g`, `_m`, `kcal`, `seconds`, `minutes`, `_pct` (percent, 0–100).
+      The user's `units` preference (`metric`/`imperial`) is for display and input only; the
+      client converts at the edges.
+    * **Dates and times** (spec §6.2):
+      * `format: date` (`YYYY-MM-DD`) is a *calendar day in the athlete's time zone*
+        (e.g. the day a session is planned or a weigh-in belongs to).
+      * `format: date-time` is an instant in **UTC**, RFC 3339 with a `Z` suffix
+        (e.g. `2026-11-03T07:15:00Z`).
+      * "Today" and week boundaries (ISO weeks, Monday start) are computed in the athlete's
+        IANA time zone (`User.timezone`).
+    * **Estimates**: calorie and body-fat numbers are estimates (spec §6.3); responses that carry
+      them include `estimated: true`.
+    * **Lists** are returned as objects with an `items` array. Catalog and notification lists are
+      cursor-paginated (`limit`, `cursor` → `next_cursor`).
+    * **Idempotent logging**: logging endpoints are upserts on their natural key (spec F10.1,
+      F12.3). They return `201` when a row is created and `200` when an existing row is replaced.
+
+    ## Authentication
+
+    Sessions use a JWT in an `HttpOnly`, `SameSite=Lax` cookie named `fitwise_session`
+    (24 h expiry), set by `POST /auth/signup` and `POST /auth/login`. Every operation requires it
+    unless it declares `security: []`. Missing or invalid sessions get `401`.
+
+    ## Authorization model
+
+    Each operation declares its access rule in `x-fitwise-access` (used by the authorization
+    matrix tests, spec F16.1):
+
+    | Value | Who may call it |
+    |---|---|
+    | `public` | Anyone, no session needed. |
+    | `authenticated` | Any signed-in user. |
+    | `athlete` | Signed-in users with role `athlete` (acting on their own data). Coaches get `403`. |
+    | `coach` | Signed-in users with role `coach`. Athletes get `403`. |
+    | `owner` | The athlete who owns the resource. A linked coach gets `403` (coaches cannot log or change the athlete's profile; spec F16.4). |
+    | `owner-or-coach` | The owning athlete, or a coach with an **active** link to that athlete (read and write). |
+    | `author` | The coach who wrote the note, while the link is active. |
+
+    Athlete-scoped paths use `/athletes/{athlete_id}/…`. `athlete_id` is the athlete's user id or
+    the literal `me` (the signed-in athlete). A coach calling `me`, or anyone calling an id they are
+    not allowed to access — including unknown ids and ids whose coach link has ended — gets `403`
+    (never `404`, so ids cannot be enumerated).
+
+    Resources addressed by their own id (`/sessions/{id}`, `/suggestions/{id}`, …) return `404`
+    when the id does not exist and `403` when it exists but belongs to an athlete the caller may
+    not access.
+
+    ## Errors
+
+    Errors use RFC 9457 problem details (`application/problem+json`, schema `Problem`) with a
+    stable machine-readable `code` and, for validation errors, a list of field `errors`.
+
+    | Status | Used for |
+    |---|---|
+    | 400 | Malformed request: unparseable JSON, invalid query combination (e.g. `from` after `to`, range too long). |
+    | 401 | No valid session, or wrong credentials on sign-in. |
+    | 403 | Authenticated but not allowed: wrong role, not the owner, no active coach link. |
+    | 404 | Resource id does not exist. |
+    | 409 | Request conflicts with current state: duplicate email, stale plan `revision`, suggestion already decided, session slot taken, link already exists, edit window closed. |
+    | 422 | Well-formed but invalid input: schema violations, implausible body values (F2.3), under 18 (F1.1), unaccepted disclaimer (F1.2). |
+    | 429 | Rate limit exceeded (5 failed sign-ins per email per 15 min, F1.6). Includes `Retry-After`. |
+    | 503 | A dependency is unavailable (database on `/readyz`, Open Food Facts on food import). |
+
+    No 5xx is ever returned because Open Food Facts is down (F6.3): search degrades to
+    `available: false`.
+  contact:
+    name: FitWise team
+    url: https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject
+
+servers:
+  - url: /api/v1
+    description: Same origin as the SPA (nginx proxies `/api` to the backend).
+
+security:
+  - cookieAuth: []
+
+tags:
+  - name: Auth
+    description: Sign-up, sign-in and sign-out (F1).
+  - name: Me
+    description: The signed-in user's account, settings, data export and deletion (F1, F18).
+  - name: Profile
+    description: Athlete onboarding, profile and calorie/macro targets (F2, F3).
+  - name: Body
+    description: Weigh-ins, body fat and measurements (F14).
+  - name: Catalog
+    description: Exercises, foods, meals and Open Food Facts search (F4, F6).
+  - name: Plan
+    description: The athlete's weekly training and meal plan, custom-mode edits and versions (F5, F7, F8).
+  - name: Calendar
+    description: Day, week and month views; moving sessions (F9, F13).
+  - name: Logging
+    description: Set logs, finishing workouts, meal logs and extra activities (F10, F12, F13).
+  - name: Suggestions
+    description: Progression, adaptive-calorie and recalculation suggestions awaiting a decision (F11, F14).
+  - name: Charts
+    description: Pre-aggregated chart series (F15).
+  - name: Coach
+    description: Coach profile, search, linking and the coach dashboard (F16).
+  - name: Notes
+    description: One-way coach notes on a day, session or exercise (F16).
+  - name: Notifications
+    description: In-app inbox (F17).
+  - name: Ops
+    description: Liveness and readiness probes.
+
+paths:
+  # ───────────────────────────── Auth ─────────────────────────────
+  /auth/signup:
+    post:
+      tags: [Auth]
+      operationId: signUp
+      summary: Create an account and start a session
+      description: |
+        Creates an athlete or coach account (role is fixed afterwards) and sets the session cookie.
+        Rejects users younger than 18 computed from `birth_date` in `timezone` (F1.1, code
+        `underage`), a missing disclaimer acceptance (F1.2, code `disclaimer_required`), passwords
+        shorter than 10 characters (F1.4) and duplicate emails compared case-insensitively
+        (F1.3, `409 email_taken`). The disclaimer acceptance time is stored as
+        `disclaimer_accepted_at`.
+      security: []
+      x-fitwise-access: public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignUpRequest'
+            examples:
+              athlete:
+                $ref: '#/components/examples/SignUpAthlete'
+      responses:
+        '201':
+          description: Account created; session cookie set.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+              examples:
+                athlete:
+                  $ref: '#/components/examples/MeAthleteNew'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: logIn
+      summary: Sign in
+      description: |
+        Verifies the password (argon2id) and sets the session cookie. Wrong email or password returns
+        `401 invalid_credentials` without saying which one was wrong. The 6th failed attempt for the
+        same email within 15 minutes returns `429` (F1.6).
+      security: []
+      x-fitwise-access: public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogInRequest'
+      responses:
+        '200':
+          description: Signed in; session cookie set.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logOut
+      summary: Sign out
+      description: Clears the session cookie. Idempotent; succeeds without a session.
+      security: []
+      x-fitwise-access: public
+      responses:
+        '204':
+          description: Signed out; cookie cleared.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/ClearSessionCookie'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ───────────────────────────── Me / Data ─────────────────────────────
+  /me:
+    get:
+      tags: [Me]
+      operationId: getMe
+      summary: Get the signed-in user
+      description: Account, settings, onboarding state, coach link and unread notification count.
+      x-fitwise-access: authenticated
+      responses:
+        '200':
+          description: The signed-in user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+              examples:
+                athlete:
+                  $ref: '#/components/examples/MeAthleteLinked'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [Me]
+      operationId: updateMe
+      summary: Update account settings
+      description: Partial update of display name, display units and time zone. Email, role and birth date cannot change.
+      x-fitwise-access: authenticated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeRequest'
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Me]
+      operationId: deleteMe
+      summary: Delete my account and all my data
+      description: |
+        Requires the current password (F18). Permanently deletes every row referencing the user,
+        ends all coach links and removes notes the user authored. A coach deleting their account
+        ends all links; athletes' data is unaffected. Only the account holder can call this, so a
+        coach can never delete an athlete's account (F18.3). Clears the session cookie.
+      x-fitwise-access: authenticated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteAccountRequest'
+      responses:
+        '204':
+          description: Account deleted; cookie cleared.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/ClearSessionCookie'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /me/export:
+    get:
+      tags: [Me]
+      operationId: exportMyData
+      summary: Export my data as a ZIP
+      description: |
+        ZIP with `profile.json`, `plan_versions.json` and CSVs for set logs, meal logs, body metrics,
+        extra activities and suggestions (F18). Contains only the caller's own data (F18.1). There is
+        no athlete-scoped export, so coaches cannot export an athlete's data (F18.3).
+      x-fitwise-access: authenticated
+      responses:
+        '200':
+          description: ZIP archive.
+          headers:
+            Content-Disposition:
+              description: '`attachment; filename="fitwise-export-<YYYY-MM-DD>.zip"`'
+              schema:
+                type: string
+          content:
+            application/zip:
+              schema:
+                type: string
+                contentMediaType: application/zip
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ───────────────────────────── Profile & targets ─────────────────────────────
+  /athletes/{athlete_id}/onboarding:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    post:
+      tags: [Profile]
+      operationId: completeOnboarding
+      summary: Complete the onboarding wizard
+      description: |
+        One action that stores the profile, a `BodyMetric` dated today in the athlete's time zone
+        (F2.1), computes targets (F3) and generates the training and meal plan (F5, F7) (F2.2).
+        Values outside plausible ranges are rejected with 422 (F2.3); the number of
+        `preferred_days` must equal `days_per_week` (F2.4). Returns `409 already_onboarded` if the
+        athlete already completed onboarding (use the profile and plan endpoints instead).
+      x-fitwise-access: owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingRequest'
+            examples:
+              ana:
+                $ref: '#/components/examples/OnboardingAna'
+      responses:
+        '201':
+          description: Onboarding completed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/profile:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Profile]
+      operationId: getAthleteProfile
+      summary: Get the athlete profile
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: Profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Profile]
+      operationId: updateAthleteProfile
+      summary: Replace the athlete profile
+      description: |
+        Replaces the profile (same validation as onboarding). If a target-relevant field changed
+        (sex, height, lifestyle, goal, training volume), targets are recomputed with
+        `valid_from` = today and future meal-day portions are rescaled; past days never change.
+        The training plan is **not** regenerated automatically — call
+        `POST /athletes/{athlete_id}/plan/regenerate`. Coaches can view but not edit the profile.
+        `404 not_onboarded` if onboarding was not completed.
+      x-fitwise-access: owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AthleteProfileInput'
+      responses:
+        '200':
+          description: Updated profile and current targets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileUpdateResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/targets:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Profile]
+      operationId: getTargets
+      summary: Get calorie and macro targets
+      description: |
+        Targets valid on `date` (default: today in the athlete's time zone), with the formulas and
+        inputs used in `explanation` (F3.5). `404 not_onboarded` before onboarding.
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - name: date
+          in: query
+          required: false
+          description: Calendar day (athlete's time zone). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Targets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Targets'
+              examples:
+                cutting:
+                  $ref: '#/components/examples/TargetsAna'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  # ───────────────────────────── Body ─────────────────────────────
+  /athletes/{athlete_id}/body-metrics:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Body]
+      operationId: listBodyMetrics
+      summary: List body metrics
+      description: Entries between `from` and `to` (inclusive), oldest first. Both default to the last 90 days.
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - $ref: '#/components/parameters/FromOptional'
+        - $ref: '#/components/parameters/ToOptional'
+      responses:
+        '200':
+          description: Body metrics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BodyMetricList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    post:
+      tags: [Body]
+      operationId: logBodyMetric
+      summary: Log weight, body fat or measurements for a day
+      description: |
+        One entry per day: logging again for the same `date` replaces it (`200`), otherwise `201`.
+        When neck/waist (and hip for female/unspecified) are given without `body_fat_pct`, body fat
+        is estimated with the Navy method (F3.3). `date` cannot be in the future. When the weight
+        differs by ≥ 2 % from the weight used for current targets, a pending `recalc` suggestion is
+        created and returned (F14). Coaches cannot log weigh-ins (403).
+      x-fitwise-access: owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BodyMetricInput'
+      responses:
+        '200':
+          description: Existing entry for that day replaced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BodyMetricResult'
+        '201':
+          description: Entry created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BodyMetricResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  # ───────────────────────────── Catalog ─────────────────────────────
+  /exercises:
+    get:
+      tags: [Catalog]
+      operationId: listExercises
+      summary: Search the exercise catalog
+      description: |
+        Seed exercises plus the caller's own custom exercises plus custom exercises of the caller's
+        active-link counterpart (an athlete sees their coach's; a coach sees their athletes').
+        Custom exercises are never visible to unrelated users (F4.3). Filterable by name, muscle
+        group, equipment and type (F4.2).
+      x-fitwise-access: authenticated
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - name: muscle_group
+          in: query
+          schema:
+            $ref: '#/components/schemas/MuscleGroup'
+        - name: equipment
+          in: query
+          schema:
+            $ref: '#/components/schemas/ExerciseEquipment'
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/ExerciseType'
+        - name: region
+          in: query
+          schema:
+            $ref: '#/components/schemas/BodyRegion'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of exercises, ordered by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExercisePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    post:
+      tags: [Catalog]
+      operationId: createExercise
+      summary: Create a custom exercise
+      description: Private to the creator; for coaches also usable in their linked athletes' plans.
+      x-fitwise-access: authenticated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExerciseInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /foods:
+    get:
+      tags: [Catalog]
+      operationId: listFoods
+      summary: Search the local food library
+      description: Seed, imported (Open Food Facts) and the caller's custom foods; same visibility rule as exercises.
+      x-fitwise-access: authenticated
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - name: diet
+          in: query
+          description: Only foods compatible with this diet.
+          schema:
+            $ref: '#/components/schemas/Diet'
+        - $ref: '#/components/parameters/ExcludeAllergens'
+        - name: source
+          in: query
+          schema:
+            $ref: '#/components/schemas/FoodSource'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of foods.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FoodPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    post:
+      tags: [Catalog]
+      operationId: createFood
+      summary: Create a custom food
+      x-fitwise-access: authenticated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FoodInput'
+      responses:
+        '201':
+          description: Created (source `custom`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Food'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /foods/search:
+    get:
+      tags: [Catalog]
+      operationId: searchOpenFoodFacts
+      summary: Search packaged foods on Open Food Facts
+      description: |
+        Server-side proxy with a 3 s timeout and a 24 h result cache (F6). Behind the feature flag
+        `off_search_enabled`. When the flag is off or the upstream times out / fails, the response
+        is still `200` with `available: false` and a user-facing `message` (F6.3) — never a 5xx.
+      x-fitwise-access: authenticated
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 100
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Results, or `available:false` in degraded mode.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OffSearchResult'
+              examples:
+                results:
+                  $ref: '#/components/examples/OffSearchOk'
+                unavailable:
+                  $ref: '#/components/examples/OffSearchUnavailable'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /foods/import:
+    post:
+      tags: [Catalog]
+      operationId: importOpenFoodFactsFood
+      summary: Copy an Open Food Facts product into the local library
+      description: |
+        Stores the product as a `Food` with source `openfoodfacts` and its product `code`. Unique on
+        `code`: importing an already-imported product returns the existing food with `200` (F6.2),
+        otherwise `201`. Uses the cached search result when available; if the product is not cached
+        and Open Food Facts is unavailable or disabled, returns `503 off_unavailable`.
+      x-fitwise-access: authenticated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FoodImportRequest'
+      responses:
+        '200':
+          description: Already imported; existing food returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Food'
+        '201':
+          description: Imported.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Food'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /meals:
+    get:
+      tags: [Catalog]
+      operationId: listMeals
+      summary: Search the meal library
+      description: Seed meals plus visible custom meals. Macros are computed from the foods (F6.1).
+      x-fitwise-access: authenticated
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - name: slot
+          in: query
+          schema:
+            $ref: '#/components/schemas/MealSlot'
+        - name: diet
+          in: query
+          schema:
+            $ref: '#/components/schemas/Diet'
+        - $ref: '#/components/parameters/ExcludeAllergens'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of meals.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MealPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    post:
+      tags: [Catalog]
+      operationId: createMeal
+      summary: Create a custom meal from foods and grams
+      x-fitwise-access: authenticated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MealInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  # ───────────────────────────── Plan ─────────────────────────────
+  /athletes/{athlete_id}/plan:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Plan]
+      operationId: getActivePlan
+      summary: Get the active weekly plan
+      description: Training days and meal days of the active plan version. `404 not_onboarded` if there is no plan yet.
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: Active plan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /athletes/{athlete_id}/plan/training:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    put:
+      tags: [Plan]
+      operationId: updateTrainingPlan
+      summary: Replace the training template (custom mode)
+      description: |
+        Replaces all training days and their planned exercises; array order is the display order.
+        Items with an `id` are updated, items without are added, missing ones are removed. Sends the
+        plan `revision` read with `GET /plan`; a stale revision returns `409 plan_revision_conflict`
+        (e.g. athlete and coach editing at once). Sets the plan `source` to `custom`, records a
+        `PlanChange` with author and timestamp (F8.3) and affects only today-and-future sessions;
+        past sessions and logs never change (F8.1). Coach edits are labelled with the coach in
+        `edited_by` and notify the athlete. At most one training day per weekday.
+      x-fitwise-access: owner-or-coach
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingPlanUpdate'
+      responses:
+        '200':
+          description: Updated plan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/plan/meals:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    put:
+      tags: [Plan]
+      operationId: updateMealPlan
+      summary: Replace the meal template (custom mode)
+      description: |
+        Replaces the planned meals of each weekday (add/remove/replace meals per slot, change
+        portion or grams). Same `revision`, `source`, history and authorization rules as
+        `updateTrainingPlan`. Gram overrides in `items` are stored as a private copy of the meal
+        owned by the athlete, so the shared library meal is never changed.
+      x-fitwise-access: owner-or-coach
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MealPlanUpdate'
+      responses:
+        '200':
+          description: Updated plan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/plan/regenerate:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    post:
+      tags: [Plan]
+      operationId: regeneratePlan
+      summary: Regenerate the suggested plan from the current profile
+      description: |
+        Creates a new plan version (source `generated`) from the current profile and targets and
+        makes it active. Previous versions stay readable (F8.2). `scope` limits regeneration to the
+        training or meal part; the other part is copied from the current version.
+      x-fitwise-access: owner-or-coach
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegeneratePlanRequest'
+      responses:
+        '201':
+          description: New active plan version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/plan/versions:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Plan]
+      operationId: listPlanVersions
+      summary: List plan versions
+      description: All versions, newest first.
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: Versions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanVersionList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /athletes/{athlete_id}/plan/versions/{version}:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      tags: [Plan]
+      operationId: getPlanVersion
+      summary: Get a plan version (read-only)
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: Plan version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  # ───────────────────────────── Calendar ─────────────────────────────
+  /athletes/{athlete_id}/days/{date}:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+      - $ref: '#/components/parameters/DayDate'
+    get:
+      tags: [Calendar]
+      operationId: getDay
+      summary: Get one day (Today view)
+      description: |
+        Everything the Today view needs for one calendar day (F9): the session with exercises,
+        planned sets and logs; planned meals with their check-off state; extra meal logs and
+        activities; the estimated energy balance and macro progress (F13.3); completions; pending
+        suggestions; coach notes for the day, its session and its exercises. `date` may be `today`
+        (resolved in the athlete's time zone, F9.1). Viewing a planned day materialises its session
+        so it has an id for logging (idempotent).
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: Day view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayView'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/calendar:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Calendar]
+      operationId: getCalendar
+      summary: Get Week or Month view summaries
+      description: |
+        One summary per day from `from` to `to` inclusive (max 42 days, i.e. a 6-week month grid).
+        Week view uses Monday–Sunday; month view the weeks covering the month. Past planned
+        sessions without logs are `missed`; rest days are never missed (F9.3). A moved session is
+        reported on its new date (F9.2). `400 range_too_large` above 42 days, `400 invalid_range`
+        when `from` is after `to`.
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Day summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarRange'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /sessions/{session_id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Calendar]
+      operationId: getSession
+      summary: Get a session with its sets and logs
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /sessions/{session_id}/move:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Calendar]
+      operationId: moveSession
+      summary: Move a session to another day in the same ISO week
+      description: |
+        Moves a not-yet-finished session to `date` (F9). The new date must be in the same ISO week
+        (Monday start, athlete's time zone), today or later, and must not already hold a session
+        (`409 day_occupied`). Moving does not change the plan template. Only the athlete can move
+        sessions.
+      x-fitwise-access: owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveSessionRequest'
+      responses:
+        '200':
+          description: Moved session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  # ───────────────────────────── Logging ─────────────────────────────
+  /sessions/{session_id}/sets:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Logging]
+      operationId: logSet
+      summary: Log (or re-log) a set
+      description: |
+        Upsert keyed by (session, `exercise_id`, `set_no`) — retrying the same request never
+        duplicates a set (F10.1): `201` on create, `200` on replace. `as_planned: true` copies the
+        targets into the actuals ("done as planned", one tap). Extra sets/exercises use
+        `planned_exercise_id: null` or a `set_no` beyond the planned sets. The first log moves the
+        session to `in_progress`. The log stores a snapshot of the targets it was performed against.
+        After finishing, sets can be edited until `Session.editable_until` (same day + 1 day,
+        F10.3); later returns `409 edit_window_closed`. Coaches get `403` (F16.4).
+      x-fitwise-access: owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetLogInput'
+            examples:
+              asPlanned:
+                $ref: '#/components/examples/SetLogAsPlanned'
+              actual:
+                $ref: '#/components/examples/SetLogActual'
+      responses:
+        '200':
+          description: Existing set log replaced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetLog'
+        '201':
+          description: Set log created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetLog'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /sessions/{session_id}/sets/{set_log_id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - name: set_log_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+    delete:
+      tags: [Logging]
+      operationId: deleteSetLog
+      summary: Remove a logged set
+      description: Removes a set log (e.g. an extra set added by mistake). Same edit window as `logSet`.
+      x-fitwise-access: owner
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /sessions/{session_id}/finish:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Logging]
+      operationId: finishSession
+      summary: Finish the workout
+      description: |
+        Closes the session (`done`), records start/end time, computes completion (F10.2) and
+        estimated exercise kcal (F13.2), and runs the progression engine (F11), returning the new
+        pending suggestions. Calling it again within the edit window recomputes completion and
+        replaces this session's pending suggestions (F10.3); after the window `409 edit_window_closed`.
+      x-fitwise-access: owner
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinishSessionRequest'
+      responses:
+        '200':
+          description: Finished session and generated suggestions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinishSessionResult'
+              examples:
+                finished:
+                  $ref: '#/components/examples/FinishSessionDone'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/meal-logs:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    post:
+      tags: [Logging]
+      operationId: logMeal
+      summary: Check off, adjust, skip or add a meal
+      description: |
+        For a planned meal (`planned_meal_id` set): `eaten` (as planned, one tap), `adjusted`
+        (with `items` grams) or `skipped`. Upsert keyed by (`date`, `planned_meal_id`), so
+        repeating a check-off is idempotent (F12.3): `201` on create, `200` on replace.
+        For off-plan food: `extra` with `planned_meal_id: null` and `items` (always creates).
+        Returns the log plus the day's updated energy balance and nutrition completion (F12.1, F12.2).
+        `date` cannot be in the future. Coaches get `403`.
+      x-fitwise-access: owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MealLogInput'
+            examples:
+              eaten:
+                $ref: '#/components/examples/MealLogEaten'
+              extra:
+                $ref: '#/components/examples/MealLogExtra'
+      responses:
+        '200':
+          description: Existing log for this planned meal replaced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MealLogResult'
+        '201':
+          description: Log created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MealLogResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/meal-logs/{meal_log_id}:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+      - name: meal_log_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+    delete:
+      tags: [Logging]
+      operationId: deleteMealLog
+      summary: Undo a meal check-off or remove extra food
+      x-fitwise-access: owner
+      responses:
+        '200':
+          description: Deleted; the day's updated energy balance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayEnergyUpdate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /athletes/{athlete_id}/activities:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    post:
+      tags: [Logging]
+      operationId: logActivity
+      summary: Log an extra (off-plan) activity
+      description: |
+        Off-plan timed/cardio activity on any day, including rest days (F10, F13.3). Counted in
+        burned calories but not in training completion (F10.4). `exercise_id` must be a `timed`
+        exercise (422 otherwise). Coaches get `403`.
+      x-fitwise-access: owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivityInput'
+      responses:
+        '201':
+          description: Logged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/activities/{activity_id}:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+      - name: activity_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+    delete:
+      tags: [Logging]
+      operationId: deleteActivity
+      summary: Remove an extra activity
+      x-fitwise-access: owner
+      responses:
+        '200':
+          description: Deleted; the day's updated energy balance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayEnergyUpdate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ───────────────────────────── Suggestions ─────────────────────────────
+  /athletes/{athlete_id}/suggestions:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Suggestions]
+      operationId: listSuggestions
+      summary: List suggestions
+      description: Newest first. Defaults to `status=pending`.
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/SuggestionStatus'
+        - name: kind
+          in: query
+          schema:
+            $ref: '#/components/schemas/SuggestionKind'
+      responses:
+        '200':
+          description: Suggestions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestionList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /suggestions/{suggestion_id}/accept:
+    parameters:
+      - $ref: '#/components/parameters/SuggestionId'
+    post:
+      tags: [Suggestions]
+      operationId: acceptSuggestion
+      summary: Accept (optionally edit-then-accept) a suggestion
+      description: |
+        Accepted values become the targets for the next sessions of that exercise (progression) or
+        the new daily targets from today, rescaling future meal-day portions only (calories, recalc;
+        F14.4). Optional `overrides` implement edit-then-accept; overrides must match the suggestion
+        kind (422) and calorie overrides are never below the floor (F3.6). Already decided →
+        `409 suggestion_already_decided`. The athlete or their linked coach can decide.
+      x-fitwise-access: owner-or-coach
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptSuggestionRequest'
+      responses:
+        '200':
+          description: Accepted suggestion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Suggestion'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /suggestions/{suggestion_id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/SuggestionId'
+    post:
+      tags: [Suggestions]
+      operationId: rejectSuggestion
+      summary: Reject a suggestion
+      description: Changes nothing else (F11.3). Already decided → `409 suggestion_already_decided`.
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: Rejected suggestion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Suggestion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ───────────────────────────── Charts ─────────────────────────────
+  /athletes/{athlete_id}/charts/session/{session_id}:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Charts]
+      operationId: getSessionChart
+      summary: Session detail — target vs. actual per set
+      description: Uses the target snapshots stored with each set log (F15.2). Empty `exercises` when nothing was logged (F15.3).
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: Session chart data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionChart'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /athletes/{athlete_id}/charts/exercise/{exercise_id}:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+      - $ref: '#/components/parameters/ExerciseId'
+    get:
+      tags: [Charts]
+      operationId: getExerciseChart
+      summary: Exercise over time
+      description: |
+        One point per finished session containing the exercise: the target at the time of that
+        session (snapshot, F15.2), the actual top set, total volume and personal-record markers.
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - $ref: '#/components/parameters/ChartWeeks'
+      responses:
+        '200':
+          description: Exercise series.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseChart'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/charts/adherence:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Charts]
+      operationId: getAdherenceChart
+      summary: Daily and weekly training and nutrition completion
+      description: Range up to 371 days (heat map + weekly bars). `400 range_too_large` above that.
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Adherence series.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdherenceChart'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/charts/weekly-summary:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Charts]
+      operationId: getWeeklySummary
+      summary: Weekly summary tiles and sparklines
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - name: week_start
+          in: query
+          required: false
+          description: Monday of the ISO week (athlete's time zone). Defaults to the current week. Must be a Monday (422).
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Weekly summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklySummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/charts/body:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Charts]
+      operationId: getBodyChart
+      summary: Weight, 7-day average and body fat
+      description: The 7-day average uses only existing weigh-ins in each window (F14.1).
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - $ref: '#/components/parameters/ChartWeeks'
+      responses:
+        '200':
+          description: Body series.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BodyChart'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  # ───────────────────────────── Coach ─────────────────────────────
+  /coach/profile:
+    get:
+      tags: [Coach]
+      operationId: getCoachProfile
+      summary: Get my coach profile
+      x-fitwise-access: coach
+      responses:
+        '200':
+          description: Coach profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoachProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Coach]
+      operationId: updateCoachProfile
+      summary: Update my coach profile
+      x-fitwise-access: coach
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoachProfileInput'
+      responses:
+        '200':
+          description: Updated coach profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoachProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /coaches/search:
+    get:
+      tags: [Coach]
+      operationId: searchCoaches
+      summary: Search discoverable coaches
+      description: |
+        By display name (≥ 3 characters, case-insensitive contains) or exact email. Returns only
+        discoverable coaches, never athletes, and never exposes emails (F16.2).
+      x-fitwise-access: athlete
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 254
+      responses:
+        '200':
+          description: Matching coaches (max 20).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoachSearchResultList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /coach-links:
+    get:
+      tags: [Coach]
+      operationId: listCoachLinks
+      summary: List my coach links
+      description: For athletes, their links; for coaches, links with their athletes (e.g. `status=pending` for incoming requests).
+      x-fitwise-access: authenticated
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/CoachLinkStatus'
+      responses:
+        '200':
+          description: Links, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoachLinkList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    post:
+      tags: [Coach]
+      operationId: requestCoachLink
+      summary: Send a link request to a coach
+      description: |
+        Creates a `pending` link and notifies the coach. An athlete with an active coach or a pending
+        request gets `409 link_exists` (F16.3). Unknown or non-discoverable coach → `404`.
+      x-fitwise-access: athlete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoachLinkRequest'
+      responses:
+        '201':
+          description: Pending link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoachLink'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /coach-links/{link_id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/LinkId'
+    post:
+      tags: [Coach]
+      operationId: approveCoachLink
+      summary: Approve a pending link request
+      description: Only the requested coach. Link must be `pending` (409 otherwise). Notifies the athlete.
+      x-fitwise-access: coach
+      responses:
+        '200':
+          description: Active link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoachLink'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /coach-links/{link_id}/decline:
+    parameters:
+      - $ref: '#/components/parameters/LinkId'
+    post:
+      tags: [Coach]
+      operationId: declineCoachLink
+      summary: Decline a pending link request
+      description: Only the requested coach. Link must be `pending` (409 otherwise). Notifies the athlete.
+      x-fitwise-access: coach
+      responses:
+        '200':
+          description: Declined link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoachLink'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /coach-links/{link_id}/end:
+    parameters:
+      - $ref: '#/components/parameters/LinkId'
+    post:
+      tags: [Coach]
+      operationId: endCoachLink
+      summary: End a link (either side)
+      description: |
+        Either party; an athlete may also withdraw a `pending` request. Access is revoked
+        immediately — subsequent coach calls on that athlete return `403`. Link must be `pending` or
+        `active` (409 otherwise). Notifies the other party.
+      x-fitwise-access: authenticated
+      responses:
+        '200':
+          description: Ended link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoachLink'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /coach/athletes:
+    get:
+      tags: [Coach]
+      operationId: listCoachAthletes
+      summary: Client list sorted by "needs attention"
+      description: |
+        Actively linked athletes. Athletes needing attention come first (training adherence < 70 %
+        over the last 7 days, a deload pending/applied in the last 14 days, or no logs for 3+ days),
+        then by display name (F16).
+      x-fitwise-access: coach
+      responses:
+        '200':
+          description: Athlete summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoachAthleteList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ───────────────────────────── Notes ─────────────────────────────
+  /athletes/{athlete_id}/notes:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Notes]
+      operationId: listNotes
+      summary: List coach notes for an athlete
+      description: Visible to the athlete and their linked coach. Filter by date range, scope, session or exercise.
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - $ref: '#/components/parameters/FromOptional'
+        - $ref: '#/components/parameters/ToOptional'
+        - name: scope
+          in: query
+          schema:
+            $ref: '#/components/schemas/NoteScope'
+        - name: session_id
+          in: query
+          schema:
+            $ref: '#/components/schemas/Id'
+        - name: exercise_id
+          in: query
+          schema:
+            $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: Notes, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    post:
+      tags: [Notes]
+      operationId: createNote
+      summary: Leave a note (coach)
+      description: Only an actively linked coach; athletes get `403` (notes are one-way). Notifies the athlete.
+      x-fitwise-access: coach
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /athletes/{athlete_id}/notes/{note_id}:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+      - $ref: '#/components/parameters/NoteId'
+    put:
+      tags: [Notes]
+      operationId: updateNote
+      summary: Edit a note (author)
+      x-fitwise-access: author
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteUpdate'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Notes]
+      operationId: deleteNote
+      summary: Delete a note (author)
+      x-fitwise-access: author
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ───────────────────────────── Notifications ─────────────────────────────
+  /notifications:
+    get:
+      tags: [Notifications]
+      operationId: listNotifications
+      summary: List my notifications
+      description: Newest first, with the unread count for the bell icon.
+      x-fitwise-access: authenticated
+      parameters:
+        - name: unread_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of notifications.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /notifications/{notification_id}/read:
+    parameters:
+      - $ref: '#/components/parameters/NotificationId'
+    post:
+      tags: [Notifications]
+      operationId: markNotificationRead
+      summary: Mark one notification read
+      description: Idempotent (F17.2). Another user's notification → `403`.
+      x-fitwise-access: authenticated
+      responses:
+        '200':
+          description: Notification.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /notifications/read-all:
+    post:
+      tags: [Notifications]
+      operationId: markAllNotificationsRead
+      summary: Mark all my notifications read
+      x-fitwise-access: authenticated
+      responses:
+        '200':
+          description: Number of notifications marked read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkAllReadResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ───────────────────────────── Ops ─────────────────────────────
+  /healthz:
+    get:
+      tags: [Ops]
+      operationId: getHealth
+      summary: Liveness probe
+      description: The process is up. Does not touch the database.
+      security: []
+      x-fitwise-access: public
+      responses:
+        '200':
+          description: Alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /readyz:
+    get:
+      tags: [Ops]
+      operationId: getReadiness
+      summary: Readiness probe
+      description: Ready to serve traffic (database reachable, migrations applied). Used by Compose health checks and deploy smoke tests.
+      security: []
+      x-fitwise-access: public
+      responses:
+        '200':
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          description: Not ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: fitwise_session
+      description: JWT session cookie (`HttpOnly`, `SameSite=Lax`, 24 h). `Secure` once HTTPS exists (spec §6.4).
+
+  headers:
+    SetSessionCookie:
+      description: '`fitwise_session=<jwt>; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400`'
+      schema:
+        type: string
+    ClearSessionCookie:
+      description: '`fitwise_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`'
+      schema:
+        type: string
+    RetryAfter:
+      description: Seconds until the client may retry.
+      schema:
+        type: integer
+        minimum: 1
+
+  parameters:
+    AthleteId:
+      name: athlete_id
+      in: path
+      required: true
+      description: Athlete user id, or `me` for the signed-in athlete.
+      schema:
+        $ref: '#/components/schemas/AthleteRef'
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Id'
+    SuggestionId:
+      name: suggestion_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Id'
+    LinkId:
+      name: link_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Id'
+    NoteId:
+      name: note_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Id'
+    NotificationId:
+      name: notification_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Id'
+    ExerciseId:
+      name: exercise_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Id'
+    DayDate:
+      name: date
+      in: path
+      required: true
+      description: Calendar day `YYYY-MM-DD` in the athlete's time zone, or `today`.
+      schema:
+        type: string
+        pattern: '^(today|\d{4}-\d{2}-\d{2})$'
+      example: '2026-11-03'
+    From:
+      name: from
+      in: query
+      required: true
+      description: First calendar day (inclusive), athlete's time zone.
+      schema:
+        type: string
+        format: date
+    To:
+      name: to
+      in: query
+      required: true
+      description: Last calendar day (inclusive), athlete's time zone.
+      schema:
+        type: string
+        format: date
+    FromOptional:
+      name: from
+      in: query
+      required: false
+      description: First calendar day (inclusive), athlete's time zone.
+      schema:
+        type: string
+        format: date
+    ToOptional:
+      name: to
+      in: query
+      required: false
+      description: Last calendar day (inclusive), athlete's time zone.
+      schema:
+        type: string
+        format: date
+    ChartWeeks:
+      name: weeks
+      in: query
+      required: false
+      description: Range ending today.
+      schema:
+        type: integer
+        enum: [4, 12, 26, 52]
+        default: 12
+    SearchQuery:
+      name: q
+      in: query
+      required: false
+      description: Case-insensitive name search.
+      schema:
+        type: string
+        maxLength: 100
+    ExcludeAllergens:
+      name: exclude_allergens
+      in: query
+      required: false
+      description: Exclude items with any of these allergens (comma-separated).
+      style: form
+      explode: false
+      schema:
+        type: array
+        uniqueItems: true
+        items:
+          $ref: '#/components/schemas/Allergen'
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor from a previous page's `next_cursor`.
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Malformed request.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /problems/invalid_range
+            title: Bad request
+            status: 400
+            code: invalid_range
+            detail: '`from` must not be after `to`.'
+    Unauthorized:
+      description: Missing or invalid session, or wrong credentials.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /problems/not_authenticated
+            title: Not authenticated
+            status: 401
+            code: not_authenticated
+            detail: Sign in to continue.
+    Forbidden:
+      description: Wrong role, not the owner, or no active coach link.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /problems/forbidden
+            title: Forbidden
+            status: 403
+            code: forbidden
+            detail: You do not have access to this athlete.
+    NotFound:
+      description: Resource does not exist.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /problems/not_found
+            title: Not found
+            status: 404
+            code: not_found
+            detail: Session not found.
+    Conflict:
+      description: Conflicts with the current state.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /problems/email_taken
+            title: Conflict
+            status: 409
+            code: email_taken
+            detail: An account with this email already exists.
+    UnprocessableEntity:
+      description: Validation failed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /problems/validation_error
+            title: Validation failed
+            status: 422
+            code: validation_error
+            detail: Some values are outside the allowed range.
+            errors:
+              - field: body_metric.weight_kg
+                code: out_of_range
+                message: Weight must be between 35 and 300 kg.
+    TooManyRequests:
+      description: Rate limit exceeded.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /problems/rate_limited
+            title: Too many requests
+            status: 429
+            code: rate_limited
+            detail: Too many failed sign-in attempts. Try again in 15 minutes.
+    ServiceUnavailable:
+      description: A dependency is unavailable.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /problems/off_unavailable
+            title: Service unavailable
+            status: 503
+            code: off_unavailable
+            detail: Online food search is unavailable — use the library or create a custom food.
+
+  examples:
+    SignUpAthlete:
+      summary: Athlete sign-up
+      value:
+        email: ana@example.com
+        password: correct-horse-battery
+        display_name: Ana
+        role: athlete
+        birth_date: '1995-04-12'
+        units: metric
+        timezone: Europe/Madrid
+        accept_disclaimer: true
+    MeAthleteNew:
+      summary: New athlete, not onboarded
+      value:
+        id: 3f0b6a1e-6a55-4f3c-9a43-1c2a3a4b5c6d
+        email: ana@example.com
+        display_name: Ana
+        role: athlete
+        birth_date: '1995-04-12'
+        units: metric
+        timezone: Europe/Madrid
+        disclaimer_accepted_at: '2026-10-21T18:00:00Z'
+        created_at: '2026-10-21T18:00:00Z'
+        onboarding_completed: false
+        active_coach: null
+        pending_coach_link_id: null
+        unread_notification_count: 0
+    MeAthleteLinked:
+      summary: Onboarded athlete with a coach
+      value:
+        id: 3f0b6a1e-6a55-4f3c-9a43-1c2a3a4b5c6d
+        email: ana@example.com
+        display_name: Ana
+        role: athlete
+        birth_date: '1995-04-12'
+        units: metric
+        timezone: Europe/Madrid
+        disclaimer_accepted_at: '2026-10-21T18:00:00Z'
+        created_at: '2026-10-21T18:00:00Z'
+        onboarding_completed: true
+        active_coach:
+          id: 9b1d2c3e-4f50-4a6b-8c7d-0e1f2a3b4c5d
+          display_name: Lucía
+          role: coach
+        pending_coach_link_id: null
+        unread_notification_count: 2
+    OnboardingAna:
+      summary: Beginner cutting at home, Navy body fat
+      value:
+        profile:
+          sex: female
+          height_cm: 165
+          lifestyle: lightly_active
+          goal: cutting
+          experience: beginner
+          days_per_week: 3
+          preferred_days: [mon, wed, fri]
+          session_minutes: 45
+          equipment: home_dumbbells
+          avoided_exercise_ids: []
+          diet: vegetarian
+          allergies: [nuts]
+          meals_per_day: 4
+        body_metric:
+          weight_kg: 72.5
+          body_fat_method: navy
+          neck_cm: 33
+          waist_cm: 80
+          hip_cm: 102
+    TargetsAna:
+      summary: Cutting targets (Katch-McArdle)
+      value:
+        id: 5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d
+        athlete_id: 3f0b6a1e-6a55-4f3c-9a43-1c2a3a4b5c6d
+        valid_from: '2026-10-21'
+        estimated: true
+        bmr_formula: katch_mcardle
+        bmr_kcal: 1385
+        lifestyle_factor: 1.3
+        baseline_kcal: 1800
+        planned_exercise_kcal_per_day: 94
+        goal_adjustment_pct: -20
+        kcal: 1515
+        protein_g: 159.5
+        carbs_g: 121.4
+        fat_g: 43.5
+        target_balance_kcal: -379
+        floor_applied: false
+        floor_kcal: 1200
+        carbs_clamped: false
+        weight_kg_used: 72.5
+        body_fat_pct_used: 35.2
+        explanation: >-
+          BMR (Katch-McArdle) = 370 + 21.6 × LBM 46.98 kg = 1385 kcal. Baseline = 1385 × 1.30
+          (lightly active) = 1800 kcal. Target = (1800 + 94 planned exercise) × (1 − 20 %) = 1515 kcal.
+          Protein 2.2 g/kg × 72.5 kg = 159.5 g; fat max(25 % of kcal, 0.6 g/kg) = 43.5 g; carbs = rest
+          = 121.4 g.
+        inputs:
+          weight_kg: 72.5
+          body_fat_pct: 35.2
+          lifestyle: lightly_active
+          goal: cutting
+        created_at: '2026-10-21T18:05:00Z'
+    OffSearchOk:
+      summary: Results
+      value:
+        available: true
+        unavailable_reason: null
+        message: null
+        items:
+          - code: '8410000810004'
+            name: Greek yogurt 2%
+            brand: Example Dairy
+            kcal_per_100g: 73
+            protein_g_per_100g: 9.5
+            carbs_g_per_100g: 3.6
+            fat_g_per_100g: 2
+            imported_food_id: null
+    OffSearchUnavailable:
+      summary: Degraded mode
+      value:
+        available: false
+        unavailable_reason: timeout
+        message: Online food search is unavailable — use the library or create a custom food.
+        items: []
+    SetLogAsPlanned:
+      summary: Done as planned (one tap)
+      value:
+        exercise_id: 7c1e2d3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        planned_exercise_id: 2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091
+        set_no: 1
+        as_planned: true
+    SetLogActual:
+      summary: Actual reps and weight
+      value:
+        exercise_id: 7c1e2d3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        planned_exercise_id: 2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091
+        set_no: 2
+        reps: 9
+        weight_kg: 40
+    MealLogEaten:
+      summary: Eaten as planned
+      value:
+        date: '2026-11-03'
+        planned_meal_id: 4d5e6f70-8192-4a3b-8c4d-5e6f7a8b9c0d
+        status: eaten
+    MealLogExtra:
+      summary: Extra food
+      value:
+        date: '2026-11-03'
+        planned_meal_id: null
+        status: extra
+        slot: snack
+        items:
+          - food_id: 1a2b3c4d-5e6f-4708-9a1b-2c3d4e5f6a7b
+            grams: 30
+    FinishSessionDone:
+      summary: Finished with one progression suggestion
+      value:
+        session:
+          id: 0a1b2c3d-4e5f-4607-8899-aabbccddeeff
+          athlete_id: 3f0b6a1e-6a55-4f3c-9a43-1c2a3a4b5c6d
+          plan_id: 6e7f8091-a2b3-4c4d-8e5f-60718293a4b5
+          plan_version: 1
+          training_day_id: 8091a2b3-c4d5-4e6f-8071-8293a4b5c6d7
+          training_day_name: Full body A
+          date: '2026-11-03'
+          original_date: null
+          status: done
+          started_at: '2026-11-03T17:02:00Z'
+          finished_at: '2026-11-03T17:48:00Z'
+          editable_until: '2026-11-04T22:59:59Z'
+          completion: 1
+          kcal: 212
+          estimated: true
+          exercises: []
+        suggestions:
+          - id: c0d1e2f3-a4b5-4c6d-8e7f-8091a2b3c4d5
+            athlete_id: 3f0b6a1e-6a55-4f3c-9a43-1c2a3a4b5c6d
+            kind: progression
+            status: pending
+            rule: double
+            reason: All 3 sets reached 12 reps at 40 kg → 42.5 kg × 8
+            inputs:
+              reps: [12, 12, 12]
+              weight_kg: 40
+              rep_range: [8, 12]
+            created_at: '2026-11-03T17:48:01Z'
+            decided_by: null
+            decided_at: null
+            payload:
+              exercise:
+                id: 7c1e2d3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+                name: Goblet squat
+                type: strength
+                equipment: dumbbell
+                muscle_group: quads
+              planned_exercise_id: 2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091
+              source_session_id: 0a1b2c3d-4e5f-4607-8899-aabbccddeeff
+              current:
+                target_weight_kg: 40
+                reps_min: 8
+                reps_max: 12
+                target_seconds: null
+              proposed:
+                target_weight_kg: 42.5
+                reps_min: 8
+                reps_max: 8
+                target_seconds: null
+              hint: null
+              applied: null
+
+  schemas:
+    # ───────── Primitives ─────────
+    Id:
+      type: string
+      format: uuid
+      example: 3f0b6a1e-6a55-4f3c-9a43-1c2a3a4b5c6d
+    AthleteRef:
+      description: An athlete user id or the literal `me`.
+      anyOf:
+        - type: string
+          format: uuid
+        - type: string
+          const: me
+    LocalDate:
+      type: string
+      format: date
+      description: Calendar day in the athlete's time zone.
+      example: '2026-11-03'
+    Timestamp:
+      type: string
+      format: date-time
+      description: UTC instant (RFC 3339, `Z` suffix).
+      example: '2026-11-03T17:48:00Z'
+    Weekday:
+      type: string
+      enum: [mon, tue, wed, thu, fri, sat, sun]
+    Kcal:
+      type: integer
+      description: Kilocalories (estimated, rounded).
+    Grams:
+      type: number
+      minimum: 0
+      description: Grams.
+    Ratio:
+      type: number
+      minimum: 0
+      maximum: 1
+      description: Completion ratio 0–1 (actual ÷ target, capped at 1).
+    Macros:
+      type: object
+      required: [kcal, protein_g, carbs_g, fat_g]
+      properties:
+        kcal:
+          $ref: '#/components/schemas/Kcal'
+        protein_g:
+          $ref: '#/components/schemas/Grams'
+        carbs_g:
+          $ref: '#/components/schemas/Grams'
+        fat_g:
+          $ref: '#/components/schemas/Grams'
+    Cursor:
+      type: [string, 'null']
+      description: Pass as `cursor` to get the next page; `null` on the last page.
+
+    # ───────── Errors ─────────
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: '`/problems/<code>`.'
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          description: Human-readable, safe to show to the user. Never contains health data.
+        instance:
+          type: string
+          format: uri-reference
+        code:
+          type: string
+          pattern: '^[a-z0-9_]+$'
+          description: |
+            Stable machine-readable code. Known codes: `bad_request`, `invalid_range`,
+            `range_too_large`, `not_authenticated`, `invalid_credentials`, `forbidden`,
+            `wrong_role`, `not_linked`, `not_found`, `not_onboarded`, `email_taken`,
+            `already_onboarded`, `plan_revision_conflict`, `day_occupied`, `session_finished`,
+            `edit_window_closed`, `suggestion_already_decided`, `link_exists`, `link_not_pending`,
+            `validation_error`, `underage`, `disclaimer_required`, `rate_limited`,
+            `off_unavailable`, `not_ready`. New codes may be added.
+        errors:
+          type: array
+          description: Field-level validation errors (422).
+          items:
+            $ref: '#/components/schemas/FieldError'
+        request_id:
+          type: string
+          description: Correlates with server logs/traces.
+    FieldError:
+      type: object
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+          description: Dotted path to the offending field, e.g. `profile.preferred_days`.
+        code:
+          type: string
+          description: e.g. `required`, `out_of_range`, `too_short`, `invalid_choice`, `mismatch`.
+        message:
+          type: string
+
+    # ───────── Users & auth ─────────
+    Role:
+      type: string
+      enum: [athlete, coach]
+    Units:
+      type: string
+      enum: [metric, imperial]
+      description: Display/input preference only; the API is always metric.
+    Timezone:
+      type: string
+      description: IANA time zone name.
+      minLength: 1
+      maxLength: 64
+      example: Europe/Madrid
+    Email:
+      type: string
+      format: email
+      maxLength: 254
+    UserRef:
+      type: object
+      required: [id, display_name, role]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        display_name:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+    SignUpRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, display_name, role, birth_date, units, timezone, accept_disclaimer]
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+        password:
+          type: string
+          format: password
+          minLength: 10
+          maxLength: 128
+          writeOnly: true
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        role:
+          $ref: '#/components/schemas/Role'
+        birth_date:
+          type: string
+          format: date
+          description: Must make the user ≥ 18 today in `timezone` (F1.1).
+        units:
+          $ref: '#/components/schemas/Units'
+        timezone:
+          $ref: '#/components/schemas/Timezone'
+        accept_disclaimer:
+          type: boolean
+          description: Must be `true` (F1.2); the server stores the acceptance time.
+    LogInRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 128
+          writeOnly: true
+    User:
+      type: object
+      required: [id, email, display_name, role, birth_date, units, timezone, disclaimer_accepted_at, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        email:
+          $ref: '#/components/schemas/Email'
+        display_name:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        birth_date:
+          type: string
+          format: date
+        units:
+          $ref: '#/components/schemas/Units'
+        timezone:
+          $ref: '#/components/schemas/Timezone'
+        disclaimer_accepted_at:
+          $ref: '#/components/schemas/Timestamp'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    Me:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          required: [onboarding_completed, active_coach, pending_coach_link_id, unread_notification_count]
+          properties:
+            onboarding_completed:
+              type: boolean
+              description: Athletes only; always `true` for coaches.
+            active_coach:
+              description: Athletes only; the actively linked coach.
+              oneOf:
+                - $ref: '#/components/schemas/UserRef'
+                - type: 'null'
+            pending_coach_link_id:
+              description: Athletes only; their pending link request.
+              oneOf:
+                - $ref: '#/components/schemas/Id'
+                - type: 'null'
+            unread_notification_count:
+              type: integer
+              minimum: 0
+    UpdateMeRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        units:
+          $ref: '#/components/schemas/Units'
+        timezone:
+          $ref: '#/components/schemas/Timezone'
+    DeleteAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 128
+          writeOnly: true
+          description: Current password; wrong password → `403 forbidden`.
+
+    # ───────── Athlete profile & targets ─────────
+    Sex:
+      type: string
+      enum: [male, female, unspecified]
+      description: '`unspecified` = "prefer not to say" (midpoint constants).'
+    Lifestyle:
+      type: string
+      enum: [sedentary, lightly_active, active, very_active]
+    Goal:
+      type: string
+      enum: [recomposition, muscle_gain, cutting, maintenance, wellness]
+    Experience:
+      type: string
+      enum: [beginner, intermediate, advanced]
+    TrainingEquipment:
+      type: string
+      enum: [full_gym, home_dumbbells, bodyweight_only]
+    Diet:
+      type: string
+      enum: [omnivore, vegetarian, vegan, pescatarian]
+    Allergen:
+      type: string
+      enum: [gluten, lactose, nuts, eggs, soy, shellfish, fish]
+    AthleteProfileInput:
+      type: object
+      additionalProperties: false
+      required: [sex, height_cm, lifestyle, goal, experience, days_per_week, preferred_days, session_minutes, equipment, diet, meals_per_day]
+      properties:
+        sex:
+          $ref: '#/components/schemas/Sex'
+        height_cm:
+          type: number
+          minimum: 120
+          maximum: 230
+        lifestyle:
+          $ref: '#/components/schemas/Lifestyle'
+        goal:
+          $ref: '#/components/schemas/Goal'
+        experience:
+          $ref: '#/components/schemas/Experience'
+        days_per_week:
+          type: integer
+          minimum: 2
+          maximum: 6
+        preferred_days:
+          type: array
+          description: Weekdays for sessions; length must equal `days_per_week` (F2.4).
+          minItems: 2
+          maxItems: 6
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Weekday'
+        session_minutes:
+          type: integer
+          enum: [30, 45, 60, 75, 90]
+        equipment:
+          $ref: '#/components/schemas/TrainingEquipment'
+        avoided_exercise_ids:
+          type: array
+          uniqueItems: true
+          default: []
+          items:
+            $ref: '#/components/schemas/Id'
+        diet:
+          $ref: '#/components/schemas/Diet'
+        allergies:
+          type: array
+          uniqueItems: true
+          default: []
+          items:
+            $ref: '#/components/schemas/Allergen'
+        meals_per_day:
+          type: integer
+          enum: [3, 4, 5]
+    AthleteProfile:
+      allOf:
+        - $ref: '#/components/schemas/AthleteProfileInput'
+        - type: object
+          required: [athlete_id, avoided_exercise_ids, allergies, updated_at]
+          properties:
+            athlete_id:
+              $ref: '#/components/schemas/Id'
+            updated_at:
+              $ref: '#/components/schemas/Timestamp'
+    BodyFatMethod:
+      type: string
+      enum: [entered, navy]
+      description: '`entered` = known value typed in; `navy` = estimated from tape measurements (F3.3).'
+    OnboardingBodyMetric:
+      type: object
+      additionalProperties: false
+      required: [weight_kg, body_fat_method]
+      description: |
+        `body_fat_method`: `entered` requires `body_fat_pct`; `navy` requires `neck_cm` and
+        `waist_cm` (plus `hip_cm` for female/unspecified); `skip` uses neither.
+      properties:
+        weight_kg:
+          type: number
+          minimum: 35
+          maximum: 300
+        body_fat_method:
+          type: string
+          enum: [entered, navy, skip]
+        body_fat_pct:
+          type: number
+          minimum: 3
+          maximum: 60
+        neck_cm:
+          $ref: '#/components/schemas/MeasurementCm'
+        waist_cm:
+          $ref: '#/components/schemas/MeasurementCm'
+        hip_cm:
+          $ref: '#/components/schemas/MeasurementCm'
+    MeasurementCm:
+      type: number
+      minimum: 20
+      maximum: 200
+      description: Circumference in cm (F2.3).
+    OnboardingRequest:
+      type: object
+      additionalProperties: false
+      required: [profile, body_metric]
+      properties:
+        profile:
+          $ref: '#/components/schemas/AthleteProfileInput'
+        body_metric:
+          $ref: '#/components/schemas/OnboardingBodyMetric'
+    OnboardingResult:
+      type: object
+      required: [profile, body_metric, targets, plan]
+      properties:
+        profile:
+          $ref: '#/components/schemas/AthleteProfile'
+        body_metric:
+          $ref: '#/components/schemas/BodyMetric'
+        targets:
+          $ref: '#/components/schemas/Targets'
+        plan:
+          $ref: '#/components/schemas/Plan'
+    ProfileUpdateResult:
+      type: object
+      required: [profile, targets, targets_changed]
+      properties:
+        profile:
+          $ref: '#/components/schemas/AthleteProfile'
+        targets:
+          $ref: '#/components/schemas/Targets'
+        targets_changed:
+          type: boolean
+          description: '`true` when new targets were computed from today.'
+    Targets:
+      type: object
+      description: Daily targets (F3). All values are estimates.
+      required:
+        - id
+        - athlete_id
+        - valid_from
+        - estimated
+        - bmr_formula
+        - bmr_kcal
+        - lifestyle_factor
+        - baseline_kcal
+        - planned_exercise_kcal_per_day
+        - goal_adjustment_pct
+        - kcal
+        - protein_g
+        - carbs_g
+        - fat_g
+        - target_balance_kcal
+        - floor_applied
+        - floor_kcal
+        - carbs_clamped
+        - weight_kg_used
+        - body_fat_pct_used
+        - explanation
+        - inputs
+        - created_at
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        athlete_id:
+          $ref: '#/components/schemas/Id'
+        valid_from:
+          $ref: '#/components/schemas/LocalDate'
+        estimated:
+          type: boolean
+          const: true
+        bmr_formula:
+          type: string
+          enum: [katch_mcardle, mifflin_st_jeor]
+          description: Katch-McArdle if and only if a body-fat value exists (F3.2).
+        bmr_kcal:
+          $ref: '#/components/schemas/Kcal'
+        lifestyle_factor:
+          type: number
+          enum: [1.2, 1.3, 1.45, 1.6]
+        baseline_kcal:
+          $ref: '#/components/schemas/Kcal'
+        planned_exercise_kcal_per_day:
+          $ref: '#/components/schemas/Kcal'
+        goal_adjustment_pct:
+          type: number
+          description: e.g. `-20` for cutting.
+        kcal:
+          $ref: '#/components/schemas/Kcal'
+        protein_g:
+          $ref: '#/components/schemas/Grams'
+        carbs_g:
+          $ref: '#/components/schemas/Grams'
+        fat_g:
+          $ref: '#/components/schemas/Grams'
+        target_balance_kcal:
+          type: integer
+          description: |
+            The goal's target daily balance (eaten − burned): `kcal − (baseline_kcal +
+            planned_exercise_kcal_per_day)`. Negative for a deficit.
+        floor_applied:
+          type: boolean
+          description: The calorie floor raised the target (F3.6); the explanation says so.
+        floor_kcal:
+          $ref: '#/components/schemas/Kcal'
+        carbs_clamped:
+          type: boolean
+          description: Carbs were clamped at 0 (F3.4); explained.
+        weight_kg_used:
+          type: number
+        body_fat_pct_used:
+          type: [number, 'null']
+        explanation:
+          type: string
+          description: Human-readable formulas and inputs used (F3.5).
+        inputs:
+          type: object
+          additionalProperties: true
+          description: Engine inputs as stored (for audit and tests).
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    # ───────── Body ─────────
+    BodyMetricInput:
+      type: object
+      additionalProperties: false
+      required: [date]
+      minProperties: 2
+      description: At least one of weight, body fat or measurements.
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        weight_kg:
+          type: number
+          minimum: 35
+          maximum: 300
+        body_fat_pct:
+          type: number
+          minimum: 3
+          maximum: 60
+          description: Known value. Omit and send measurements to use the Navy method.
+        neck_cm:
+          $ref: '#/components/schemas/MeasurementCm'
+        waist_cm:
+          $ref: '#/components/schemas/MeasurementCm'
+        hip_cm:
+          $ref: '#/components/schemas/MeasurementCm'
+    BodyMetric:
+      type: object
+      required: [id, date, weight_kg, body_fat_pct, body_fat_method, body_fat_explanation, neck_cm, waist_cm, hip_cm, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        weight_kg:
+          type: [number, 'null']
+        body_fat_pct:
+          type: [number, 'null']
+          description: Estimated when `body_fat_method` is `navy`.
+        body_fat_method:
+          oneOf:
+            - $ref: '#/components/schemas/BodyFatMethod'
+            - type: 'null'
+        body_fat_explanation:
+          type: [string, 'null']
+          description: Navy formula and inputs, when estimated.
+        neck_cm:
+          type: [number, 'null']
+        waist_cm:
+          type: [number, 'null']
+        hip_cm:
+          type: [number, 'null']
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    BodyMetricList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BodyMetric'
+    BodyMetricResult:
+      type: object
+      required: [body_metric, recalc_suggestion]
+      properties:
+        body_metric:
+          $ref: '#/components/schemas/BodyMetric'
+        recalc_suggestion:
+          description: Created when weight moved ≥ 2 % from the weight used for current targets.
+          oneOf:
+            - $ref: '#/components/schemas/Suggestion'
+            - type: 'null'
+
+    # ───────── Catalog ─────────
+    MuscleGroup:
+      type: string
+      enum: [chest, back, shoulders, biceps, triceps, forearms, core, quads, hamstrings, glutes, calves, full_body, cardio]
+    ExerciseEquipment:
+      type: string
+      enum: [barbell, dumbbell, machine, cable, bodyweight, band, cardio_machine, none]
+    ExerciseType:
+      type: string
+      enum: [strength, bodyweight, timed]
+      description: '`timed` covers holds and cardio.'
+    BodyRegion:
+      type: string
+      enum: [upper, lower, full, cardio]
+    ExerciseSummary:
+      type: object
+      required: [id, name, type, equipment, muscle_group]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/ExerciseType'
+        equipment:
+          $ref: '#/components/schemas/ExerciseEquipment'
+        muscle_group:
+          $ref: '#/components/schemas/MuscleGroup'
+    ExerciseInput:
+      type: object
+      additionalProperties: false
+      required: [name, muscle_group, equipment, type, met, region]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        muscle_group:
+          $ref: '#/components/schemas/MuscleGroup'
+        equipment:
+          $ref: '#/components/schemas/ExerciseEquipment'
+        type:
+          $ref: '#/components/schemas/ExerciseType'
+        met:
+          type: number
+          minimum: 1
+          maximum: 20
+        increment_kg:
+          type: number
+          minimum: 0
+          maximum: 20
+          default: 2.5
+        region:
+          $ref: '#/components/schemas/BodyRegion'
+    Exercise:
+      allOf:
+        - $ref: '#/components/schemas/ExerciseInput'
+        - type: object
+          required: [id, increment_kg, is_custom, owner]
+          properties:
+            id:
+              $ref: '#/components/schemas/Id'
+            is_custom:
+              type: boolean
+            owner:
+              description: Creator of a custom exercise; `null` for seed exercises.
+              oneOf:
+                - $ref: '#/components/schemas/UserRef'
+                - type: 'null'
+    ExercisePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Exercise'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    FoodSource:
+      type: string
+      enum: [seed, custom, openfoodfacts]
+    DietTag:
+      type: string
+      enum: [vegetarian, vegan, pescatarian]
+      description: Diets the food is suitable for (every food suits `omnivore`).
+    Per100g:
+      type: object
+      required: [kcal_per_100g, protein_g_per_100g, carbs_g_per_100g, fat_g_per_100g]
+      properties:
+        kcal_per_100g:
+          type: number
+          minimum: 0
+          maximum: 900
+        protein_g_per_100g:
+          type: number
+          minimum: 0
+          maximum: 100
+        carbs_g_per_100g:
+          type: number
+          minimum: 0
+          maximum: 100
+        fat_g_per_100g:
+          type: number
+          minimum: 0
+          maximum: 100
+    FoodInput:
+      allOf:
+        - $ref: '#/components/schemas/Per100g'
+        - type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+              minLength: 2
+              maxLength: 120
+            brand:
+              type: [string, 'null']
+              maxLength: 80
+            diet_tags:
+              type: array
+              uniqueItems: true
+              default: []
+              items:
+                $ref: '#/components/schemas/DietTag'
+            allergen_tags:
+              type: array
+              uniqueItems: true
+              default: []
+              items:
+                $ref: '#/components/schemas/Allergen'
+    FoodSummary:
+      type: object
+      required: [id, name, source]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+        source:
+          $ref: '#/components/schemas/FoodSource'
+    Food:
+      allOf:
+        - $ref: '#/components/schemas/FoodInput'
+        - type: object
+          required: [id, source, external_code, brand, diet_tags, allergen_tags, owner]
+          properties:
+            id:
+              $ref: '#/components/schemas/Id'
+            source:
+              $ref: '#/components/schemas/FoodSource'
+            external_code:
+              type: [string, 'null']
+              description: Open Food Facts product code (unique) for imported foods.
+            owner:
+              oneOf:
+                - $ref: '#/components/schemas/UserRef'
+                - type: 'null'
+    FoodPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Food'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    OffProduct:
+      allOf:
+        - $ref: '#/components/schemas/Per100g'
+        - type: object
+          required: [code, name, brand, imported_food_id]
+          properties:
+            code:
+              type: string
+            name:
+              type: string
+            brand:
+              type: [string, 'null']
+            imported_food_id:
+              description: Local food id if already imported.
+              oneOf:
+                - $ref: '#/components/schemas/Id'
+                - type: 'null'
+    OffSearchResult:
+      type: object
+      required: [available, unavailable_reason, message, items]
+      properties:
+        available:
+          type: boolean
+        unavailable_reason:
+          type: [string, 'null']
+          enum: [disabled, timeout, upstream_error, null]
+        message:
+          type: [string, 'null']
+          description: User-facing message when unavailable.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OffProduct'
+    FoodImportRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9]{4,14}$'
+          description: Open Food Facts product code from a search result.
+    MealSlot:
+      type: string
+      enum: [breakfast, lunch, dinner, snack]
+    FoodGrams:
+      type: object
+      additionalProperties: false
+      required: [food_id, grams]
+      properties:
+        food_id:
+          $ref: '#/components/schemas/Id'
+        grams:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 2000
+    MealItem:
+      allOf:
+        - $ref: '#/components/schemas/Macros'
+        - type: object
+          required: [food, grams]
+          description: A food in a meal; macros = per-100 g × grams ÷ 100 (F6.1).
+          properties:
+            food:
+              $ref: '#/components/schemas/FoodSummary'
+            grams:
+              $ref: '#/components/schemas/Grams'
+    MealInput:
+      type: object
+      additionalProperties: false
+      required: [name, slots, items]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        slots:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/MealSlot'
+        items:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/FoodGrams'
+    MealSummary:
+      type: object
+      required: [id, name, slots]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/MealSlot'
+    Meal:
+      allOf:
+        - $ref: '#/components/schemas/MealSummary'
+        - type: object
+          required: [items, totals, diet_tags, allergen_tags, is_custom, owner]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/MealItem'
+            totals:
+              $ref: '#/components/schemas/Macros'
+            diet_tags:
+              type: array
+              description: Diets every food in the meal suits.
+              items:
+                $ref: '#/components/schemas/DietTag'
+            allergen_tags:
+              type: array
+              description: Union of the foods' allergens.
+              items:
+                $ref: '#/components/schemas/Allergen'
+            is_custom:
+              type: boolean
+            owner:
+              oneOf:
+                - $ref: '#/components/schemas/UserRef'
+                - type: 'null'
+    MealPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Meal'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+
+    # ───────── Plan ─────────
+    PlanSource:
+      type: string
+      enum: [generated, custom]
+    ProgressionRule:
+      type: string
+      enum: [linear, double, manual]
+      description: Bodyweight and timed exercises progress by their type (F11) unless `manual`.
+    PlannedExerciseInput:
+      type: object
+      additionalProperties: false
+      required: [exercise_id, sets, rest_seconds, rule]
+      description: |
+        Strength/bodyweight need `reps_min` (and `reps_max` ≥ `reps_min`; equal = fixed reps).
+        Timed need `target_seconds`. `target_weight_kg: null` = calibration (choose a weight).
+        For bodyweight exercises `target_weight_kg` is *added* weight.
+      properties:
+        id:
+          description: Existing planned exercise to update; omit to add.
+          $ref: '#/components/schemas/Id'
+        exercise_id:
+          $ref: '#/components/schemas/Id'
+        sets:
+          type: integer
+          minimum: 1
+          maximum: 10
+        reps_min:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 100
+        reps_max:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 100
+        target_weight_kg:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 500
+        target_seconds:
+          type: [integer, 'null']
+          minimum: 5
+          maximum: 14400
+        rest_seconds:
+          type: integer
+          minimum: 0
+          maximum: 600
+          default: 90
+        rule:
+          $ref: '#/components/schemas/ProgressionRule'
+        increment_kg:
+          type: number
+          minimum: 0
+          maximum: 20
+          description: Defaults to the exercise's increment.
+        deload_enabled:
+          type: boolean
+          default: true
+    PlannedExercise:
+      type: object
+      required: [id, exercise, order, sets, reps_min, reps_max, target_weight_kg, target_seconds, rest_seconds, rule, increment_kg, deload_enabled, calibration_hint]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        exercise:
+          $ref: '#/components/schemas/ExerciseSummary'
+        order:
+          type: integer
+          minimum: 0
+        sets:
+          type: integer
+        reps_min:
+          type: [integer, 'null']
+        reps_max:
+          type: [integer, 'null']
+        target_weight_kg:
+          type: [number, 'null']
+          description: '`null` until calibrated (F5.4).'
+        target_seconds:
+          type: [integer, 'null']
+        rest_seconds:
+          type: integer
+        rule:
+          $ref: '#/components/schemas/ProgressionRule'
+        increment_kg:
+          type: number
+        deload_enabled:
+          type: boolean
+        calibration_hint:
+          type: [string, 'null']
+          description: Shown while `target_weight_kg` is null, e.g. "Choose a weight you can do for the target reps with 2 reps left".
+    TrainingDayInput:
+      type: object
+      additionalProperties: false
+      required: [weekday, name, exercises]
+      properties:
+        id:
+          description: Existing training day to update; omit to add.
+          $ref: '#/components/schemas/Id'
+        weekday:
+          $ref: '#/components/schemas/Weekday'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        exercises:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/PlannedExerciseInput'
+    TrainingDay:
+      type: object
+      required: [id, weekday, name, order, exercises, estimated_minutes, planned_kcal, edited_by]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        weekday:
+          $ref: '#/components/schemas/Weekday'
+        name:
+          type: string
+        order:
+          type: integer
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlannedExercise'
+        estimated_minutes:
+          type: integer
+          description: Estimated session duration (F5.1).
+        planned_kcal:
+          $ref: '#/components/schemas/Kcal'
+        edited_by:
+          description: Last editor when the day was edited by hand; shown as "edited by <coach name>" for coaches (F8).
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+    PlannedMealInput:
+      type: object
+      additionalProperties: false
+      required: [slot, meal_id]
+      properties:
+        id:
+          description: Existing planned meal to update; omit to add.
+          $ref: '#/components/schemas/Id'
+        slot:
+          $ref: '#/components/schemas/MealSlot'
+        meal_id:
+          $ref: '#/components/schemas/Id'
+        portion_factor:
+          type: number
+          minimum: 0.25
+          maximum: 3
+          default: 1
+        items:
+          type: array
+          description: Optional gram overrides for this planned meal (stored as an athlete-owned copy of the meal).
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/FoodGrams'
+    PlannedMeal:
+      type: object
+      required: [id, slot, order, meal, portion_factor, items, totals]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        slot:
+          $ref: '#/components/schemas/MealSlot'
+        order:
+          type: integer
+        meal:
+          $ref: '#/components/schemas/MealSummary'
+        portion_factor:
+          type: number
+        items:
+          type: array
+          description: Foods with grams already scaled by `portion_factor`.
+          items:
+            $ref: '#/components/schemas/MealItem'
+        totals:
+          $ref: '#/components/schemas/Macros'
+    MealDayInput:
+      type: object
+      additionalProperties: false
+      required: [weekday, meals]
+      properties:
+        weekday:
+          $ref: '#/components/schemas/Weekday'
+        meals:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/PlannedMealInput'
+    MealDay:
+      type: object
+      required: [id, weekday, meals, totals, warning, edited_by]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        weekday:
+          $ref: '#/components/schemas/Weekday'
+        meals:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlannedMeal'
+        totals:
+          $ref: '#/components/schemas/Macros'
+        warning:
+          type: [string, 'null']
+          description: Generator warning when targets could not be hit (F7).
+        edited_by:
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+    Plan:
+      type: object
+      required: [id, athlete_id, version, source, active, revision, created_by, created_at, updated_at, training_days, meal_days, warnings]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        athlete_id:
+          $ref: '#/components/schemas/Id'
+        version:
+          type: integer
+          minimum: 1
+        source:
+          $ref: '#/components/schemas/PlanSource'
+        active:
+          type: boolean
+          description: Only the active version is editable.
+        revision:
+          type: integer
+          minimum: 0
+          description: Optimistic-concurrency counter; send it back with plan updates.
+        created_by:
+          $ref: '#/components/schemas/UserRef'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+        training_days:
+          type: array
+          description: Ordered Monday → Sunday; weekdays not listed are rest days.
+          items:
+            $ref: '#/components/schemas/TrainingDay'
+        meal_days:
+          type: array
+          maxItems: 7
+          items:
+            $ref: '#/components/schemas/MealDay'
+        warnings:
+          type: array
+          items:
+            type: string
+    TrainingPlanUpdate:
+      type: object
+      additionalProperties: false
+      required: [revision, training_days]
+      properties:
+        revision:
+          type: integer
+          minimum: 0
+        training_days:
+          type: array
+          maxItems: 7
+          items:
+            $ref: '#/components/schemas/TrainingDayInput'
+    MealPlanUpdate:
+      type: object
+      additionalProperties: false
+      required: [revision, meal_days]
+      properties:
+        revision:
+          type: integer
+          minimum: 0
+        meal_days:
+          type: array
+          maxItems: 7
+          items:
+            $ref: '#/components/schemas/MealDayInput'
+    RegeneratePlanRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        scope:
+          type: string
+          enum: [all, training, meals]
+          default: all
+    PlanVersionSummary:
+      type: object
+      required: [id, version, source, active, created_by, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        version:
+          type: integer
+        source:
+          $ref: '#/components/schemas/PlanSource'
+        active:
+          type: boolean
+        created_by:
+          $ref: '#/components/schemas/UserRef'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    PlanVersionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanVersionSummary'
+
+    # ───────── Sessions & logging ─────────
+    SessionStatus:
+      type: string
+      enum: [planned, in_progress, done, missed]
+    SetLogInput:
+      type: object
+      additionalProperties: false
+      required: [exercise_id, set_no]
+      description: |
+        Strength: `reps` + `weight_kg`. Bodyweight: `reps` (+ optional added `weight_kg`).
+        Timed: `seconds` (+ optional `distance_m`). Or `as_planned: true` / `skipped: true` alone.
+      properties:
+        exercise_id:
+          $ref: '#/components/schemas/Id'
+        planned_exercise_id:
+          description: '`null` for an exercise added to the session (extra).'
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        set_no:
+          type: integer
+          minimum: 1
+          maximum: 30
+        as_planned:
+          type: boolean
+          default: false
+        skipped:
+          type: boolean
+          default: false
+        reps:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        weight_kg:
+          type: number
+          minimum: 0
+          maximum: 1000
+        seconds:
+          type: integer
+          minimum: 0
+          maximum: 86400
+        distance_m:
+          type: number
+          minimum: 0
+          maximum: 1000000
+    SetLog:
+      type: object
+      required: [id, session_id, planned_exercise_id, exercise_id, set_no, skipped, target_reps, target_weight_kg, target_seconds, reps, weight_kg, seconds, distance_m, logged_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        session_id:
+          $ref: '#/components/schemas/Id'
+        planned_exercise_id:
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        exercise_id:
+          $ref: '#/components/schemas/Id'
+        set_no:
+          type: integer
+        skipped:
+          type: boolean
+        target_reps:
+          type: [integer, 'null']
+          description: Snapshot of the target at logging time.
+        target_weight_kg:
+          type: [number, 'null']
+          description: Snapshot.
+        target_seconds:
+          type: [integer, 'null']
+          description: Snapshot.
+        reps:
+          type: [integer, 'null']
+        weight_kg:
+          type: [number, 'null']
+        seconds:
+          type: [integer, 'null']
+        distance_m:
+          type: [number, 'null']
+        logged_at:
+          $ref: '#/components/schemas/Timestamp'
+    SessionSet:
+      type: object
+      required: [set_no, is_extra, target_reps, target_weight_kg, target_seconds, log]
+      properties:
+        set_no:
+          type: integer
+        is_extra:
+          type: boolean
+        target_reps:
+          type: [integer, 'null']
+          description: For rep ranges, the current target within the range.
+        target_weight_kg:
+          type: [number, 'null']
+        target_seconds:
+          type: [integer, 'null']
+        log:
+          oneOf:
+            - $ref: '#/components/schemas/SetLog'
+            - type: 'null'
+    SessionExercise:
+      type: object
+      required: [planned_exercise_id, exercise, order, is_extra, rule, sets, reps_min, reps_max, rest_seconds, calibration_hint, completion, pending_suggestion_id]
+      properties:
+        planned_exercise_id:
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        exercise:
+          $ref: '#/components/schemas/ExerciseSummary'
+        order:
+          type: integer
+        is_extra:
+          type: boolean
+        rule:
+          oneOf:
+            - $ref: '#/components/schemas/ProgressionRule'
+            - type: 'null'
+        sets:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSet'
+        reps_min:
+          type: [integer, 'null']
+        reps_max:
+          type: [integer, 'null']
+        rest_seconds:
+          type: integer
+          description: Rest-timer duration after each set.
+        calibration_hint:
+          type: [string, 'null']
+        completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        pending_suggestion_id:
+          description: Set when a suggestion for this exercise is pending — the session uses current targets and shows a banner (F11).
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+    Session:
+      type: object
+      required: [id, athlete_id, plan_id, plan_version, training_day_id, training_day_name, date, original_date, status, started_at, finished_at, editable_until, completion, kcal, estimated, exercises]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        athlete_id:
+          $ref: '#/components/schemas/Id'
+        plan_id:
+          $ref: '#/components/schemas/Id'
+        plan_version:
+          type: integer
+        training_day_id:
+          $ref: '#/components/schemas/Id'
+        training_day_name:
+          type: string
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        original_date:
+          description: Planned date before a move; `null` if not moved.
+          oneOf:
+            - $ref: '#/components/schemas/LocalDate'
+            - type: 'null'
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        started_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        finished_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        editable_until:
+          description: End of the edit window (day after the session date, athlete's time zone, in UTC).
+          $ref: '#/components/schemas/Timestamp'
+        completion:
+          description: Σ min(actual, target) ÷ Σ target over planned working sets (F10.2); `null` until something is logged.
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        kcal:
+          description: Estimated exercise kcal (F13.2); `null` until finished.
+          oneOf:
+            - $ref: '#/components/schemas/Kcal'
+            - type: 'null'
+        estimated:
+          type: boolean
+          const: true
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionExercise'
+    MoveSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [date]
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+    FinishSessionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        finished_at:
+          description: Defaults to now.
+          $ref: '#/components/schemas/Timestamp'
+    FinishSessionResult:
+      type: object
+      required: [session, suggestions]
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+        suggestions:
+          type: array
+          description: Pending progression suggestions created by this finish.
+          items:
+            $ref: '#/components/schemas/Suggestion'
+    MealLogStatus:
+      type: string
+      enum: [eaten, adjusted, skipped, extra]
+    MealLogInput:
+      type: object
+      additionalProperties: false
+      required: [date, planned_meal_id, status]
+      description: |
+        `eaten`/`skipped`: no `items` (eaten copies the planned grams). `adjusted`: `items` required.
+        `extra`: `planned_meal_id: null`, `items` required, `slot` optional.
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        planned_meal_id:
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        status:
+          $ref: '#/components/schemas/MealLogStatus'
+        slot:
+          $ref: '#/components/schemas/MealSlot'
+        items:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/FoodGrams'
+    MealLog:
+      type: object
+      required: [id, date, planned_meal_id, status, slot, items, totals, logged_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        planned_meal_id:
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        status:
+          $ref: '#/components/schemas/MealLogStatus'
+        slot:
+          oneOf:
+            - $ref: '#/components/schemas/MealSlot'
+            - type: 'null'
+        items:
+          type: array
+          description: Logged quantities (empty when skipped).
+          items:
+            $ref: '#/components/schemas/MealItem'
+        totals:
+          $ref: '#/components/schemas/Macros'
+        logged_at:
+          $ref: '#/components/schemas/Timestamp'
+    MealLogResult:
+      allOf:
+        - $ref: '#/components/schemas/DayEnergyUpdate'
+        - type: object
+          required: [meal_log]
+          properties:
+            meal_log:
+              $ref: '#/components/schemas/MealLog'
+    ActivityInput:
+      type: object
+      additionalProperties: false
+      required: [date, exercise_id, minutes]
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        exercise_id:
+          $ref: '#/components/schemas/Id'
+        minutes:
+          type: integer
+          minimum: 1
+          maximum: 600
+    Activity:
+      type: object
+      required: [id, date, exercise, minutes, kcal, estimated, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        exercise:
+          $ref: '#/components/schemas/ExerciseSummary'
+        minutes:
+          type: integer
+        kcal:
+          $ref: '#/components/schemas/Kcal'
+        estimated:
+          type: boolean
+          const: true
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+    ActivityResult:
+      allOf:
+        - $ref: '#/components/schemas/DayEnergyUpdate'
+        - type: object
+          required: [activity]
+          properties:
+            activity:
+              $ref: '#/components/schemas/Activity'
+    DayEnergyUpdate:
+      type: object
+      required: [energy, nutrition_completion]
+      properties:
+        energy:
+          $ref: '#/components/schemas/EnergyBalance'
+        nutrition_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+
+    # ───────── Day / calendar ─────────
+    EnergyBalance:
+      type: object
+      description: Estimated daily energy balance (F13). All numbers are estimates.
+      required: [date, estimated, eaten, planned, target, burned, balance_kcal, target_balance_kcal]
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        estimated:
+          type: boolean
+          const: true
+        eaten:
+          description: From logged quantities only (F12.1).
+          $ref: '#/components/schemas/Macros'
+        planned:
+          description: Sum of the day's planned meals.
+          $ref: '#/components/schemas/Macros'
+        target:
+          description: Daily targets valid on this date (for macro progress bars).
+          $ref: '#/components/schemas/Macros'
+        burned:
+          $ref: '#/components/schemas/Burned'
+        balance_kcal:
+          type: integer
+          description: '`eaten.kcal − burned.total_kcal`.'
+        target_balance_kcal:
+          type: integer
+          description: The goal's target balance (see `Targets.target_balance_kcal`).
+    Burned:
+      type: object
+      required: [total_kcal, baseline_kcal, training_kcal, activities_kcal]
+      description: Baseline (BMR × lifestyle) + logged training + extra activities (F13.1), using the most recent weight on or before the date.
+      properties:
+        total_kcal:
+          $ref: '#/components/schemas/Kcal'
+        baseline_kcal:
+          $ref: '#/components/schemas/Kcal'
+        training_kcal:
+          $ref: '#/components/schemas/Kcal'
+        activities_kcal:
+          $ref: '#/components/schemas/Kcal'
+    DayMeal:
+      type: object
+      required: [planned_meal, log]
+      properties:
+        planned_meal:
+          $ref: '#/components/schemas/PlannedMeal'
+        log:
+          description: '`null` = not checked off yet (counts as 0 eaten).'
+          oneOf:
+            - $ref: '#/components/schemas/MealLog'
+            - type: 'null'
+    TrainingStatus:
+      type: string
+      enum: [rest, planned, in_progress, done, missed]
+      description: '`rest` = no session that day (never missed). `missed` = past planned session without logs (F9.3).'
+    DayView:
+      type: object
+      required: [date, weekday, is_today, training_status, session, meals, extra_meal_logs, activities, energy, training_completion, nutrition_completion, pending_suggestions, notes, meal_warning]
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        weekday:
+          $ref: '#/components/schemas/Weekday'
+        is_today:
+          type: boolean
+        training_status:
+          $ref: '#/components/schemas/TrainingStatus'
+        session:
+          description: '`null` on rest days.'
+          oneOf:
+            - $ref: '#/components/schemas/Session'
+            - type: 'null'
+        meals:
+          type: array
+          description: Planned meals in slot order with their check-off state.
+          items:
+            $ref: '#/components/schemas/DayMeal'
+        extra_meal_logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/MealLog'
+        activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        energy:
+          $ref: '#/components/schemas/EnergyBalance'
+        training_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        nutrition_completion:
+          description: Planned meals eaten or adjusted ÷ planned meals (F12.2).
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        pending_suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Suggestion'
+        notes:
+          type: array
+          description: Coach notes for this day, its session and its exercises.
+          items:
+            $ref: '#/components/schemas/Note'
+        meal_warning:
+          type: [string, 'null']
+    CalendarDay:
+      type: object
+      required: [date, weekday, is_today, training_status, session_id, training_day_name, moved, training_completion, nutrition_completion, planned_meal_count, eaten_meal_count, energy]
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        weekday:
+          $ref: '#/components/schemas/Weekday'
+        is_today:
+          type: boolean
+        training_status:
+          $ref: '#/components/schemas/TrainingStatus'
+        session_id:
+          description: '`null` for rest days and for future sessions not yet materialised.'
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        training_day_name:
+          type: [string, 'null']
+        moved:
+          type: boolean
+          description: The session on this day was moved here from another day.
+        training_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        nutrition_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        planned_meal_count:
+          type: integer
+          minimum: 0
+        eaten_meal_count:
+          type: integer
+          minimum: 0
+        energy:
+          $ref: '#/components/schemas/EnergyBalance'
+    CalendarRange:
+      type: object
+      required: [from, to, timezone, days]
+      properties:
+        from:
+          $ref: '#/components/schemas/LocalDate'
+        to:
+          $ref: '#/components/schemas/LocalDate'
+        timezone:
+          $ref: '#/components/schemas/Timezone'
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarDay'
+
+    # ───────── Suggestions ─────────
+    SuggestionKind:
+      type: string
+      enum: [progression, calories, recalc]
+    SuggestionStatus:
+      type: string
+      enum: [pending, accepted, rejected]
+    SuggestionRule:
+      type: string
+      enum: [linear, double, deload, bodyweight, timed, calibration, adaptive_calories, weight_change]
+    SuggestionBase:
+      type: object
+      required: [id, athlete_id, kind, status, rule, reason, inputs, created_at, decided_by, decided_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        athlete_id:
+          $ref: '#/components/schemas/Id'
+        kind:
+          $ref: '#/components/schemas/SuggestionKind'
+        status:
+          $ref: '#/components/schemas/SuggestionStatus'
+        rule:
+          $ref: '#/components/schemas/SuggestionRule'
+        reason:
+          type: string
+          description: Human-readable rule and numbers (F11.4), e.g. "All 3 sets reached 12 reps at 40 kg → 42.5 kg × 8".
+        inputs:
+          type: object
+          additionalProperties: true
+          description: Engine inputs as stored.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        decided_by:
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+        decided_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+    ExerciseTargets:
+      type: object
+      required: [target_weight_kg, reps_min, reps_max, target_seconds]
+      properties:
+        target_weight_kg:
+          type: [number, 'null']
+        reps_min:
+          type: [integer, 'null']
+        reps_max:
+          type: [integer, 'null']
+        target_seconds:
+          type: [integer, 'null']
+    ProgressionPayload:
+      type: object
+      required: [exercise, planned_exercise_id, source_session_id, current, proposed, hint, applied]
+      properties:
+        exercise:
+          $ref: '#/components/schemas/ExerciseSummary'
+        planned_exercise_id:
+          $ref: '#/components/schemas/Id'
+        source_session_id:
+          $ref: '#/components/schemas/Id'
+        current:
+          $ref: '#/components/schemas/ExerciseTargets'
+        proposed:
+          $ref: '#/components/schemas/ExerciseTargets'
+        hint:
+          type: [string, 'null']
+          description: e.g. "Ready for a harder variation" (bodyweight at top of range).
+        applied:
+          description: Values that became the targets on accept (after edits).
+          oneOf:
+            - $ref: '#/components/schemas/ExerciseTargets'
+            - type: 'null'
+    CaloriesPayload:
+      type: object
+      required: [current_kcal, proposed_kcal, delta_kcal, floor_applied, expected_weekly_change_pct, tolerance_pct, observed_weekly_change_pct, applied_kcal]
+      properties:
+        current_kcal:
+          $ref: '#/components/schemas/Kcal'
+        proposed_kcal:
+          $ref: '#/components/schemas/Kcal'
+        delta_kcal:
+          type: integer
+          enum: [-150, 150]
+        floor_applied:
+          type: boolean
+        expected_weekly_change_pct:
+          type: number
+        tolerance_pct:
+          type: number
+        observed_weekly_change_pct:
+          type: array
+          description: 7-day-average trend for the two complete weeks, oldest first.
+          minItems: 2
+          maxItems: 2
+          items:
+            type: number
+        applied_kcal:
+          oneOf:
+            - $ref: '#/components/schemas/Kcal'
+            - type: 'null'
+    RecalcPayload:
+      type: object
+      required: [weight_used_kg, new_weight_kg, change_pct, current, proposed]
+      properties:
+        weight_used_kg:
+          type: number
+        new_weight_kg:
+          type: number
+        change_pct:
+          type: number
+        current:
+          $ref: '#/components/schemas/Macros'
+        proposed:
+          $ref: '#/components/schemas/Macros'
+    ProgressionSuggestion:
+      allOf:
+        - $ref: '#/components/schemas/SuggestionBase'
+        - type: object
+          required: [kind, payload]
+          properties:
+            kind:
+              type: string
+              const: progression
+            payload:
+              $ref: '#/components/schemas/ProgressionPayload'
+    CaloriesSuggestion:
+      allOf:
+        - $ref: '#/components/schemas/SuggestionBase'
+        - type: object
+          required: [kind, payload]
+          properties:
+            kind:
+              type: string
+              const: calories
+            payload:
+              $ref: '#/components/schemas/CaloriesPayload'
+    RecalcSuggestion:
+      allOf:
+        - $ref: '#/components/schemas/SuggestionBase'
+        - type: object
+          required: [kind, payload]
+          properties:
+            kind:
+              type: string
+              const: recalc
+            payload:
+              $ref: '#/components/schemas/RecalcPayload'
+    Suggestion:
+      description: A pending or decided suggestion; `payload` shape depends on `kind`.
+      oneOf:
+        - $ref: '#/components/schemas/ProgressionSuggestion'
+        - $ref: '#/components/schemas/CaloriesSuggestion'
+        - $ref: '#/components/schemas/RecalcSuggestion'
+      discriminator:
+        propertyName: kind
+        mapping:
+          progression: '#/components/schemas/ProgressionSuggestion'
+          calories: '#/components/schemas/CaloriesSuggestion'
+          recalc: '#/components/schemas/RecalcSuggestion'
+    SuggestionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Suggestion'
+    AcceptSuggestionRequest:
+      type: object
+      additionalProperties: false
+      description: Edit-then-accept. Progression accepts the target fields; calories accepts `kcal`; recalc accepts no overrides.
+      properties:
+        overrides:
+          type: object
+          additionalProperties: false
+          minProperties: 1
+          properties:
+            target_weight_kg:
+              type: [number, 'null']
+              minimum: 0
+              maximum: 500
+            reps_min:
+              type: integer
+              minimum: 1
+              maximum: 100
+            reps_max:
+              type: integer
+              minimum: 1
+              maximum: 100
+            target_seconds:
+              type: integer
+              minimum: 5
+              maximum: 14400
+            kcal:
+              type: integer
+              minimum: 1200
+              maximum: 6000
+
+    # ───────── Charts ─────────
+    SetStatus:
+      type: string
+      enum: [met, partial, missed, skipped, extra]
+      description: '`met` ✅ actual ≥ target; `partial` ⚠️; `missed` no log; `extra` not planned.'
+    SessionChartSet:
+      type: object
+      required: [set_no, status, completion, target_reps, target_weight_kg, target_seconds, reps, weight_kg, seconds]
+      properties:
+        set_no:
+          type: integer
+        status:
+          $ref: '#/components/schemas/SetStatus'
+        completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        target_reps:
+          type: [integer, 'null']
+        target_weight_kg:
+          type: [number, 'null']
+        target_seconds:
+          type: [integer, 'null']
+        reps:
+          type: [integer, 'null']
+        weight_kg:
+          type: [number, 'null']
+        seconds:
+          type: [integer, 'null']
+    SessionChartExercise:
+      type: object
+      required: [exercise, is_extra, completion, sets]
+      properties:
+        exercise:
+          $ref: '#/components/schemas/ExerciseSummary'
+        is_extra:
+          type: boolean
+        completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        sets:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionChartSet'
+    SessionChart:
+      type: object
+      required: [session_id, date, training_day_name, status, completion, kcal, exercises]
+      properties:
+        session_id:
+          $ref: '#/components/schemas/Id'
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        training_day_name:
+          type: string
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        kcal:
+          oneOf:
+            - $ref: '#/components/schemas/Kcal'
+            - type: 'null'
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionChartExercise'
+    ExerciseChartPoint:
+      type: object
+      required: [date, session_id, target_weight_kg, target_reps, target_seconds, top_set_weight_kg, top_set_reps, top_set_seconds, volume_kg, is_pr]
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        session_id:
+          $ref: '#/components/schemas/Id'
+        target_weight_kg:
+          type: [number, 'null']
+          description: Target at the time of the session (snapshot).
+        target_reps:
+          type: [integer, 'null']
+        target_seconds:
+          type: [integer, 'null']
+        top_set_weight_kg:
+          type: [number, 'null']
+        top_set_reps:
+          type: [integer, 'null']
+        top_set_seconds:
+          type: [integer, 'null']
+        volume_kg:
+          type: number
+          minimum: 0
+          description: Σ reps × weight over the session's sets of this exercise.
+        is_pr:
+          type: boolean
+          description: Personal record (heaviest top set so far, or longest duration for timed).
+    ExerciseChart:
+      type: object
+      required: [exercise, weeks, points]
+      properties:
+        exercise:
+          $ref: '#/components/schemas/ExerciseSummary'
+        weeks:
+          type: integer
+          enum: [4, 12, 26, 52]
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExerciseChartPoint'
+    AdherenceDay:
+      type: object
+      required: [date, training_status, training_completion, nutrition_completion]
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        training_status:
+          $ref: '#/components/schemas/TrainingStatus'
+        training_completion:
+          description: '`null` on rest days.'
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        nutrition_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+    AdherenceWeek:
+      type: object
+      required: [week_start, sessions_planned, sessions_done, training_completion, nutrition_completion]
+      properties:
+        week_start:
+          $ref: '#/components/schemas/LocalDate'
+        sessions_planned:
+          type: integer
+        sessions_done:
+          type: integer
+        training_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        nutrition_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+    AdherenceChart:
+      type: object
+      required: [from, to, days, weeks]
+      properties:
+        from:
+          $ref: '#/components/schemas/LocalDate'
+        to:
+          $ref: '#/components/schemas/LocalDate'
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdherenceDay'
+        weeks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdherenceWeek'
+    DatedValue:
+      type: object
+      required: [date, value]
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        value:
+          type: [number, 'null']
+    WeeklySummary:
+      type: object
+      required: [week_start, week_end, estimated, sessions_planned, sessions_done, sessions_missed, avg_completion, avg_daily_balance_kcal, target_daily_balance_kcal, weight_avg_start_kg, weight_avg_end_kg, weight_change_kg, sparklines]
+      properties:
+        week_start:
+          $ref: '#/components/schemas/LocalDate'
+        week_end:
+          $ref: '#/components/schemas/LocalDate'
+        estimated:
+          type: boolean
+          const: true
+        sessions_planned:
+          type: integer
+        sessions_done:
+          type: integer
+        sessions_missed:
+          type: integer
+        avg_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        avg_daily_balance_kcal:
+          type: [integer, 'null']
+        target_daily_balance_kcal:
+          type: [integer, 'null']
+        weight_avg_start_kg:
+          type: [number, 'null']
+          description: 7-day average at the start of the week.
+        weight_avg_end_kg:
+          type: [number, 'null']
+        weight_change_kg:
+          type: [number, 'null']
+        sparklines:
+          type: object
+          required: [daily_balance_kcal, training_completion, weight_avg_kg]
+          properties:
+            daily_balance_kcal:
+              type: array
+              items:
+                $ref: '#/components/schemas/DatedValue'
+            training_completion:
+              type: array
+              items:
+                $ref: '#/components/schemas/DatedValue'
+            weight_avg_kg:
+              type: array
+              items:
+                $ref: '#/components/schemas/DatedValue'
+    BodyChartPoint:
+      type: object
+      required: [date, weight_kg, weight_avg_7d_kg, body_fat_pct]
+      properties:
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        weight_kg:
+          type: [number, 'null']
+        weight_avg_7d_kg:
+          type: [number, 'null']
+          description: Mean of existing weigh-ins in the 7 days ending on `date`.
+        body_fat_pct:
+          type: [number, 'null']
+    BodyChart:
+      type: object
+      required: [weeks, estimated, points]
+      properties:
+        weeks:
+          type: integer
+          enum: [4, 12, 26, 52]
+        estimated:
+          type: boolean
+          const: true
+          description: Body fat values are estimates.
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/BodyChartPoint'
+
+    # ───────── Coach ─────────
+    CoachProfileInput:
+      type: object
+      additionalProperties: false
+      required: [bio, discoverable]
+      properties:
+        bio:
+          type: string
+          maxLength: 500
+        discoverable:
+          type: boolean
+          default: true
+    CoachProfile:
+      allOf:
+        - $ref: '#/components/schemas/CoachProfileInput'
+        - type: object
+          required: [user_id, display_name]
+          properties:
+            user_id:
+              $ref: '#/components/schemas/Id'
+            display_name:
+              type: string
+    CoachSearchResult:
+      type: object
+      description: Never contains the coach's email (F16.2).
+      required: [id, display_name, bio]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        display_name:
+          type: string
+        bio:
+          type: string
+    CoachSearchResultList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/CoachSearchResult'
+    CoachLinkStatus:
+      type: string
+      enum: [pending, active, declined, ended]
+    CoachLinkRequest:
+      type: object
+      additionalProperties: false
+      required: [coach_id]
+      properties:
+        coach_id:
+          $ref: '#/components/schemas/Id'
+    CoachLink:
+      type: object
+      required: [id, status, source, coach, athlete, created_at, updated_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        status:
+          $ref: '#/components/schemas/CoachLinkStatus'
+        source:
+          type: string
+          enum: [request]
+          description: '`subscription` will be added with paid coaching (roadmap).'
+        coach:
+          $ref: '#/components/schemas/UserRef'
+        athlete:
+          $ref: '#/components/schemas/UserRef'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+    CoachLinkList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoachLink'
+    AttentionReason:
+      type: string
+      enum: [low_adherence, deload, inactive]
+      description: '`low_adherence` < 70 % training adherence over 7 days; `deload` pending/applied in 14 days; `inactive` no logs for 3+ days.'
+    CoachAthleteSummary:
+      type: object
+      required: [athlete, link_id, linked_since, needs_attention, attention_reasons, training_adherence_7d, last_log_date, pending_suggestion_count]
+      properties:
+        athlete:
+          $ref: '#/components/schemas/UserRef'
+        link_id:
+          $ref: '#/components/schemas/Id'
+        linked_since:
+          $ref: '#/components/schemas/Timestamp'
+        needs_attention:
+          type: boolean
+        attention_reasons:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AttentionReason'
+        training_adherence_7d:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        last_log_date:
+          oneOf:
+            - $ref: '#/components/schemas/LocalDate'
+            - type: 'null'
+        pending_suggestion_count:
+          type: integer
+          minimum: 0
+    CoachAthleteList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoachAthleteSummary'
+
+    # ───────── Notes ─────────
+    NoteScope:
+      type: string
+      enum: [day, session, exercise]
+    NoteInput:
+      type: object
+      additionalProperties: false
+      required: [scope, text]
+      description: '`day` requires `date`; `session` requires `session_id`; `exercise` requires `exercise_id` (optionally with `session_id` for context).'
+      properties:
+        scope:
+          $ref: '#/components/schemas/NoteScope'
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        session_id:
+          $ref: '#/components/schemas/Id'
+        exercise_id:
+          $ref: '#/components/schemas/Id'
+        text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    NoteUpdate:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    Note:
+      type: object
+      required: [id, athlete_id, author, scope, date, session_id, exercise, text, created_at, updated_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        athlete_id:
+          $ref: '#/components/schemas/Id'
+        author:
+          $ref: '#/components/schemas/UserRef'
+        scope:
+          $ref: '#/components/schemas/NoteScope'
+        date:
+          oneOf:
+            - $ref: '#/components/schemas/LocalDate'
+            - type: 'null'
+        session_id:
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        exercise:
+          oneOf:
+            - $ref: '#/components/schemas/ExerciseSummary'
+            - type: 'null'
+        text:
+          type: string
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+    NoteList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Note'
+
+    # ───────── Notifications ─────────
+    NotificationType:
+      type: string
+      enum:
+        - progression_suggestion
+        - calorie_suggestion
+        - recalc_prompt
+        - coach_note
+        - link_request_received
+        - link_request_approved
+        - link_request_declined
+        - link_ended
+        - plan_edited_by_coach
+    Notification:
+      type: object
+      required: [id, type, payload, created_at, read_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        type:
+          $ref: '#/components/schemas/NotificationType'
+        payload:
+          $ref: '#/components/schemas/NotificationPayload'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        read_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+    NotificationPayload:
+      type: object
+      description: References for navigation; the client renders the text from `type`. Only the ids relevant to the type are present.
+      additionalProperties: false
+      properties:
+        athlete_id:
+          $ref: '#/components/schemas/Id'
+        suggestion_id:
+          $ref: '#/components/schemas/Id'
+        note_id:
+          $ref: '#/components/schemas/Id'
+        link_id:
+          $ref: '#/components/schemas/Id'
+        plan_id:
+          $ref: '#/components/schemas/Id'
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        actor:
+          $ref: '#/components/schemas/UserRef'
+    NotificationPage:
+      type: object
+      required: [items, unread_count, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        unread_count:
+          type: integer
+          minimum: 0
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    MarkAllReadResult:
+      type: object
+      required: [updated]
+      properties:
+        updated:
+          type: integer
+          minimum: 0
+
+    # ───────── Ops ─────────
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+    Readiness:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+        checks:
+          type: object
+          required: [database]
+          properties:
+            database:
+              type: string
+              enum: [ok, fail]
+            migrations:
+              type: string
+              enum: [ok, pending]
