@@ -568,6 +568,16 @@ Full contract in `openapi.yaml` (written before implementation). All paths under
 | Data | `GET /me/export` · `DELETE /me` |
 | Ops | `GET /healthz` · `GET /readyz` |
 
+Contract v1 adds or makes precise these endpoints, which the screens in §5 need (D39–D47):
+
+| Area | Endpoints |
+|---|---|
+| Me | `PATCH /me` (display name, units, time zone) |
+| Catalog | `POST /foods/import` (copy an Open Food Facts result into `Food`) |
+| Plan | `PUT /athletes/{id}/plan/training` · `PUT /athletes/{id}/plan/meals` (the `plan/...` edits) · `GET /athletes/{id}/plan/versions/{version}` |
+| Calendar / Logging | `GET /sessions/{id}` · `DELETE /sessions/{id}/sets/{set_log_id}` · `DELETE /athletes/{id}/meal-logs/{log_id}` · `DELETE /athletes/{id}/activities/{activity_id}` |
+| Coach | `GET/PUT /coach/profile` · `GET /coach-links?status=` (incoming/outgoing requests) · notes edit/delete at `/athletes/{id}/notes/{note_id}` |
+
 ## 10. Testing strategy
 
 Single command: **`make test`** runs everything below (except e2e, which runs with `make e2e` and in CI).
@@ -745,6 +755,15 @@ If time runs out, milestones are cut from the end; M0–M2 alone satisfy every g
 | D36 | Agent team: PM, Engineer, QA, DevOps/SRE |
 | D37 | Tracker: public GitHub repo + Issues + Projects board |
 | D38 | Product name: FitWise |
+| D39 | API conventions (`openapi.yaml`): `snake_case` JSON; metric only, with the unit in the field name (`_kg`, `_cm`, `_g`, `kcal`, `seconds`); `date` = calendar day in the athlete's time zone, `date-time` = UTC instant with `Z`; weekdays as `mon`…`sun`; lists wrapped in `{items}`, catalog/notifications cursor-paginated |
+| D40 | Errors are RFC 9457 `application/problem+json` with a stable `code` and field `errors[]`. 400 = malformed request/invalid range, 422 = validation (incl. F1.1, F1.2, F2.3), 409 = state conflict |
+| D41 | `athletes/{id}` accepts `me`; an unknown or not-actively-linked athlete id returns 403 (never 404) so ids cannot be enumerated. Each operation declares its access rule in `x-fitwise-access` for the authorization matrix tests |
+| D42 | Custom-mode plan edits replace the whole training or meal template (`PUT /plan/training`, `PUT /plan/meals`) with an optimistic-concurrency `revision`; a stale revision returns 409. Gram overrides on a planned meal are stored as an athlete-owned copy of the meal |
+| D43 | Logging endpoints are upserts on their natural key (set: session + exercise + set number; meal: date + planned meal); 201 on create, 200 on replace. Body metrics upsert per day the same way |
+| D44 | Open Food Facts search degrades to `200 {available: false, message}` when the flag is off or upstream fails; imports go through `POST /foods/import` (unique on product code), which returns 503 only if the product is not cached and upstream is down |
+| D45 | A session can be moved only if not finished, to a day in the same ISO week that is today or later and has no other session |
+| D46 | Editing the profile (owner only; coaches can view) recomputes targets from today and rescales future meal portions without a suggestion, because the athlete made the change; the training plan is regenerated only on request |
+| D47 | `target_balance_kcal` (goal's target daily balance) = target kcal − (baseline + average daily planned exercise kcal). Exercise muscle groups are a fixed enum (chest, back, shoulders, biceps, triceps, forearms, core, quads, hamstrings, glutes, calves, full_body, cardio). Custom exercises/foods/meals are visible to their creator and the creator's active-link counterpart |
 
 ## 20. Assumptions and open questions
 

@@ -1,0 +1,9 @@
+# Lint config for openapi.yaml: `npx @redocly/cli lint openapi.yaml`
+extends:
+  - recommended
+rules:
+  # The repository has no license chosen yet; re-enable once one is added.
+  info-license: off
+  # Examples are documentation and test fixtures: an example that does not match its schema fails lint.
+  no-invalid-media-type-examples: error
+  no-invalid-schema-examples: error
