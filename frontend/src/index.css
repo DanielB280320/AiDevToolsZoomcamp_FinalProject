@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/*
+ * FitWise tokens. Gym-floor palette: chalk paper, iron ink, spruce for actions and
+ * one bumper-plate yellow used only for the brand bar. Barlow Condensed (signage) for
+ * the wordmark and headings, Barlow for reading text. Type scale: 1.25 ratio from 16 px.
+ */
+@theme {
+  --color-chalk: #f2f4f1;
+  --color-iron: #1c2530;
+  --color-spruce: #1e6b57;
+  --color-spruce-dark: #154d3f;
+  --color-plate: #e8b931;
+  --color-slate: #56616c;
+  --color-line: #d3d9d4;
+  --color-alert: #a3321f;
+
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, system-ui, sans-serif;
+
+  --text-step--1: 0.875rem;
+  --text-step--1--line-height: 1.45;
+  --text-step-0: 1rem;
+  --text-step-0--line-height: 1.55;
+  --text-step-1: 1.25rem;
+  --text-step-1--line-height: 1.4;
+  --text-step-2: 1.5625rem;
+  --text-step-2--line-height: 1.2;
+  --text-step-3: 1.953rem;
+  --text-step-3--line-height: 1.1;
+  --text-step-4: 2.441rem;
+  --text-step-4--line-height: 1.05;
+  --text-step-5: 3.052rem;
+  --text-step-5--line-height: 1;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-chalk);
+    color: var(--color-iron);
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-width: 0;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-spruce);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
