@@ -22,6 +22,7 @@ Standard library only, so it runs from a fresh clone with any python3 >= 3.9.
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
@@ -49,6 +50,10 @@ SAFE_DEVICES = ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty")
 
 class Denied(Exception):
     """Raised with a human-readable reason when a write is out of scope."""
+
+
+class Unexpandable(Denied):
+    """A brace expansion the checks don't model (sequences, empty results)."""
 
 
 # --------------------------------------------------------------------------
@@ -166,6 +171,12 @@ def check_path(path: str, cwd: str | None, ctx: Context, action: str) -> None:
 class Word:
     text: str
     dynamic: bool = False  # contains unquoted/double-quoted $ or a substitution
+    # marks[i] is True when text[i] was unquoted (subject to brace expansion and
+    # globbing). Empty means "all unquoted", for words built by the checks.
+    marks: list[bool] = field(default_factory=list)
+
+    def unquoted(self) -> list[bool]:
+        return self.marks if len(self.marks) == len(self.text) else [True] * len(self.text)
 
 
 @dataclass
@@ -251,7 +262,13 @@ class ShellParser:
 
     def _read_word(self) -> Word:
         buf: list[str] = []
+        marks: list[bool] = []
         dynamic = False
+
+        def add(text: str, unquoted: bool) -> None:
+            buf.append(text)
+            marks.extend([unquoted] * len(text))
+
         while self.i < len(self.s):
             c = self.s[self.i]
             if c in " \t\n;&|()<>":
@@ -260,52 +277,52 @@ class ShellParser:
                 if self._peek(2) == "\\\n":
                     self.i += 2
                     continue
-                buf.append(self.s[self.i + 1 : self.i + 2])
+                add(self.s[self.i + 1 : self.i + 2], False)
                 self.i += 2
             elif c == "'":
                 end = self.s.find("'", self.i + 1)
                 end = len(self.s) if end == -1 else end
-                buf.append(self.s[self.i + 1 : end])
+                add(self.s[self.i + 1 : end], False)
                 self.i = end + 1
             elif c == '"':
                 self.i += 1
                 while self.i < len(self.s) and self.s[self.i] != '"':
                     d = self.s[self.i]
                     if d == "\\" and self.i + 1 < len(self.s):
-                        buf.append(self.s[self.i + 1])
+                        add(self.s[self.i + 1], False)
                         self.i += 2
                     elif d == "$" and self._peek(2) == "$(":
                         self.i += 2
                         self._substitution(self._read_balanced_subst())
                         dynamic = True
-                        buf.append("$")
+                        add("$", False)
                     elif d == "`":
                         self.i += 1
                         self._substitution(self._read_backtick())
                         dynamic = True
-                        buf.append("`")
+                        add("`", False)
                     else:
                         if d == "$":
                             dynamic = True
-                        buf.append(d)
+                        add(d, False)
                         self.i += 1
                 self.i += 1
             elif c == "$" and self._peek(2) == "$(":
                 self.i += 2
                 self._substitution(self._read_balanced_subst())
                 dynamic = True
-                buf.append("$")
+                add("$", True)
             elif c == "`":
                 self.i += 1
                 self._substitution(self._read_backtick())
                 dynamic = True
-                buf.append("`")
+                add("`", True)
             else:
                 if c == "$":
                     dynamic = True
-                buf.append(c)
+                add(c, True)
                 self.i += 1
-        return Word("".join(buf), dynamic)
+        return Word("".join(buf), dynamic, marks)
 
     def _skip_heredoc_bodies(self) -> None:
         """At a newline: skip the bodies of here-documents opened on this line."""
@@ -374,13 +391,83 @@ def parse_shell(text: str) -> list[SimpleCommand]:
 # Bash command checks
 # --------------------------------------------------------------------------
 
-KEYWORDS = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "!", "{", "}", "time", "case", "esac"}
-WRAPPERS = {"sudo", "nohup", "nice", "command", "builtin", "exec", "stdbuf", "ionice", "doas"}
+KEYWORDS = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "!", "{", "}", "case", "esac"}
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+MAX_EXPANSIONS = 256
+
+
+@dataclass(frozen=True)
+class OptSpec:
+    """Options of a wrapper command, which runs the command that follows them.
+
+    ``flags``/``values``: short option letters without/with a value.
+    ``optional``: short options whose value may only be attached (``xargs -i{}``).
+    ``chdir``/``output``: options whose value is a new working directory / a file it writes.
+    ``deny``: options that make the wrapped command impossible to verify.
+    ``positionals``: words between the options and the command (``timeout DURATION``).
+    Any other option is unknown, and the call is denied (fail closed).
+    """
+
+    flags: str = ""
+    values: str = ""
+    optional: str = ""
+    long_flags: frozenset[str] = frozenset()
+    long_values: frozenset[str] = frozenset()
+    chdir: frozenset[str] = frozenset()
+    output: frozenset[str] = frozenset()
+    deny: frozenset[str] = frozenset()
+    positionals: int = 0
+    numeric: bool = False  # accepts -N (nice -10)
+
+
+def _f(*names: str) -> frozenset[str]:
+    return frozenset(names)
+
+
+WRAPPERS: dict[str, OptSpec] = {
+    "sudo": OptSpec(
+        flags="AbEHiKklnPSsVv", values="CDghpRrTtUu",
+        long_flags=_f("--askpass", "--background", "--preserve-env", "--set-home", "--login", "--remove-timestamp",
+                      "--reset-timestamp", "--list", "--non-interactive", "--preserve-groups", "--stdin", "--shell",
+                      "--validate", "--bell"),
+        long_values=_f("--close-from", "--chdir", "--group", "--host", "--prompt", "--chroot", "--role", "--type",
+                       "--command-timeout", "--other-user", "--user"),
+        chdir=_f("-D", "--chdir"), deny=_f("-e", "--edit", "-R", "--chroot")),
+    "doas": OptSpec(flags="Lns", values="Cu"),
+    "nice": OptSpec(values="n", long_values=_f("--adjustment"), numeric=True),
+    "nohup": OptSpec(),
+    "setsid": OptSpec(flags="cfw", long_flags=_f("--ctty", "--fork", "--wait")),
+    "command": OptSpec(flags="pvV"),
+    "builtin": OptSpec(),
+    "exec": OptSpec(flags="cl", values="a"),
+    "busybox": OptSpec(),
+    "stdbuf": OptSpec(values="ioe", long_values=_f("--input", "--output", "--error")),
+    "ionice": OptSpec(flags="t", values="cnpPu",
+                      long_flags=_f("--ignore"), long_values=_f("--class", "--classdata", "--pid", "--pgid", "--uid")),
+    "env": OptSpec(flags="i0v", values="uCS",
+                   long_flags=_f("--ignore-environment", "--null", "--debug"),
+                   long_values=_f("--unset", "--chdir", "--split-string"),
+                   chdir=_f("-C", "--chdir"), deny=_f("-S", "--split-string")),
+    "timeout": OptSpec(flags="v", values="sk", long_flags=_f("--preserve-status", "--foreground", "--verbose"),
+                       long_values=_f("--signal", "--kill-after"), positionals=1),
+    # The bash keyword (time -p) and GNU time (-o FILE writes FILE).
+    "time": OptSpec(flags="pvaq", values="of", long_flags=_f("--portability", "--verbose", "--append", "--quiet"),
+                    long_values=_f("--output", "--format"), output=_f("-o", "--output")),
+    "xargs": OptSpec(
+        flags="0prtxo", values="adEILnPs", optional="eil",
+        long_flags=_f("--null", "--interactive", "--no-run-if-empty", "--verbose", "--exit", "--show-limits",
+                      "--open-tty"),
+        long_values=_f("--arg-file", "--delimiter", "--max-lines", "--max-args", "--max-procs", "--max-chars",
+                       "--process-slot-var"),
+        # Optional-value long options only take their value with "=".
+        chdir=_f()),
+}
+# Long options that take an optional value, attached with "=" only.
+OPTIONAL_LONG = {"xargs": {"--eof", "--replace"}, "sudo": {"--preserve-env"}}
 
 # Commands whose every positional argument is a path they create, change or delete.
-ALL_ARGS_WRITERS = {"rm", "rmdir", "touch", "mkdir", "truncate", "shred", "unlink", "mv"}
+ALL_ARGS_WRITERS = {"rm", "rmdir", "touch", "mkdir", "truncate", "shred", "unlink", "mv", "link"}
 # Commands that write their last positional argument (or -t DIR).
 DEST_WRITERS = {"cp", "install", "ln", "rsync"}
 # Commands that first take a mode/owner, then paths.
@@ -401,7 +488,21 @@ ALWAYS_DENIED = {
     "claude": "starting another Claude Code session would bypass the agent's scope",
     "patch": "patch can write any file; edit in-scope files with the Edit tool instead",
     "PowerShell": "PowerShell is not available to this agent",
+    "sudoedit": "sudoedit can write any file",
+    "su": "su runs a command that cannot be verified",
+    "runuser": "runuser runs a command that cannot be verified",
+    "parallel": "parallel builds commands from its input, so the files it writes cannot be verified",
 }
+# find actions that run a command or write files.
+FIND_EXEC = {"-exec", "-execdir", "-ok", "-okdir"}
+FIND_OUTPUT = {"-fprint": 1, "-fprint0": 1, "-fls": 1, "-fprintf": 2}
+# git subcommands that the checks verify from their arguments; with unknown (xargs/find) arguments they are denied.
+GIT_WRITE_SUBCOMMANDS = {"add", "stage", "commit", "mv", "rm", "restore", "checkout", "apply", "am"}
+
+
+def _short_has(word: str, letter: str) -> bool:
+    """True if a short-option bundle such as -sf contains letter."""
+    return word.startswith("-") and not word.startswith("--") and letter in word[1:]
 
 
 def _positionals(args: list[Word], value_opts: set[str]) -> list[Word]:
@@ -423,10 +524,97 @@ def _positionals(args: list[Word], value_opts: set[str]) -> list[Word]:
     return out
 
 
+# -- brace expansion and globbing --------------------------------------------
+
+
+def _brace_alternatives(text: str, marks: list[bool]) -> tuple[int, int, list[int]] | None:
+    """Find the first unquoted {a,b} group: (open index, close index, top-level comma indexes)."""
+    for start, ch in enumerate(text):
+        if ch != "{" or not marks[start] or (start and text[start - 1] == "$" and marks[start - 1]):
+            continue
+        depth = 0
+        commas: list[int] = []
+        for k in range(start + 1, len(text)):
+            if not marks[k]:
+                continue
+            if text[k] == "{":
+                depth += 1
+            elif text[k] == "}":
+                if depth == 0:
+                    inner = text[start + 1 : k]
+                    if commas:
+                        return start, k, commas
+                    if re.fullmatch(r"(-?\d+|[A-Za-z])\.\.(-?\d+|[A-Za-z])(\.\.-?\d+)?", inner):
+                        raise Unexpandable(f"cannot verify the brace sequence {{{inner}}}; list the paths explicitly")
+                    break
+                depth -= 1
+            elif text[k] == "," and depth == 0:
+                commas.append(k)
+    return None
+
+
+def brace_expand(word: Word) -> list[Word]:
+    """Expand unquoted {a,b} groups like bash does; quoted braces stay literal."""
+    pending = [(word.text, word.unquoted())]
+    done: list[Word] = []
+    while pending:
+        text, marks = pending.pop(0)
+        found = _brace_alternatives(text, marks)
+        if found is None:
+            done.append(Word(text, word.dynamic, marks))
+        else:
+            start, close, commas = found
+            bounds = [start, *commas, close]
+            for n in range(len(bounds) - 1):
+                a, b = bounds[n], bounds[n + 1]
+                pending.append((text[:start] + text[a + 1 : b] + text[close + 1 :],
+                                marks[:start] + marks[a + 1 : b] + marks[close + 1 :]))
+        if len(done) + len(pending) > MAX_EXPANSIONS:
+            raise Denied(f"the brace expansion in {word.text!r} produces too many words to verify")
+    if len(done) > 1 and any(not w.text for w in done):
+        # bash drops empty results, which shifts positional arguments; don't try to model that.
+        raise Unexpandable(f"cannot verify the brace expansion {word.text!r} because it produces empty words")
+    return done
+
+
+def expand_words(words: list[Word]) -> tuple[list[Word], bool]:
+    """Brace-expand an argv. The flag is True when a word could not be expanded reliably;
+    the caller then treats the arguments as unknown (writers are denied, readers pass)."""
+    out: list[Word] = []
+    unknown = False
+    for w in words:
+        try:
+            out.extend(brace_expand(w))
+        except Unexpandable:
+            out.append(w)
+            unknown = True
+    return out, unknown
+
+
+def _glob_matches(w: Word, cwd: str | None) -> list[str]:
+    """Paths an unquoted glob in w matches (bash replaces the word with them)."""
+    marks = w.unquoted()
+    if not any(m and c in "*?[" for c, m in zip(w.text, marks)):
+        return []
+    pattern = "".join(c if m else glob.escape(c) for c, m in zip(w.text, marks))
+    pattern = os.path.expanduser(pattern)
+    if not os.path.isabs(pattern):
+        if not cwd:
+            raise Denied(f"cannot verify the glob {w.text!r} (unknown working directory)")
+        pattern = os.path.join(cwd, pattern)
+    matches = glob.glob(pattern)
+    if len(matches) > MAX_EXPANSIONS:
+        raise Denied(f"the glob {w.text!r} matches too many files to verify")
+    return matches
+
+
 def _check_word(w: Word, cwd: str | None, ctx: Context, action: str) -> None:
     if w.dynamic:
         raise Denied(f"{action}: cannot verify the target {w.text!r} because it contains a variable or command substitution")
-    check_path(w.text, cwd, ctx, action)
+    for expanded in brace_expand(w):
+        check_path(expanded.text, cwd, ctx, action)
+        for match in _glob_matches(expanded, cwd):
+            check_path(match, cwd, ctx, action)
 
 
 class BashChecker:
@@ -459,25 +647,104 @@ class BashChecker:
             words.pop(0)
         if not words:
             return
-        self._check_argv(words, depth, unknown_args=False)
+        expanded, unknown = expand_words(words)
+        self._check_argv(expanded, depth, unknown_args=unknown)
+
+    def _strip_wrapper(self, name: str, words: list[Word]) -> list[Word]:
+        """Drop a wrapper's own options (and env assignments); return the wrapped command."""
+        spec = WRAPPERS[name]
+        optional_long = OPTIONAL_LONG.get(name, set())
+        i = 0
+        while i < len(words):
+            w = words[i]
+            t = w.text
+            if name == "env" and ASSIGNMENT.match(t):
+                i += 1
+                continue
+            if t == "--":
+                i += 1
+                break
+            if t == "-" and name == "env":
+                i += 1
+                continue
+            if not t.startswith("-") or t == "-":
+                break
+            value: Word | None = None
+            opt = t
+            if t.startswith("--"):
+                opt, eq, val = t.partition("=")
+                if opt in spec.long_values:
+                    if eq:
+                        value = Word(val, w.dynamic)
+                    elif i + 1 < len(words):
+                        i += 1
+                        value = words[i]
+                elif opt in spec.long_flags or opt in optional_long:
+                    pass
+                else:
+                    raise Denied(f"{name} {opt}: unknown option, so the wrapped command cannot be verified")
+                self._wrapper_option(name, spec, opt, value)
+                i += 1
+                continue
+            if spec.numeric and re.fullmatch(r"-\d+", t):
+                i += 1
+                continue
+            k = 1
+            while k < len(t):
+                ch = t[k]
+                opt = "-" + ch
+                if ch in spec.optional:
+                    self._wrapper_option(name, spec, opt, None)
+                    break  # the rest of the bundle is the optional value
+                if ch in spec.values:
+                    if k + 1 < len(t):
+                        value = Word(t[k + 1 :], w.dynamic)
+                    elif i + 1 < len(words):
+                        i += 1
+                        value = words[i]
+                    self._wrapper_option(name, spec, opt, value)
+                    break
+                if ch not in spec.flags:
+                    raise Denied(f"{name} {opt}: unknown option, so the wrapped command cannot be verified")
+                self._wrapper_option(name, spec, opt, None)
+                k += 1
+            i += 1
+        rest = words[i:]
+        return rest[spec.positionals :]
+
+    def _wrapper_option(self, name: str, spec: OptSpec, opt: str, value: Word | None) -> None:
+        if opt in spec.deny:
+            raise Denied(f"{name} {opt}: the wrapped command cannot be verified")
+        if opt in spec.output and value is not None:
+            _check_word(value, self.cwd, self.ctx, f"{name} {opt}")
+        if opt in spec.chdir:
+            if value is None or value.dynamic:
+                self.cwd = None
+            else:
+                try:
+                    self.cwd = resolve(value.text, self.cwd)
+                except Denied:
+                    self.cwd = None
 
     def _check_argv(self, words: list[Word], depth: int, unknown_args: bool) -> None:
+        saved_cwd = self.cwd
+        chdir_by_wrapper = False
         while words:
             name = os.path.basename(words[0].text)
-            if name in WRAPPERS:
-                words = words[1:]
-            elif name == "env":
-                words = words[1:]
-                while words and (words[0].text.startswith("-") or ASSIGNMENT.match(words[0].text)):
-                    words = words[1:]
-            elif name == "timeout":
-                rest = _positionals(words[1:], {"-s", "--signal", "-k", "--kill-after"})
-                words = rest[1:]
-            elif name == "xargs":
-                words = _positionals(words[1:], {"-I", "-n", "-L", "-P", "-d", "-a", "-E", "-s"})
-                unknown_args = True
-            else:
+            if name not in WRAPPERS:
                 break
+            before = self.cwd
+            words = self._strip_wrapper(name, words[1:])
+            chdir_by_wrapper = chdir_by_wrapper or self.cwd != before
+            if name == "xargs":
+                unknown_args = True
+        try:
+            self._check_command(words, depth, unknown_args)
+        finally:
+            if chdir_by_wrapper:
+                self.cwd = saved_cwd  # env -C / sudo -D only change the wrapped command's directory
+
+    def _check_command(self, words: list[Word], depth: int, unknown_args: bool) -> None:
         if not words:
             return
         name = os.path.basename(words[0].text)
@@ -486,11 +753,13 @@ class BashChecker:
 
         if name in ALWAYS_DENIED:
             raise Denied(f"{name}: {ALWAYS_DENIED[name]}")
+        if unknown_args and (name in SHELLS or name in ("eval", "find")):
+            raise Denied(f"{name}: cannot verify a command whose arguments come from xargs, find or a brace expansion")
         if name in ("cd", "pushd"):
             pos = _positionals(args, set())
             if not pos:
                 self.cwd = os.path.expanduser("~")
-            elif pos[0].dynamic or pos[0].text == "-":
+            elif pos[0].dynamic or pos[0].text == "-" or len(pos) > 1 or _glob_matches(pos[0], cwd):
                 self.cwd = None
             else:
                 try:
@@ -516,7 +785,10 @@ class BashChecker:
             self.check(" ".join(w.text for w in args), depth + 1)
             return
         if name == "git":
-            self._check_git(args)
+            self._check_git(args, unknown_args)
+            return
+        if name == "find":
+            self._check_find(args, depth)
             return
 
         is_writer = (
@@ -530,7 +802,7 @@ class BashChecker:
         if not is_writer:
             return
         if unknown_args:
-            raise Denied(f"xargs {name}: cannot verify the files it would write")
+            raise Denied(f"{name}: cannot verify the files it would write (arguments from xargs, find -exec or a brace expansion)")
 
         action = name
         if name in ALL_ARGS_WRITERS or name == "tee":
@@ -547,17 +819,11 @@ class BashChecker:
             for w in targets:
                 _check_word(w, cwd, ctx, action)
         elif name in DEST_WRITERS:
-            target_dir = _option_value(args, "-t", "--target-directory")
-            if target_dir is not None:
-                _check_word(target_dir, cwd, ctx, action)
-            else:
-                pos = _positionals(args, VALUE_OPTS.get(name, set()) | {"-t", "--target-directory"})
-                if pos:
-                    _check_word(pos[-1], cwd, ctx, action)
+            self._check_dest_writer(name, args)
         elif name == "dd":
             for w in args:
                 if w.text.startswith("of="):
-                    _check_word(Word(w.text[3:], w.dynamic), cwd, ctx, "dd of=")
+                    _check_word(Word(w.text[3:], w.dynamic, w.marks[3:]), cwd, ctx, "dd of=")
         elif name == "sed":
             for w in _sed_files(args):
                 _check_word(w, cwd, ctx, "sed -i")
@@ -565,8 +831,85 @@ class BashChecker:
             for w in _perl_files(args):
                 _check_word(w, cwd, ctx, "perl -i")
 
+    def _check_dest_writer(self, name: str, args: list[Word]) -> None:
+        ctx, cwd = self.ctx, self.cwd
+        texts = [a.text for a in args]
+        target_dir = _option_value(args, "-t", "--target-directory")
+        pos = _positionals(args, VALUE_OPTS.get(name, set()) | {"-t", "--target-directory"})
+        if name == "install" and any(t == "--directory" or _short_has(t, "d") for t in texts):
+            for w in pos:  # install -d creates every directory it is given
+                _check_word(w, cwd, ctx, "install -d")
+            return
+        if target_dir is not None:
+            dests, sources = [target_dir], pos
+        elif len(pos) == 1 and name == "ln":
+            # ln TARGET creates a link named after TARGET in the working directory.
+            dests, sources = [Word(os.path.basename(pos[0].text.rstrip("/")), pos[0].dynamic)], pos
+        else:
+            dests, sources = pos[-1:], pos[:-1]
+        for w in dests:
+            _check_word(w, cwd, ctx, action=name)
+        # A hard link shares the file's content: writing the in-scope name changes the original.
+        hard_link = (name == "ln" and not any(t in ("--symbolic",) or _short_has(t, "s") for t in texts)) or (
+            name == "cp" and any(t == "--link" or (_short_has(t, "l") and not t.startswith("-S")) for t in texts))
+        if hard_link:
+            for w in sources:
+                _check_word(w, cwd, ctx, f"{name} (hard link from)")
+
+    # -- find ----------------------------------------------------------------
+    def _check_find(self, args: list[Word], depth: int) -> None:
+        i, follow = 0, False
+        while i < len(args):
+            t = args[i].text
+            if t in ("-H", "-P"):
+                i += 1
+            elif t == "-L":
+                follow, i = True, i + 1
+            elif t == "-D":
+                i += 2
+            elif re.fullmatch(r"-O\d*", t):
+                i += 1
+            else:
+                break
+        starts: list[Word] = []
+        while i < len(args) and not (args[i].text.startswith("-") or args[i].text in ("(", ")", "!", ",")):
+            starts.append(args[i])
+            i += 1
+        if not starts:
+            starts = [Word(".")]
+        expr = args[i:]
+        follow = follow or any(w.text == "-follow" for w in expr)
+        j = 0
+        while j < len(expr):
+            t = expr[j].text
+            if t in FIND_EXEC:
+                k = j + 1
+                while k < len(expr) and expr[k].text not in (";", "+"):
+                    k += 1
+                saved = self.cwd
+                if t in ("-execdir", "-okdir"):
+                    self.cwd = None  # runs in each file's directory
+                try:
+                    # The command gets the found files as arguments, so any writer is denied.
+                    self._check_argv(expr[j + 1 : k], depth + 1, unknown_args=True)
+                finally:
+                    self.cwd = saved
+                j = k + 1
+            elif t == "-delete":
+                if follow:
+                    raise Denied("find -L/-follow -delete: cannot verify which files it deletes")
+                for w in starts:
+                    _check_word(w, self.cwd, self.ctx, "find -delete")
+                j += 1
+            elif t in FIND_OUTPUT:
+                if j + 1 < len(expr):
+                    _check_word(expr[j + 1], self.cwd, self.ctx, f"find {t}")
+                j += 1 + FIND_OUTPUT[t]
+            else:
+                j += 1
+
     # -- git -----------------------------------------------------------------
-    def _check_git(self, args: list[Word]) -> None:
+    def _check_git(self, args: list[Word], unknown_args: bool = False) -> None:
         ctx = self.ctx
         cwd = self.cwd
         i = 0
@@ -588,6 +931,8 @@ class BashChecker:
             return
         sub = args[i].text
         rest = args[i + 1 :]
+        if unknown_args and sub in GIT_WRITE_SUBCOMMANDS:
+            raise Denied(f"git {sub}: cannot verify the files it would change (arguments from xargs, find -exec or a brace expansion)")
 
         if sub in ("add", "stage"):
             self._git_add(rest, cwd)

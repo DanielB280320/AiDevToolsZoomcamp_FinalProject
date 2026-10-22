@@ -10,6 +10,7 @@ out of scope and a second, unrelated repository.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -225,6 +226,84 @@ BASH_CASES = [
     ("pm-redirect-backend", "pm", "echo x > backend/app/main.py", DENY),
     ("pm-redirect-tests", "pm", "printf x > backend/tests/test_x.py", DENY),
     ("pm-workflow", "pm", "cp {pad}/ci.yml .github/workflows/ci.yml", DENY),
+    # QA FAIL on #60, bypass 1: xargs keeps the wrapped command's options
+    ("qa-xargs-sed-i", "qa", "grep -rl aaa backend/app | xargs sed -i s/aaa/XXX/", DENY),
+    ("qa-xargs-perl-pi", "qa", "grep -rl a backend | xargs perl -pi -e s/a/b/", DENY),
+    ("qa-xargs-opts-sed", "qa", "git ls-files -z | xargs -0 -n 1 -I{} sed -i s/a/b/ {}", DENY),
+    ("qa-xargs-bundled-opts", "qa", "ls | xargs -0rt -P4 sed -i.bak s/a/b/", DENY),
+    ("qa-xargs-sh-c", "qa", "ls | xargs -I{} sh -c 'echo x > {}'", DENY),
+    ("qa-xargs-git-add", "qa", "git ls-files -m | xargs git add", DENY),
+    ("qa-xargs-unknown-opt", "qa", "ls | xargs --bogus sed -i s/a/b/", DENY),
+    ("qa-xargs-read-only", "qa", "grep -rl x backend | xargs grep -n y | xargs -r wc -l", ALLOW),
+    # bypass 2: wrappers with options
+    ("qa-nice-n", "qa", "nice -n 1 touch backend/app/qa_live_probe.txt", DENY),
+    ("qa-nice-numeric", "qa", "nice -5 touch backend/app/x.py", DENY),
+    ("qa-sudo-u", "qa", "sudo -u root tee backend/app/x.py", DENY),
+    ("qa-sudo-flags-dashdash", "qa", "sudo -E -n -- touch backend/app/x.py", DENY),
+    ("qa-sudo-unknown-opt", "qa", "sudo --bogus touch backend/tests/x.py", DENY),
+    ("qa-sudo-edit", "qa", "sudo -e backend/app/main.py", DENY),
+    ("qa-stdbuf-attached", "qa", "stdbuf -oL tee backend/app/x.py", DENY),
+    ("qa-stdbuf-separate", "qa", "stdbuf -o L -e 0 tee backend/app/x.py", DENY),
+    ("qa-env-u", "qa", "env -u X tee backend/app/x.py", DENY),
+    ("qa-env-i-assign", "qa", "env -i PATH=/bin tee backend/app/x.py", DENY),
+    ("qa-env-chdir", "qa", "env -C backend/tests touch ../app/x.py", DENY),
+    ("qa-env-split-string", "qa", "env -S 'tee backend/tests/x'", DENY),
+    ("qa-command-p", "qa", "command -p touch backend/app/x.py", DENY),
+    ("qa-exec-a", "qa", "exec -a x tee backend/app/x.py", DENY),
+    ("qa-time-p", "qa", "time -p touch backend/app/x.py", DENY),
+    ("qa-gnu-time-output", "qa", "/usr/bin/time -o backend/app/t.txt ls", DENY),
+    ("qa-timeout-opts", "qa", "timeout -s KILL 5 touch backend/app/x.py", DENY),
+    ("qa-stacked-wrappers", "qa", "nohup nice ionice -c3 setsid -f touch backend/app/x.py", DENY),
+    ("qa-parallel", "qa", "ls | parallel sed -i s/a/b/", DENY),
+    ("qa-wrappers-in-scope", "qa", "sudo -u root touch backend/tests/x.py && env -u X tee e2e/n.txt < /dev/null", ALLOW),
+    ("qa-wrappers-read-only", "qa", "nice -n 10 make test && timeout 600 make e2e && time -p make lint", ALLOW),
+    ("qa-stdbuf-tee-pad", "qa", "stdbuf -oL make test 2>&1 | tee {pad}/out.log", ALLOW),
+    # bypass 3: brace expansion in write targets
+    ("qa-brace-touch", "qa", "touch backend/tests/{k,../../backend/app/brace.txt}", DENY),
+    ("qa-brace-mkdir", "qa", "mkdir -p backend/tests/{a,../app/b}", DENY),
+    ("qa-brace-rm", "qa", "rm -rf backend/tests/{x,../app}", DENY),
+    ("qa-brace-sed", "qa", "sed -i s/a/b/ backend/tests/{test_a.py,../app/main.py}", DENY),
+    ("qa-brace-tee", "qa", "echo x | tee backend/tests/{a,../app/b}", DENY),
+    ("qa-brace-redirect", "qa", "echo x > backend/tests/{a,../app/b}", DENY),
+    ("qa-brace-nested", "qa", "touch backend/tests/{a,{b,../../backend/app/c}}", DENY),
+    ("qa-brace-cp-dest", "qa", "cp README.md backend/tests/{x,../app/y}", DENY),
+    ("qa-brace-empty-shift", "qa", "cd backend/tests && cp ../app/main.py ../app/x {,}", DENY),
+    ("qa-brace-sequence", "qa", "touch backend/tests/{a..z}pp_link/x.py", DENY),
+    ("qa-brace-sequence-rm", "qa", "cd backend/tests && rm ../app/x{1..3}.py", DENY),
+    ("qa-brace-sequence-read-only", "qa", "for i in {1..3}; do make test; done && echo {,}", ALLOW),
+    ("qa-brace-in-scope", "qa", "mkdir -p backend/tests/{unit,integration} && touch e2e/{a,b}.spec.ts", ALLOW),
+    ("qa-brace-quoted-literal", "qa", "touch backend/tests/'{x,../../app/y}' \"e2e/{a,b}\"", ALLOW),
+    # globs that match a symlink pointing out of scope
+    ("qa-glob-symlink-file", "qa", "echo x > backend/tests/main_lin*", DENY),
+    ("qa-glob-symlink-dir", "qa", "cp README.md backend/tests/app_lin?/", DENY),
+    ("qa-glob-in-scope", "qa", "rm -f backend/tests/*.pyc e2e/*.tmp", ALLOW),
+    # bypass 4: find actions
+    ("qa-find-exec-sed", "qa", "find backend/app -name '*.py' -exec sed -i s/a/b/ {} +", DENY),
+    ("qa-find-execdir-rm", "qa", "find backend -name x -execdir rm {} \\;", DENY),
+    ("qa-find-ok", "qa", "find . -name x -ok rm {} \\;", DENY),
+    ("qa-find-exec-sh", "qa", "find backend/tests -exec sh -c 'echo > ../app/x' \\;", DENY),
+    ("qa-find-delete-out", "qa", "find backend/app -name '*.py' -delete", DENY),
+    ("qa-find-delete-root", "qa", "find . -name '*.tmp' -delete", DENY),
+    ("qa-find-delete-follow", "qa", "find -L backend/tests -delete", DENY),
+    ("qa-find-fprint", "qa", "find backend/tests -fprint backend/app/list.txt", DENY),
+    ("qa-find-fprintf", "qa", "find backend/tests -fprintf backend/app/l.txt '%p'", DENY),
+    ("qa-find-fls", "qa", "find backend/tests -fls backend/app/l", DENY),
+    ("qa-find-read-only", "qa", "find backend -name '*.py' -exec grep -l TODO {} + && find . -type f -print | head", ALLOW),
+    ("qa-find-delete-in-scope", "qa", "find e2e backend/tests -name '*.tmp' -delete", ALLOW),
+    ("qa-find-fprint-pad", "qa", "find backend -name '*.py' -fprint {pad}/files.txt", ALLOW),
+    # hard links from outside the scope
+    ("qa-hardlink", "qa", "ln backend/app/main.py backend/tests/h.py", DENY),
+    ("qa-hardlink-force-dir", "qa", "ln -f backend/app/main.py backend/tests/", DENY),
+    ("qa-hardlink-target-dir", "qa", "ln -t backend/tests backend/app/main.py", DENY),
+    ("qa-cp-link", "qa", "cp -l backend/app/main.py backend/tests/h.py", DENY),
+    ("qa-cp-link-long", "qa", "cp --link backend/app/main.py backend/tests/h.py", DENY),
+    ("qa-link-cmd", "qa", "link backend/app/main.py backend/tests/h.py", DENY),
+    ("qa-ln-single-arg", "qa", "ln -s backend/tests/test_a.py", DENY),
+    ("qa-install-d", "qa", "install -d backend/app/x backend/tests/y", DENY),
+    ("qa-hardlink-in-scope", "qa", "ln backend/tests/test_a.py backend/tests/h.py", ALLOW),
+    ("qa-symlink-create", "qa", "ln -sf ../app/main.py backend/tests/l.py", ALLOW),
+    ("pm-brace-out", "pm", "touch docs/{a,../openapi.yaml}", DENY),
+    ("pm-xargs-sed", "pm", "ls docs | xargs sed -i s/a/b/", DENY),
     # unaffected agents
     ("engineer-redirect", "engineer", "echo x > backend/app/main.py", ALLOW),
     ("devops-sed", "devops", "sed -i 's/a/b/' .claude/settings.json", ALLOW),
@@ -362,14 +441,26 @@ class ScopeGuardTest(unittest.TestCase):
         self.assertIn("The qa agent may only write under backend/tests/, frontend/tests/, e2e/", reason)
         self.assertIn("backend/app/main.py is outside the allowed directories", reason)
 
+    def test_brace_expansion_matches_bash(self) -> None:
+        """The hook expands unquoted {a,b} groups the way bash does (and leaves quoted ones alone)."""
+        spec = importlib.util.spec_from_file_location("scope_guard", HOOK)
+        assert spec and spec.loader
+        guard = importlib.util.module_from_spec(spec)
+        sys.modules["scope_guard"] = guard  # dataclasses need the module registered
+        spec.loader.exec_module(guard)
+        for word in ["a{b,c}d", "{a,b}{c,d}", "x{,}y", "a{b,c{d,e}}f", '"{a,b}"', "{a}", "\\{a,b\\}",
+                     '{a,"b,c"}', "pre/{x,../y}/z", "'{'a,b}", "{a,b'}'}", "plain", "{}"]:
+            with self.subTest(word):
+                bash = subprocess.run(["bash", "-c", f"printf '%s\\n' {word}"], capture_output=True, text=True, check=True)
+                parsed = guard.parse_shell(f"echo {word}")[0].words[1]
+                self.assertEqual([w.text for w in guard.brace_expand(parsed)], bash.stdout.splitlines(), word)
+
     def test_settings_register_the_hook(self) -> None:
         """The committed settings run this script for every write-capable tool and fail closed."""
         settings = json.loads(SETTINGS.read_text())
         entries = settings["hooks"]["PreToolUse"]
         hook = next(h for e in entries for h in e["hooks"] if any("scope_guard.py" in a for a in h.get("args", [])))
         matcher = next(e["matcher"] for e in entries if hook in e["hooks"])
-
-
         for tool in ("Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"):
             self.assertRegex(tool, matcher)
         for tool in ("Read", "Grep", "Glob"):
