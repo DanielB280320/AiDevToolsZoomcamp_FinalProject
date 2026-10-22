@@ -450,7 +450,7 @@ Events: pending progression suggestion, pending calorie adjustment, target-recal
 - Authorization enforced server-side on every resource (ownership or active coach link).
 - Rate limiting on auth endpoints (F1.6).
 - **Known limitation — plain HTTP**: the MVP is served over HTTP on the EC2 public DNS name (no domain, no TLS). Credentials and health data are not encrypted in transit. The README must warn reviewers to use **test accounts and fake data only**. HTTPS (domain + Caddy/Let's Encrypt) is the first roadmap item. The cookie `Secure` flag is configurable and turned on once HTTPS exists.
-- Dependency and secret scanning in CI (see §11).
+- Dependency and secret scanning in CI (see [§13](#13-cicd-github-actions)).
 
 ### 6.5 Privacy (health data)
 - Body metrics, food logs and training logs are health-related personal data.
@@ -565,7 +565,7 @@ Full contract in `openapi.yaml` (written before implementation). All paths under
 | Charts | `GET /athletes/{id}/charts/session/{sid}` · `/charts/exercise/{eid}` · `/charts/adherence` · `/charts/weekly-summary` · `/charts/body` |
 | Coach | `GET /coaches/search?q=` · `POST /coach-links` · `POST /coach-links/{id}/approve|decline|end` · `GET /coach/athletes` · `GET/POST/PUT/DELETE /athletes/{id}/notes` |
 | Notifications | `GET /notifications` · `POST /notifications/{id}/read` · `POST /notifications/read-all` |
-| Data | `GET /me/export` · `DELETE /me` |
+| Data | `GET /me/export` · `POST /me/delete` (D48) |
 | Ops | `GET /healthz` · `GET /readyz` |
 
 Contract v1 adds or makes precise these endpoints, which the screens in §5 need (D39–D47):
@@ -591,11 +591,11 @@ Single command: **`make test`** runs everything below (except e2e, which runs wi
 | Contract | Backend responses validate against `openapi.yaml` | schemathesis (smoke) |
 | End-to-end | Key journeys: (1) sign up → onboarding → Today; (2) log sets → finish → accept suggestion; (3) check off meals → balance updates; (4) coach link → coach views chart → leaves note | Playwright |
 
-Coverage target: ≥ 90 % lines for `backend/engines/`, ≥ 75 % backend overall.
+Coverage target: ≥ 90 % lines for `backend/app/engines/`, ≥ 75 % backend overall.
 
 ## 11. Containerization and local run
 
-- `make up` → `docker compose up --build`: Postgres, backend (runs migrations + seed on start), frontend (nginx serving the built SPA and proxying `/api`).
+- `make up` → `docker compose up --build --wait`: Postgres, backend (runs migrations + seed on start), frontend (nginx serving the built SPA and proxying `/api`).
 - `make up-obs` adds the observability stack locally.
 - Seeded demo data command: `make seed-demo` (one athlete with 8 weeks of history, one coach).
 - Health checks on every service; `docker compose up --wait` succeeds only when all are healthy.
@@ -613,7 +613,7 @@ Coverage target: ≥ 90 % lines for `backend/engines/`, ≥ 75 % backend overall
 
 | Trigger | Pipeline |
 |---|---|
-| Pull request | Lint (ruff, eslint), type-check (mypy, tsc), unit + integration tests, frontend tests, OpenAPI validation, secret scan, build images (no push) |
+| Pull request | Lint (ruff, eslint), type-check (mypy, tsc), unit + integration tests, frontend tests, OpenAPI validation, dependency scan, secret scan, build images (no push) |
 | Merge to `main` | Same checks → build & push images (`sha` tag) → **auto-deploy to dev** → smoke test (`/readyz` + e2e smoke) |
 | Manual `workflow_dispatch` "Promote to production" | Choose an already-deployed-to-dev SHA → GitHub Environment `production` requires approval → deploy to prod → smoke test → **automatic rollback to `PREVIOUS_TAG` if smoke test fails** |
 | Manual "Rollback production" | Redeploy `PREVIOUS_TAG` (also used by the on-call agent's script) |
@@ -702,7 +702,7 @@ If time runs out, milestones are cut from the end; M0–M2 alone satisfy every g
 |---|---|
 | Problem description | §1, README |
 | Product specification + tracker | This spec + GitHub Issues/Projects with AC per issue, PRs linked `Closes #N` |
-| Agent team | §7.1, `docs/team.md`, `.claude/agents/` (PM, Engineer, QA, DevOps/SRE) |
+| Agent team | [docs/team.md](team.md), [docs/process.md](process.md), `.claude/agents/` (PM, Engineer, QA, DevOps/SRE) |
 | Context management | `CLAUDE.md` → `docs/` (process, team, architecture, runbooks, ADRs) |
 | Application | §5, §11 (`make up`) |
 | Testing | §10 (`make test`) |
@@ -715,12 +715,14 @@ If time runs out, milestones are cut from the end; M0–M2 alone satisfy every g
 
 ## 19. Decisions log
 
+Decisions with architectural trade-offs have an ADR in [`docs/adr/`](adr/README.md), linked from the matching row ([process.md §8](process.md#8-changing-the-spec)). [ADR 0004](adr/0004-pure-calculation-engines.md) (pure, explainable calculation engines) has no single row; it underpins F3, F5, F7, F11, F13 and F14.
+
 | # | Decision |
 |---|---|
-| D1 | Stack: FastAPI + React + Postgres |
-| D2 | Hosting: AWS, EC2 + Docker Compose, Postgres in a container |
-| D3 | Environments: two EC2 instances (dev, prod) |
-| D4 | Public access: EC2 public DNS over plain HTTP, documented limitation |
+| D1 | Stack: FastAPI + React + Postgres ([ADR 0001](adr/0001-stack-fastapi-react-postgres.md)) |
+| D2 | Hosting: AWS, EC2 + Docker Compose, Postgres in a container ([ADR 0002](adr/0002-ec2-docker-compose-deployment.md)) |
+| D3 | Environments: two EC2 instances (dev, prod) ([ADR 0002](adr/0002-ec2-docker-compose-deployment.md)) |
+| D4 | Public access: EC2 public DNS over plain HTTP, documented limitation ([ADR 0003](adr/0003-plain-http-known-limitation.md)) |
 | D5 | UI language: English now, i18n-ready, Spanish later |
 | D6 | Units: metric + imperial per user, stored metric |
 | D7 | Mobile-first responsive web |
@@ -748,15 +750,15 @@ If time runs out, milestones are cut from the end; M0–M2 alone satisfy every g
 | D29 | Adaptive calories: weekly suggestion, requires acceptance |
 | D30 | Notifications: in-app only |
 | D31 | Export (JSON/CSV) + delete account |
-| D32 | Observability stack self-hosted on prod EC2 |
-| D33 | On-call: runtime mitigation (flag/rollback/restart) + GitHub issue + fix PR |
-| D34 | Alerts: key-journey error rate and latency |
+| D32 | Observability stack self-hosted on prod EC2 ([ADR 0006](adr/0006-self-hosted-observability-on-prod.md)) |
+| D33 | On-call: runtime mitigation (flag/rollback/restart) + GitHub issue + fix PR ([ADR 0007](adr/0007-on-call-agent-with-allow-listed-mitigations.md)) |
+| D34 | Alerts: key-journey error rate and latency ([ADR 0006](adr/0006-self-hosted-observability-on-prod.md)) |
 | D35 | Coding agents: Claude Code only |
 | D36 | Agent team: PM, Engineer, QA, DevOps/SRE |
 | D37 | Tracker: public GitHub repo + Issues + Projects board |
 | D38 | Product name: FitWise |
-| D39 | API conventions (`openapi.yaml`): `snake_case` JSON; metric only, with the unit in the field name (`_kg`, `_cm`, `_g`, `kcal`, `seconds`); `date` = calendar day in the athlete's time zone, `date-time` = UTC instant with `Z`; weekdays as `mon`…`sun`; lists wrapped in `{items}`, catalog/notifications cursor-paginated |
-| D40 | Errors are RFC 9457 `application/problem+json` with a stable `code` and field `errors[]`. 400 = malformed request/invalid range, 422 = validation (incl. F1.1, F1.2, F2.3), 409 = state conflict |
+| D39 | API conventions (`openapi.yaml`): `snake_case` JSON; metric only, with the unit in the field name (`_kg`, `_cm`, `_g`, `kcal`, `seconds`); `date` = calendar day in the athlete's time zone, `date-time` = UTC instant with `Z`; weekdays as `mon`…`sun`; lists wrapped in `{items}`, catalog/notifications cursor-paginated. `openapi.yaml` is the API source of truth ([ADR 0005](adr/0005-contract-first-openapi.md)) |
+| D40 | Errors are RFC 9457 `application/problem+json` with a stable `code` and field `errors[]`. **400** = the request line or envelope is invalid: unparseable JSON, or an invalid query/path parameter (wrong type or format, e.g. a non-date `{date}`; invalid range, e.g. `from` after `to` or a range that is too long; `week_start` not a Monday). **422** = the JSON request body is well-formed but fails validation (schema, F1.1 under 18, F1.2 disclaimer, F2.3 plausible ranges). 409 = state conflict |
 | D41 | `athletes/{id}` accepts `me`; an unknown or not-actively-linked athlete id returns 403 (never 404) so ids cannot be enumerated. Each operation declares its access rule in `x-fitwise-access` for the authorization matrix tests |
 | D42 | Custom-mode plan edits replace the whole training or meal template (`PUT /plan/training`, `PUT /plan/meals`) with an optimistic-concurrency `revision`; a stale revision returns 409. Gram overrides on a planned meal are stored as an athlete-owned copy of the meal |
 | D43 | Logging endpoints are upserts on their natural key (set: session + exercise + set number; meal: date + planned meal); 201 on create, 200 on replace. Body metrics upsert per day the same way |
@@ -764,6 +766,7 @@ If time runs out, milestones are cut from the end; M0–M2 alone satisfy every g
 | D45 | A session can be moved only if not finished, to a day in the same ISO week that is today or later and has no other session |
 | D46 | Editing the profile (owner only; coaches can view) recomputes targets from today and rescales future meal portions without a suggestion, because the athlete made the change; the training plan is regenerated only on request |
 | D47 | `target_balance_kcal` (goal's target daily balance) = target kcal − (baseline + average daily planned exercise kcal). Exercise muscle groups are a fixed enum (chest, back, shoulders, biceps, triceps, forearms, core, quads, hamstrings, glutes, calves, full_body, cardio). Custom exercises/foods/meals are visible to their creator and the creator's active-link counterpart |
+| D48 | Account deletion is `POST /me/delete` with the current password in a JSON body, not `DELETE /me` with a body: request bodies on `DELETE` have no defined semantics (RFC 9110) and some proxies and clients drop them. Wrong password → 403; F18 unchanged |
 
 ## 20. Assumptions and open questions
 
