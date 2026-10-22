@@ -144,7 +144,18 @@ sequenceDiagram
     S->>O: span + fitwise_sets_logged_total (user_hash only)
     S-->>A: SetLog (a retry returns the same row)
 
-    Note over A,DB: 3. Finish workout
+    Note over A,DB: 3. Check off a meal ("eaten as planned")
+    A->>N: POST /api/v1/athletes/me/meal-logs
+    N->>API: proxy /api
+    API->>S: validate body (Pydantic), authenticate
+    S->>S: authorize: owner only (coach gets 403)
+    S->>DB: upsert MealLog on (date, planned meal)
+    S->>E: energy balance for the day (F13)
+    E-->>S: eaten vs. burned + explanation
+    S->>O: span + fitwise_meal_checkoffs_total (user_hash only)
+    S-->>A: MealLog + updated day balance (a retry returns the same row)
+
+    Note over A,DB: 4. Finish workout
     A->>N: POST /api/v1/sessions/{id}/finish
     N->>API: proxy /api
     API->>S: authenticate, authorize owner
@@ -158,7 +169,7 @@ sequenceDiagram
     S->>O: engine.progression span, fitwise_workouts_finished_total,<br/>fitwise_suggestions_generated_total{kind, rule}
     S-->>A: 200 summary + pending suggestions
 
-    Note over A,DB: 4. Accept a suggestion
+    Note over A,DB: 5. Accept a suggestion
     A->>N: POST /api/v1/suggestions/{id}/accept
     N->>API: proxy /api
     API->>S: authorize (athlete or active coach)
@@ -187,10 +198,12 @@ flowchart LR
 
     subgraph aws["AWS"]
         subgraph devec2["fitwise-dev EC2"]
-            devapp["nginx + backend + Postgres<br/>OTel Collector"]
+            devapp["nginx + backend + Postgres"]
+            devcol["OTel Collector"]
         end
         subgraph prodec2["fitwise-prod EC2"]
-            prodapp["nginx + backend + Postgres<br/>OTel Collector"]
+            prodapp["nginx + backend + Postgres"]
+            prodcol["OTel Collector"]
             obs["Prometheus, Loki, Tempo, Grafana"]
             resp["On-call responder"]
         end
@@ -204,8 +217,10 @@ flowchart LR
     actions -- "Promote to production<br/>(required reviewer)" --> prodec2
     ghcr -- "pull" --> devec2
     ghcr -- "pull" --> prodec2
-    devapp -- "OTLP env=dev (SG-restricted)" --> obs
-    prodapp -- "OTLP env=prod" --> obs
+    devapp -- "OTLP" --> devcol
+    devcol -- "OTLP env=dev<br/>(prod OTLP port open only to dev, SG)" --> prodcol
+    prodapp -- "OTLP" --> prodcol
+    prodcol -- "env=dev and env=prod" --> obs
     obs -- "alert webhook" --> resp
     resp -- "issue + fix PR" --> repo
     prodapp -- "backup" --> s3
@@ -214,7 +229,7 @@ flowchart LR
 | Environment | Where | How it gets code | What runs | Access |
 |---|---|---|---|---|
 | **Local** | Developer or agent machine | Working tree / worktree | `make up`: Postgres, backend (migrations + seed on start), frontend (nginx). `make up-obs` adds the observability stack. `make seed-demo` loads a demo athlete and coach. | `localhost` |
-| **CI** | GitHub Actions runners | Every PR and every merge to `main` | Lint, type-check, unit + integration tests against a Postgres service, frontend tests, OpenAPI validation, secret scan, image build. Integration tests use the Open Food Facts fake. | n/a |
+| **CI** | GitHub Actions runners | Every PR and every merge to `main` | Lint, type-check, unit + integration tests against a Postgres service, frontend tests, OpenAPI validation, dependency scan, secret scan, image build. Integration tests use the Open Food Facts fake. | n/a |
 | **Image registry** | GHCR | Built once per commit on merge to `main` | Images tagged with the git SHA; the same image is promoted from dev to prod. | Pulled by the EC2 hosts |
 | **dev** | `fitwise-dev` EC2, Docker Compose | Auto-deploy on every merge to `main`, then smoke test (`/readyz` + e2e smoke) | App stack + OTel Collector, forwarding to prod | Public DNS over HTTP, port 80 |
 | **prod** | `fitwise-prod` EC2, Docker Compose | Manual "Promote to production" of a SHA already on dev; `production` environment needs approval. Failed smoke test rolls back to `PREVIOUS_TAG` automatically. | App stack, observability stack, on-call responder (systemd), nightly `pg_dump` to S3 | Public DNS over HTTP, port 80; Grafana restricted to the owner's IP |

@@ -66,12 +66,12 @@ info:
 
     | Status | Used for |
     |---|---|
-    | 400 | Malformed request: unparseable JSON, invalid query combination (e.g. `from` after `to`, range too long). |
+    | 400 | Invalid request line or envelope: unparseable JSON, or an invalid query or path parameter (wrong type or format, unknown enum value, out-of-range `limit`, `from` after `to`, range too long, `week_start` not a Monday). Parameter errors list the offending parameter in `errors`. |
     | 401 | No valid session, or wrong credentials on sign-in. |
     | 403 | Authenticated but not allowed: wrong role, not the owner, no active coach link. |
     | 404 | Resource id does not exist. |
     | 409 | Request conflicts with current state: duplicate email, stale plan `revision`, suggestion already decided, session slot taken, link already exists, edit window closed. |
-    | 422 | Well-formed but invalid input: schema violations, implausible body values (F2.3), under 18 (F1.1), unaccepted disclaimer (F1.2). |
+    | 422 | Well-formed JSON request body that fails validation: schema violations, unknown properties, implausible body values (F2.3), under 18 (F1.1), unaccepted disclaimer (F1.2). Only operations with a request body return 422. |
     | 429 | Rate limit exceeded (5 failed sign-ins per email per 15 min, F1.6). Includes `Retry-After`. |
     | 503 | A dependency is unavailable (database on `/readyz`, Open Food Facts on food import). |
 
@@ -263,15 +263,19 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
-    delete:
+
+  /me/delete:
+    post:
       tags: [Me]
       operationId: deleteMe
       summary: Delete my account and all my data
       description: |
-        Requires the current password (F18). Permanently deletes every row referencing the user,
-        ends all coach links and removes notes the user authored. A coach deleting their account
-        ends all links; athletes' data is unaffected. Only the account holder can call this, so a
-        coach can never delete an athlete's account (F18.3). Clears the session cookie.
+        Requires the current password in the body (F18). `POST` rather than `DELETE`, because
+        request bodies on `DELETE` have no defined semantics (spec D48). Permanently deletes every
+        row referencing the user, ends all coach links and removes notes the user authored. A coach
+        deleting their account ends all links; athletes' data is unaffected. Only the account holder
+        can call this, so a coach can never delete an athlete's account (F18.3). Clears the session
+        cookie.
       x-fitwise-access: authenticated
       requestBody:
         required: true
@@ -369,6 +373,9 @@ paths:
       tags: [Profile]
       operationId: getAthleteProfile
       summary: Get the athlete profile
+      description: |
+        `404 not_onboarded` if the athlete has not completed onboarding yet (there is no profile).
+        An unknown or inaccessible `athlete_id` is `403`, never `404`.
       x-fitwise-access: owner-or-coach
       responses:
         '200':
@@ -377,12 +384,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AthleteProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/NotOnboarded'
     put:
       tags: [Profile]
       operationId: updateAthleteProfile
@@ -393,7 +402,9 @@ paths:
         `valid_from` = today and future meal-day portions are rescaled; past days never change.
         The training plan is **not** regenerated automatically — call
         `POST /athletes/{athlete_id}/plan/regenerate`. Coaches can view but not edit the profile.
-        `404 not_onboarded` if onboarding was not completed.
+        `404 not_onboarded` if onboarding was not completed (create the profile with
+        `POST /athletes/{athlete_id}/onboarding`). An unknown or inaccessible `athlete_id` is `403`,
+        never `404`.
       x-fitwise-access: owner
       requestBody:
         required: true
@@ -415,7 +426,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/NotOnboarded'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
@@ -455,9 +466,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          $ref: '#/components/responses/NotOnboarded'
 
   # ───────────────────────────── Body ─────────────────────────────
   /athletes/{athlete_id}/body-metrics:
@@ -485,8 +494,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
     post:
       tags: [Body]
       operationId: logBodyMetric
@@ -569,8 +576,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
     post:
       tags: [Catalog]
       operationId: createExercise
@@ -631,8 +636,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
     post:
       tags: [Catalog]
       operationId: createFood
@@ -699,8 +702,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   /foods/import:
     post:
@@ -774,8 +775,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
     post:
       tags: [Catalog]
       operationId: createMeal
@@ -820,6 +819,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Plan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -960,6 +961,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlanVersionList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -994,8 +997,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   # ───────────────────────────── Calendar ─────────────────────────────
   /athletes/{athlete_id}/days/{date}:
@@ -1029,8 +1030,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   /athletes/{athlete_id}/calendar:
     parameters:
@@ -1062,8 +1061,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   /sessions/{session_id}:
     parameters:
@@ -1080,6 +1077,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1197,6 +1196,8 @@ paths:
       responses:
         '204':
           description: Deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1318,6 +1319,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DayEnergyUpdate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1381,6 +1384,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DayEnergyUpdate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1420,8 +1425,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   /suggestions/{suggestion_id}/accept:
     parameters:
@@ -1479,6 +1482,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Suggestion'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1506,6 +1511,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionChart'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1542,8 +1549,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   /athletes/{athlete_id}/charts/adherence:
     parameters:
@@ -1570,8 +1575,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   /athletes/{athlete_id}/charts/weekly-summary:
     parameters:
@@ -1585,7 +1588,7 @@ paths:
         - name: week_start
           in: query
           required: false
-          description: Monday of the ISO week (athlete's time zone). Defaults to the current week. Must be a Monday (422).
+          description: Monday of the ISO week (athlete's time zone). Defaults to the current week. Must be a Monday (400).
           schema:
             type: string
             format: date
@@ -1602,8 +1605,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   /athletes/{athlete_id}/charts/body:
     parameters:
@@ -1629,8 +1630,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   # ───────────────────────────── Coach ─────────────────────────────
   /coach/profile:
@@ -1707,8 +1706,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   /coach-links:
     get:
@@ -1733,8 +1730,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
     post:
       tags: [Coach]
       operationId: requestCoachLink
@@ -1785,6 +1780,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CoachLink'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1810,6 +1807,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CoachLink'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1838,6 +1837,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CoachLink'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1907,8 +1908,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
     post:
       tags: [Notes]
       operationId: createNote
@@ -1979,6 +1978,8 @@ paths:
       responses:
         '204':
           description: Deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2013,8 +2014,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   /notifications/{notification_id}/read:
     parameters:
@@ -2032,6 +2031,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Notification'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2254,7 +2255,7 @@ components:
 
   responses:
     BadRequest:
-      description: Malformed request.
+      description: Unparseable JSON or an invalid query/path parameter.
       content:
         application/problem+json:
           schema:
@@ -2301,6 +2302,18 @@ components:
             status: 404
             code: not_found
             detail: Session not found.
+    NotOnboarded:
+      description: The athlete has not completed onboarding, so there is no profile or targets yet (`code` = `not_onboarded`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /problems/not_onboarded
+            title: Not onboarded
+            status: 404
+            code: not_onboarded
+            detail: Complete onboarding first.
     Conflict:
       description: Conflicts with the current state.
       content:
@@ -2314,7 +2327,7 @@ components:
             code: email_taken
             detail: An account with this email already exists.
     UnprocessableEntity:
-      description: Validation failed.
+      description: The request body failed validation.
       content:
         application/problem+json:
           schema:
@@ -2448,7 +2461,7 @@ components:
         floor_applied: false
         floor_kcal: 1200
         carbs_clamped: false
-        weight_kg_used: 72.5
+        weight_used_kg: 72.5
         body_fat_pct_used: 35.2
         explanation: >-
           BMR (Katch-McArdle) = 370 + 21.6 × LBM 46.98 kg = 1385 kcal. Baseline = 1385 × 1.30
@@ -2659,7 +2672,7 @@ components:
             `off_unavailable`, `not_ready`. New codes may be added.
         errors:
           type: array
-          description: Field-level validation errors (422).
+          description: Field-level errors — invalid parameters (400) or invalid request-body fields (422). `field` is the parameter name or the body path.
           items:
             $ref: '#/components/schemas/FieldError'
         request_id:
@@ -2992,7 +3005,7 @@ components:
         - floor_applied
         - floor_kcal
         - carbs_clamped
-        - weight_kg_used
+        - weight_used_kg
         - body_fat_pct_used
         - explanation
         - inputs
@@ -3044,8 +3057,9 @@ components:
         carbs_clamped:
           type: boolean
           description: Carbs were clamped at 0 (F3.4); explained.
-        weight_kg_used:
+        weight_used_kg:
           type: number
+          description: Body weight the targets were computed from (kg).
         body_fat_pct_used:
           type: [number, 'null']
         explanation:
@@ -4140,7 +4154,7 @@ components:
       description: '`rest` = no session that day (never missed). `missed` = past planned session without logs (F9.3).'
     DayView:
       type: object
-      required: [date, weekday, is_today, training_status, session, meals, extra_meal_logs, activities, energy, training_completion, nutrition_completion, pending_suggestions, notes, meal_warning]
+      required: [date, weekday, is_today, training_status, session, meals, extra_meal_logs, activities, energy, training_completion, nutrition_completion, pending_suggestions, weigh_in_hint, notes, meal_warning]
       properties:
         date:
           $ref: '#/components/schemas/LocalDate'
@@ -4183,6 +4197,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Suggestion'
+        weigh_in_hint:
+          description: Same as `SuggestionList.weigh_in_hint`; set only when `date` is in the current week.
+          oneOf:
+            - $ref: '#/components/schemas/WeighInHint'
+            - type: 'null'
         notes:
           type: array
           description: Coach notes for this day, its session and its exercises.
@@ -4407,12 +4426,48 @@ components:
           recalc: '#/components/schemas/RecalcSuggestion'
     SuggestionList:
       type: object
-      required: [items]
+      required: [items, weigh_in_hint]
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/Suggestion'
+        weigh_in_hint:
+          description: Set when this week's adaptive calorie check produced no suggestion for lack of weigh-ins (F14); otherwise `null`.
+          oneOf:
+            - $ref: '#/components/schemas/WeighInHint'
+            - type: 'null'
+    WeighInHint:
+      type: object
+      description: |
+        F14: the weekly adaptive calorie check (Mondays, over the previous two complete ISO weeks)
+        needs ≥ 4 weigh-ins in each week. When either week has fewer, no `calories` suggestion is
+        created and this hint is returned instead, from that Monday until the next check.
+      required: [message, evaluated_on, required_per_week, weeks]
+      properties:
+        message:
+          type: string
+          description: Safe to show to the user, e.g. "Weigh in at least 4 times a week to get an adaptive calorie suggestion."
+        evaluated_on:
+          $ref: '#/components/schemas/LocalDate'
+        required_per_week:
+          type: integer
+          const: 4
+        weeks:
+          type: array
+          description: The two evaluated weeks, oldest first.
+          minItems: 2
+          maxItems: 2
+          items:
+            type: object
+            required: [week_start, weigh_ins]
+            properties:
+              week_start:
+                $ref: '#/components/schemas/LocalDate'
+              weigh_ins:
+                type: integer
+                minimum: 0
+                maximum: 7
     AcceptSuggestionRequest:
       type: object
       additionalProperties: false
@@ -4607,12 +4662,17 @@ components:
             $ref: '#/components/schemas/AdherenceWeek'
     DatedValue:
       type: object
+      description: One point of a sparkline. The unit of `value` is set by the series that contains it.
       required: [date, value]
       properties:
         date:
           $ref: '#/components/schemas/LocalDate'
         value:
           type: [number, 'null']
+          description: |
+            In the unit carried by the series name: `daily_balance_kcal` → kcal,
+            `training_completion` → ratio 0–1 (see `Ratio`), `weight_avg_kg` → kg.
+            `null` when there is no data for that day.
     WeeklySummary:
       type: object
       required: [week_start, week_end, estimated, sessions_planned, sessions_done, sessions_missed, avg_completion, avg_daily_balance_kcal, target_daily_balance_kcal, weight_avg_start_kg, weight_avg_end_kg, weight_change_kg, sparklines]
