@@ -8,13 +8,14 @@ fail rather than skip, so CI can never go green without exercising Postgres.
 import os
 import uuid
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, make_url, text
 
-from app.config import Settings
+from app.config import DatabaseSettings
 from app.migrations import ALEMBIC_INI
 
 
@@ -32,7 +33,8 @@ def admin_url() -> str:
             "TEST_DATABASE_URL is not set. Point it at a throwaway PostgreSQL 16 server whose "
             "user may CREATE DATABASE (see backend/.env.example), or run only tests/unit."
         )
-    return Settings(database_url=url, _env_file=None).database_url
+    values: dict[str, Any] = {"database_url": url, "_env_file": None}
+    return DatabaseSettings(**values).database_url.get_secret_value()
 
 
 @pytest.fixture
@@ -62,3 +64,7 @@ def migrated_database_url(fresh_database_url: str) -> str:
     """URL of a new database upgraded to `head`."""
     command.upgrade(alembic_config(fresh_database_url), "head")
     return fresh_database_url
+
+
+# Auth fixtures (`api`, `api_factory`) shared by the account tests and later endpoint tests.
+from tests.integration.auth_helpers import api, api_factory  # noqa: E402, F401

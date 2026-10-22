@@ -8,6 +8,7 @@ The API contract is [`../openapi.yaml`](../openapi.yaml); every path is served u
 ```
 app/
   main.py          create_app() factory, mounts routers under /api/v1
+  dependencies.py  CurrentUser (401) and require_role(...) (403) for every protected endpoint
   config.py        Settings from environment variables (documented in .env.example)
   errors.py        shared RFC 9457 problem+json handling (ProblemError, 400/422 mapping, 500)
   telemetry/       OpenTelemetry traces + metrics, allow-listed JSON logs, user_hash (spec §14)
@@ -51,6 +52,15 @@ integration tests fail (they do not skip) when it is missing.
   body validation becomes 422 `validation_error` (spec D40).
 * `tests/unit/test_contract.py` fails if the app serves an operation that is not in `openapi.yaml`
   or uses a different `operationId`.
+* Protected endpoints take `user: CurrentUser` (401 `not_authenticated` without a valid
+  `fitwise_session` cookie). Role-restricted ones add
+  `Depends(require_role("coach"))` / `require_role("athlete")` (403 `wrong_role`).
+* Read the time with `clock: ClockDep` (`app.services.clock`), never `datetime.now()`; use
+  `local_today(now, user.timezone)` for "today". Tests swap `app.state.clock` for
+  `tests.fakes.FakeClock`; `tests/integration/auth_helpers.py` has an `api` fixture with a
+  fake clock and sign-up/sign-in helpers.
+* Never log emails, names, passwords, tokens or health data (spec §6.5); the engine is created
+  with `hide_parameters=True` so SQL parameters stay out of logs and exception messages.
 
 ## Telemetry (spec §14, §6.5)
 

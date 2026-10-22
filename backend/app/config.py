@@ -15,10 +15,13 @@ _LOCAL_USER_HASH_SALT = "fitwise-local-user-hash-salt"
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
-class Settings(BaseSettings):
+class DatabaseSettings(BaseSettings):
+    """The database connection only. Alembic migrations need nothing else (no JWT secret)."""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", frozen=True)
 
-    database_url: str = Field(
+    # Secrets are `SecretStr`: they print as `**********` in reprs, logs and tracebacks.
+    database_url: SecretStr = Field(
         description="SQLAlchemy URL of the PostgreSQL database (env DATABASE_URL).",
     )
     database_connect_timeout_seconds: int = Field(
@@ -27,6 +30,21 @@ class Settings(BaseSettings):
         le=60,
         description="Connect timeout for new DB connections, bounds /readyz latency.",
     )
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _use_psycopg_driver(cls, value: object) -> object:
+        """Accept plain `postgresql://` / `postgres://` URLs and select the psycopg 3 driver."""
+        if isinstance(value, SecretStr):
+            value = value.get_secret_value()
+        if isinstance(value, str):
+            for prefix in ("postgresql://", "postgres://"):
+                if value.startswith(prefix):
+                    return "postgresql+psycopg://" + value.removeprefix(prefix)
+        return value
+
+
+class Settings(DatabaseSettings):
     app_env: Environment = Field(default="local", description="Deployment environment name.")
     log_level: LogLevel = Field(default="INFO", description="Root log level of the app.")
     app_version: str = Field(
@@ -51,14 +69,19 @@ class Settings(BaseSettings):
             return self.user_hash_salt.get_secret_value().encode()
         return _LOCAL_USER_HASH_SALT.encode()
 
-    @field_validator("database_url")
-    @classmethod
-    def _use_psycopg_driver(cls, value: str) -> str:
-        """Accept plain `postgresql://` / `postgres://` URLs and select the psycopg 3 driver."""
-        for prefix in ("postgresql://", "postgres://"):
-            if value.startswith(prefix):
-                return "postgresql+psycopg://" + value.removeprefix(prefix)
-        return value
+    jwt_secret: SecretStr = Field(
+        min_length=32,
+        description="HMAC key that signs session JWTs (env JWT_SECRET), at least 32 characters.",
+    )
+    session_cookie_secure: bool = Field(
+        default=False,
+        description="Add `Secure` to the session cookie; turn on once HTTPS exists (spec §6.4).",
+    )
+
+    @property
+    def serves_api_docs(self) -> bool:
+        """Swagger UI and `/openapi.json` are served everywhere except prod."""
+        return self.app_env != "prod"
 
     @field_validator("otel_exporter_otlp_endpoint")
     @classmethod
@@ -85,4 +108,4 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     """Settings from the process environment, loaded once."""
-    return Settings()  # database_url is required and comes from the environment
+    return Settings()  # database_url and jwt_secret are required, from the environment

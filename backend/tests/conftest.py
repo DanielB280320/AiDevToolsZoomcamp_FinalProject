@@ -28,13 +28,18 @@ def closed_port() -> int:
     return port
 
 
-def make_settings(database_url: str) -> Settings:
-    return Settings(
-        database_url=database_url,
-        database_connect_timeout_seconds=1,
-        app_env="test",
-        _env_file=None,
-    )
+TEST_JWT_SECRET = "test-only-jwt-secret-0123456789abcdef"
+
+
+def make_settings(database_url: str, **overrides: Any) -> Settings:
+    values: dict[str, Any] = {
+        "database_url": database_url,
+        "database_connect_timeout_seconds": 1,
+        "app_env": "test",
+        "jwt_secret": TEST_JWT_SECRET,
+        **overrides,
+    }
+    return Settings(**values, _env_file=None)
 
 
 def unreachable_database_url() -> str:

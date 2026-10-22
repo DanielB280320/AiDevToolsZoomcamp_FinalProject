@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from app.config import Settings
 from app.telemetry import build_telemetry
 from app.telemetry.privacy import user_hash
+from tests.conftest import TEST_JWT_SECRET
 
 SALT = b"a-long-random-test-salt"
 
@@ -52,6 +53,7 @@ def test_a_different_salt_gives_a_different_hash() -> None:
 def test_the_salt_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://h/d")
     monkeypatch.setenv("USER_HASH_SALT", SALT.decode())
+    monkeypatch.setenv("JWT_SECRET", TEST_JWT_SECRET)
     settings = Settings(_env_file=None)
     user_id = uuid.uuid4()
 
@@ -64,13 +66,20 @@ def test_the_salt_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch) ->
 def test_dev_and_prod_refuse_to_start_without_a_real_salt(env: str, salt: str | None) -> None:
     with pytest.raises(ValidationError, match="USER_HASH_SALT"):
         Settings.model_validate(
-            {"database_url": "postgresql://h/d", "app_env": env, "user_hash_salt": salt}
+            {
+                "database_url": "postgresql://h/d",
+                "jwt_secret": TEST_JWT_SECRET,
+                "app_env": env,
+                "user_hash_salt": salt,
+            }
         )
 
 
 @pytest.mark.parametrize("env", ["local", "test"])
 def test_local_and_test_use_a_fixed_development_salt(env: str) -> None:
-    settings = Settings.model_validate({"database_url": "postgresql://h/d", "app_env": env})
+    settings = Settings.model_validate(
+        {"database_url": "postgresql://h/d", "jwt_secret": TEST_JWT_SECRET, "app_env": env}
+    )
 
     assert settings.user_hash_salt is None
     assert settings.user_hash_salt_bytes

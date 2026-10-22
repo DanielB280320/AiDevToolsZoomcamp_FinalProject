@@ -6,13 +6,16 @@ from fastapi import Request
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.config import Settings
+from app.config import DatabaseSettings
 
 
-def make_engine(settings: Settings) -> Engine:
+def make_engine(settings: DatabaseSettings) -> Engine:
     return create_engine(
-        settings.database_url,
+        settings.database_url.get_secret_value(),
         pool_pre_ping=True,
+        # Bound parameters (emails, password hashes, body metrics) never reach SQL logs or
+        # exception messages (spec §6.5).
+        hide_parameters=True,
         connect_args={"connect_timeout": settings.database_connect_timeout_seconds},
     )
 

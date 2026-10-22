@@ -86,7 +86,7 @@ Each requirement has an ID used by the backlog (GitHub Issues). Priority uses Mo
 - [ ] F1.3 Duplicate email (case-insensitive) is rejected.
 - [ ] F1.4 Password must be ≥ 10 characters.
 - [ ] F1.5 Protected API endpoints return 401 without a valid session; role-restricted endpoints return 403 for the wrong role.
-- [ ] F1.6 The 6th failed sign-in within 15 min returns 429.
+- [ ] F1.6 The 6th failed sign-in within 15 min returns 429 (lockout semantics: D49).
 
 ### F2. Onboarding and profile (athlete) — *Must*
 
@@ -554,7 +554,7 @@ Full contract in `openapi.yaml` (written before implementation). All paths under
 
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /auth/signup` · `POST /auth/login` · `POST /auth/logout` · `GET /me` |
+| Auth | `POST /auth/signup` · `POST /auth/login` · `POST /auth/logout` · `GET/PATCH /me` |
 | Profile & targets | `GET/PUT /athletes/{id}/profile` · `POST /athletes/{id}/onboarding` · `GET /athletes/{id}/targets` |
 | Body | `GET/POST /athletes/{id}/body-metrics` |
 | Catalog | `GET/POST /exercises` · `GET/POST /foods` · `GET /foods/search?q=` (Open Food Facts) · `GET/POST /meals` |
@@ -770,6 +770,7 @@ Decisions with architectural trade-offs have an ADR in [`docs/adr/`](adr/README.
 | D46 | Editing the profile (owner only; coaches can view) recomputes targets from today and rescales future meal portions without a suggestion, because the athlete made the change; the training plan is regenerated only on request |
 | D47 | `target_balance_kcal` (goal's target daily balance) = target kcal − (baseline + average daily planned exercise kcal). Exercise muscle groups are a fixed enum (chest, back, shoulders, biceps, triceps, forearms, core, quads, hamstrings, glutes, calves, full_body, cardio). Custom exercises/foods/meals are visible to their creator and the creator's active-link counterpart |
 | D48 | Account deletion is `POST /me/delete` with the current password in a JSON body, not `DELETE /me` with a body: request bodies on `DELETE` have no defined semantics (RFC 9110) and some proxies and clients drop them. Wrong password → 403; F18 unchanged |
+| D49 | *Proposed (PM, implemented in #8; awaiting owner confirmation).* F1.6 sign-in lockout: failures are counted per email, case-insensitively, whether or not an account exists, in a sliding 15-minute window. Once 5 failures are in the window, **every** sign-in for that email returns `429 rate_limited` with `Retry-After` (seconds until the oldest of them leaves the window), **even with the correct password**, and is not evaluated or counted. Answering 200 to a correct password during the lockout would turn the 429 into a password oracle. A successful sign-in clears the count. Failures are stored as a SHA-256 of the lower-cased email, never the email itself, and only for the window |
 
 ## 20. Assumptions and open questions
 
