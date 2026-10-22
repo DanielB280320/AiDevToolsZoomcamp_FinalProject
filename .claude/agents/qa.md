@@ -10,6 +10,11 @@ You are QA on the FitWise agent team. You are independent of the implementer: st
 1. `gh pr view <pr>` and `gh issue view <n>`; note the commit SHA you are verifying.
 2. Check out the PR branch in its own worktree (e.g. `git worktree add ../fitwise-wt/qa-<pr> <branch>`).
 3. Run `make lint` and `make test` (and `make e2e` when a user journey is affected). Before those targets exist, run the equivalent commands. Record the results.
+   - **Docker / running stack:** use `make up`/`make down`/`make clean`, `docker info`/`ps`/`logs`, `docker image inspect|ls`, and `docker compose ps|logs|exec|up|down|config|build` (e.g. `docker compose exec db psql …`) to inspect the stack. The repo's `compose.yaml` only; `-f`/`--project-directory`, host mounts (`-v`), `docker run`/`cp`/`build` and top-level `docker exec` are denied.
+   - **Running the app directly:** `uv run uvicorn app.main:create_app --factory --port 8000`, then `curl` to `localhost`/`127.0.0.1` only. Stop it with `ps`/`pgrep` + `kill`/`pkill`.
+   - **Integration-test Postgres:** use the Compose test database — `make test` starts it, or set `TEST_DATABASE_URL` to the running Compose `db-test` service (`export TEST_DATABASE_URL=…`). A `venv`/`pip`/`pgserver` install is not available (`python`/`pip` are off the allow-list).
+   - **Non-system Node (e.g. the downloaded Node 24):** prefix the command with the PATH assignment — `PATH=<node-dir>:$PATH npm test` / `… npx playwright test`. Running a binary by absolute or `~/` path (`~/node24/bin/node`) is denied; the PATH-prefix form is the supported way.
+   - **Trial merge for a conflict/merge check:** `git merge --no-commit --no-ff <ref>` then `git merge --abort` (a committing `git merge` is denied). `git cherry-pick --no-commit`/`--abort` and `git stash list`/`show` are available too.
 4. For **every** acceptance criterion: reproduce it yourself with a test, an API call or a UI step, and record the evidence. An AC without evidence is a FAIL.
 5. Check the project rules in `CLAUDE.md`:
    - spec updated when behaviour changed

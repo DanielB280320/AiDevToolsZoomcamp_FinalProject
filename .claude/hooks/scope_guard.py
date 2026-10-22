@@ -411,10 +411,13 @@ MAX_EXPANSIONS = 256
 LITERAL_NAME = re.compile(r"[A-Za-z0-9_./+-]+")
 
 # Read-only commands, allowed for both restricted agents with any arguments.
+# ps/pgrep/ss/lsof only read process/socket state; kill/pkill write no files (they signal
+# processes — an accepted risk documented in ADR 0008).
 READ_ONLY = {
     "cat", "head", "tail", "less", "more", "wc", "grep", "egrep", "fgrep", "rg", "jq", "diff",
     "ls", "printf", "echo", "test", "[", "true", "false", "pwd", "basename", "dirname",
     "realpath", "stat", "date", "which", "sleep", "cut", "tr", "comm", "column", "nl",
+    "ps", "pgrep", "ss", "lsof", "kill", "pkill",
 }
 # Read-only commands that can also write through an option; allowed only in read-only form.
 GUARDED_READERS = {"sort", "uniq", "sed", "find"}
@@ -426,7 +429,7 @@ LINK_COMMANDS = {"ln", "link"}
 NAV = {"cd", "pushd", "popd"}
 
 # QA-only tools (engineers run everything; PM does not run the build tool chain).
-QA_TOOLS = {"make", "uv", "uvx", "npm", "npx", "node", "curl"}
+QA_TOOLS = {"make", "uv", "uvx", "npm", "npx", "node", "curl", "docker"}
 
 # Project scripts each agent may run directly (checked to live under scripts/).
 SCRIPTS = {"qa": {"issue-status.sh", "test-hooks.sh"}, "pm": {"issue-status.sh"}}
@@ -440,18 +443,28 @@ GIT_READONLY = {
 }
 # git write subcommands allowed per role (with path/staging checks where relevant).
 GIT_WRITE = {
-    "qa": {"add", "stage", "commit", "push", "fetch", "worktree", "switch", "checkout", "restore"},
+    "qa": {"add", "stage", "commit", "push", "fetch", "worktree", "switch", "checkout", "restore",
+           "merge", "cherry-pick", "stash"},
     "pm": {"add", "stage", "commit", "push", "fetch", "worktree", "switch"},
 }
 
 NPM_SUBCOMMANDS = {"ci", "test", "run", "run-script", "exec"}
 NPX_PACKAGES = {"@redocly/cli", "redocly", "playwright", "@playwright/test", "tsc", "typescript",
                 "vitest", "openapi-typescript"}
-UV_RUN_TOOLS = {"pytest", "ruff", "mypy", "alembic"}
+UV_RUN_TOOLS = {"pytest", "ruff", "mypy", "alembic", "uvicorn"}
 UVX_TOOLS = {"ruff", "mypy", "openapi-spec-validator"}
-MAKE_TARGETS = {"lint", "test", "e2e"}
+MAKE_TARGETS = {"lint", "test", "e2e", "up", "down", "clean", "seed-demo"}
 MAKE_DENY_OPTS = {"-C", "--directory", "-f", "--file", "--makefile", "-o", "--old-file",
                   "-W", "--what-if", "--new-file", "--assume-new", "--eval", "-I", "--include-dir"}
+
+# docker: a read-only / compose subset. docker run/cp/build/exec (top level) and host mounts are off.
+DOCKER_SUBCOMMANDS = {"info", "ps", "logs", "image", "compose", "version", "events", "top", "port", "stats"}
+DOCKER_IMAGE_SUB = {"inspect", "ls", "history"}
+DOCKER_COMPOSE_SUB = {"ps", "logs", "exec", "up", "down", "config", "build"}
+DOCKER_GLOBAL_VALUE = {"-H", "--host", "-c", "--context", "-l", "--log-level", "--config",
+                       "--tlscacert", "--tlscert", "--tlskey"}
+DOCKER_COMPOSE_VALUE = {"-p", "--project-name", "--profile", "--env-file", "--progress", "--ansi",
+                        "--parallel"}
 NODE_EVAL_OPTS = {"-e", "--eval", "-p", "--print", "-pe", "--input-type"}
 CURL_DENY = {"-o", "--output", "-O", "--remote-name", "--remote-name-all", "--output-dir",
              "--create-dirs", "-J", "--remote-header-name", "-D", "--dump-header", "--trace",
@@ -762,6 +775,9 @@ class BashChecker:
             if args:
                 self._not_allowed("env with arguments")
             return
+        if name == "export":
+            self._check_export(args)
+            return
         if name == "command":
             if args and args[0].text in ("-v", "-V"):
                 return
@@ -820,6 +836,14 @@ class BashChecker:
                 self.cwd = resolve(pos[0].text, self.cwd)
             except Denied:
                 self.cwd = None
+
+    def _check_export(self, args: list[Word]) -> None:
+        for w in args:
+            if w.dynamic:
+                raise Denied(f"export with a substituted value is not on the {self.role} allow-list "
+                             f"(literal values only); {ADR_HINT}")
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(=.*)?", w.text):
+                raise Denied(f"export {w.text}: only NAME=value assignments are on the {self.role} allow-list; {ADR_HINT}")
 
     # -- guarded readers -----------------------------------------------------
     def _check_sort(self, args: list[Word]) -> None:
@@ -954,15 +978,22 @@ class BashChecker:
             raise Denied(f"uvx {pkg}: only {', '.join(sorted(UVX_TOOLS))} are on the {self.role} allow-list; {ADR_HINT}")
 
     def _check_npm(self, args: list[Word]) -> None:
-        sub = next((w.text for w in args if not w.text.startswith("-")), None)
-        if sub not in NPM_SUBCOMMANDS:
+        idx = next((i for i, w in enumerate(args) if not w.text.startswith("-")), None)
+        sub = args[idx].text if idx is not None else None
+        if idx is None or sub not in NPM_SUBCOMMANDS:
             raise Denied(f"npm {sub or '(default)'}: only {', '.join(sorted(NPM_SUBCOMMANDS))} are on the {self.role} allow-list; {ADR_HINT}")
+        if sub == "exec":
+            # `npm exec <pkg>` runs an arbitrary binary like npx: hold it to the same package list.
+            self._check_npx(args[idx + 1 :])
 
     def _check_npx(self, args: list[Word]) -> None:
         pkg: str | None = None
         i = 0
         while i < len(args):
             t = args[i].text
+            if t == "--":
+                i += 1
+                continue
             if t in ("-p", "--package") and i + 1 < len(args):
                 pkg = args[i + 1].text
                 break
@@ -974,8 +1005,14 @@ class BashChecker:
                 continue
             pkg = t
             break
-        if pkg is None or pkg not in NPX_PACKAGES:
-            raise Denied(f"npx {pkg or '(none)'}: only {', '.join(sorted(NPX_PACKAGES))} are on the {self.role} allow-list; {ADR_HINT}")
+        if pkg is None:
+            raise Denied(f"npx with no package is not on the {self.role} allow-list; {ADR_HINT}")
+        # Reject version/tag pins (`tsc@x`, `@redocly/cli@1`): require a bare known package name.
+        at = pkg.count("@")
+        if (pkg.startswith("@") and at > 1) or (not pkg.startswith("@") and at > 0):
+            raise Denied(f"npx {pkg}: version/tag-pinned packages are not on the {self.role} allow-list; {ADR_HINT}")
+        if pkg not in NPX_PACKAGES:
+            raise Denied(f"npx {pkg}: only {', '.join(sorted(NPX_PACKAGES))} are on the {self.role} allow-list; {ADR_HINT}")
 
     def _check_node(self, args: list[Word]) -> None:
         for w in args:
@@ -1016,6 +1053,62 @@ class BashChecker:
             if not _is_local_url(u):
                 raise Denied(f"curl {u}: only localhost/127.0.0.1 URLs are on the {self.role} allow-list; {ADR_HINT}")
 
+    def _check_docker(self, args: list[Word]) -> None:
+        i = 0
+        while i < len(args):
+            t = args[i].text
+            if t in ("--volume", "--mount"):
+                raise Denied(f"docker {t}: bind mounts are not on the {self.role} allow-list; {ADR_HINT}")
+            if t in DOCKER_GLOBAL_VALUE:
+                i += 2
+                continue
+            if t.startswith("-"):
+                i += 1
+                continue
+            break
+        if i >= len(args):
+            raise Denied(f"docker with no subcommand is not on the {self.role} allow-list; {ADR_HINT}")
+        sub = args[i].text
+        rest = args[i + 1 :]
+        if sub == "compose":
+            self._check_docker_compose(rest)
+            return
+        if sub == "image":
+            isub = next((w.text for w in rest if not w.text.startswith("-")), None)
+            if isub not in DOCKER_IMAGE_SUB:
+                raise Denied(f"docker image {isub or ''}: only {', '.join(sorted(DOCKER_IMAGE_SUB))} are on the {self.role} allow-list; {ADR_HINT}")
+            return
+        if sub in DOCKER_SUBCOMMANDS:
+            for w in rest:
+                if w.text in ("-v", "--volume", "--mount") or w.text.startswith(("--volume=", "--mount=")):
+                    raise Denied(f"docker {sub} {w.text}: bind mounts are not on the {self.role} allow-list; {ADR_HINT}")
+            return
+        raise Denied(f"docker {sub}: not on the {self.role} allow-list (run/cp/build/exec and host mounts are off); {ADR_HINT}")
+
+    def _check_docker_compose(self, args: list[Word]) -> None:
+        i = 0
+        while i < len(args):
+            t = args[i].text
+            if t in ("-f", "--file", "--project-directory") or t.startswith(("--file=", "--project-directory=")):
+                raise Denied(f"docker compose {t.split('=')[0]}: must use the repo's compose.yaml (no -f/--project-directory); {ADR_HINT}")
+            if t in DOCKER_COMPOSE_VALUE:
+                i += 2
+                continue
+            if t.startswith("-"):
+                i += 1
+                continue
+            break
+        if i >= len(args):
+            raise Denied(f"docker compose with no subcommand is not on the {self.role} allow-list; {ADR_HINT}")
+        sub = args[i].text
+        rest = args[i + 1 :]
+        if sub not in DOCKER_COMPOSE_SUB:
+            raise Denied(f"docker compose {sub}: only {', '.join(sorted(DOCKER_COMPOSE_SUB))} are on the {self.role} allow-list; {ADR_HINT}")
+        if sub == "exec":
+            for w in rest:
+                if w.text in ("-v", "--volume", "--mount") or w.text.startswith(("--volume=", "--mount=")):
+                    raise Denied(f"docker compose exec {w.text}: bind mounts are not on the {self.role} allow-list; {ADR_HINT}")
+
     # -- git -----------------------------------------------------------------
     def _check_git(self, args: list[Word], unknown_args: bool) -> None:
         ctx = self.ctx
@@ -1053,8 +1146,29 @@ class BashChecker:
             return
         if sub not in GIT_WRITE.get(self.role, set()):
             self._not_allowed(f"git {sub}")
-        if sub in ("push", "switch", "worktree"):
-            return  # publish commits / change branch / manage worktrees: no repo-file write to check
+        if sub == "push":
+            for w in rest:
+                t = w.text
+                if "://" in t or re.match(r"^[\w.-]+@[\w.-]+:", t):
+                    raise Denied(f"git push to an explicit URL ({t}) is not on the {self.role} allow-list; push to a named remote; {ADR_HINT}")
+            return
+        if sub in ("switch", "worktree"):
+            return  # change branch / manage worktrees (new worktrees stay hook-governed): no repo-file write
+        if sub == "merge":
+            texts = [w.text for w in rest]
+            if "--abort" in texts or ("--no-commit" in texts and "--no-ff" in texts):
+                return
+            raise Denied(f"git merge without --abort or --no-commit --no-ff would commit, which could carry out-of-scope changes; {ADR_HINT}")
+        if sub == "cherry-pick":
+            texts = [w.text for w in rest]
+            if "--abort" in texts or "--quit" in texts or "--no-commit" in texts or "-n" in texts:
+                return
+            raise Denied(f"git cherry-pick without --no-commit/--abort/--quit would commit; {ADR_HINT}")
+        if sub == "stash":
+            first = next((w.text for w in rest if not w.text.startswith("-")), None)
+            if first in ("list", "show"):
+                return
+            raise Denied(f"git stash (only list/show are on the {self.role} allow-list); {ADR_HINT}")
         if unknown_args and sub in ("add", "stage", "commit"):
             raise Denied(f"git {sub}: cannot verify the files it would change (arguments from xargs or an unexpandable expansion)")
         if sub in ("add", "stage"):
