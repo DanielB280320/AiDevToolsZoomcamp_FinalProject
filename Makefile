@@ -65,7 +65,7 @@ up-obs: ## Start the observability stack (not yet: #17)
 	@exit 1
 
 .PHONY: check-log-privacy
-check-log-privacy: ## Smoke: no query/IP/referrer/token in logs, backend up AND down (stack running)
+check-log-privacy: ## Smoke: no query/ids/IP/referrer/token in logs, valid JSON; backend up AND down
 	COMPOSE="$(COMPOSE)" scripts/check-log-privacy.sh
 
 .PHONY: seed-demo

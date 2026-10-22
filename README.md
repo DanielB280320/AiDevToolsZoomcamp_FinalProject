@@ -27,7 +27,7 @@ all targets.
 | `make test` | Backend unit + integration tests (throwaway Postgres container on `127.0.0.1:${TEST_DB_PORT}`, default 15432) and frontend tests. Uses `TEST_DATABASE_URL` instead if it is already set |
 | `make lint` | ruff, ruff format --check, mypy, eslint, tsc |
 | `make e2e` | Playwright project in `e2e/` against the running stack (`BASE_URL`, #65) |
-| `make check-log-privacy` | Smoke check that no query string, client IP, referrer or token reaches container logs, with the backend up and down |
+| `make check-log-privacy` | Smoke check (stack running) that no query string, user UUID or numeric id in a path, client IP, referrer or token reaches container logs, and that nginx access lines are valid JSON; with the backend up and down |
 | `make build TAG=<sha>` | Build `<IMAGE_PREFIX>-backend:<TAG>` and `<IMAGE_PREFIX>-frontend:<TAG>` |
 
 ### Several stacks side by side

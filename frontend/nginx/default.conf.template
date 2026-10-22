@@ -11,17 +11,37 @@
 # main-level error_log of nginx.conf. Checked by `make check-log-privacy`.
 error_log /dev/null;
 
-# Access log: allow-listed fields only. `path` is the route the client asked for (e.g. /today,
-# not the internal /index.html) with the query string cut off, so food/coach search `q` never
-# reaches the log; no client IP, user agent, referrer, cookies or other headers.
+# Access log: allow-listed fields only. No client IP, user agent, referrer, cookies, other
+# headers or query string.
+#
+# `path` is a coarse, allow-listed route, never the raw path (spec §6.5: user identity only as
+# user_hash; §14: route templates, never raw paths). Only the FIRST segment is kept (after
+# /api/v1/ for the API), and only if it is lowercase letters, `_`, `-` or `.` with no digits;
+# everything after it collapses to `/*`. So UUIDs, numeric ids and dates can never appear, for any
+# route added later:
+#   /api/v1/athletes/<uuid>/body-metrics -> /api/v1/athletes/*   (the backend logs the template)
+#   /api/v1/healthz -> /api/v1/healthz    /coach/athletes/<uuid> -> /coach/*    /today -> /today
+#   anything else (digits, upper case, other API versions) -> /api/* or /*
 map $request_uri $fitwise_path {
-  "~^(?<fitwise_p>[^?]*)" $fitwise_p;
-  default                 "-";
+  "~^/api/v1/(?<fw_api>[a-z][a-z_.-]{0,31})(?:\?.*)?$" "/api/v1/$fw_api";
+  "~^/api/v1/(?<fw_api_sub>[a-z][a-z_.-]{0,31})/"      "/api/v1/$fw_api_sub/*";
+  "~^/api(?:[/?]|$)"                                   "/api/*";
+  "~^/(?:\?.*)?$"                                      "/";
+  "~^/(?<fw_spa>[a-z][a-z_.-]{0,31})(?:\?.*)?$"        "/$fw_spa";
+  "~^/(?<fw_spa_sub>[a-z][a-z_.-]{0,31})/"             "/$fw_spa_sub/*";
+  default                                              "/*";
+}
+
+# `status` stays a JSON number for valid HTTP codes; anything else (e.g. "009" for a non-HTTP
+# upstream reply, which is not valid JSON with its leading zeros) becomes null.
+map $status $fitwise_status {
+  "~^[1-5][0-9][0-9]$" $status;
+  default              null;
 }
 
 log_format fitwise_access escape=json
   '{"time":"$time_iso8601","source":"nginx","method":"$request_method","path":"$fitwise_path",'
-  '"status":$status,"bytes":$body_bytes_sent,"duration_s":$request_time,'
+  '"status":$fitwise_status,"bytes":$body_bytes_sent,"duration_s":$request_time,'
   '"upstream_s":"$upstream_response_time"}';
 
 # Container health checks come from loopback every few seconds: don't log them.
