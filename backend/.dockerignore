@@ -1,0 +1,15 @@
+# Only pyproject.toml, uv.lock, alembic.ini, alembic/ and app/ go into the image.
+# Never ship local env files (secrets) or caches.
+**/.env
+**/.env.*
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+tests/
+Dockerfile
+.dockerignore

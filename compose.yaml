@@ -1,0 +1,118 @@
+# FitWise local stack (spec §11): `make up` = `docker compose up --build --wait`.
+# All configuration comes from environment variables; `.env` (copied from .env.example) fills them.
+# Deploy overrides for EC2 (published port 80, GHCR images by SHA) layer on top of this file (#13).
+
+name: ${COMPOSE_PROJECT_NAME:-fitwise}
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-fitwise}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}@db:5432/${POSTGRES_DB:-fitwise}
+  DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-3}
+  APP_ENV: ${APP_ENV:-local}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  # Session JWT signing key (#8, >= 32 chars). Required: no default is baked into this file.
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (see .env.example)}
+  # Secure cookie attribute; false while served over plain HTTP (ADR 0003).
+  SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+  # Telemetry (#16). user_hash HMAC key: required in dev/prod, dev-only placeholder locally.
+  USER_HASH_SALT: ${USER_HASH_SALT:?set USER_HASH_SALT in .env (see .env.example)}
+  # Release reported as service.version and in every log line: the image tag by default.
+  APP_VERSION: ${APP_VERSION:-${TAG:-local}}
+  # No value = passed through only when set in the shell or .env; unset means nothing is
+  # exported (the observability stack arrives in #17).
+  OTEL_EXPORTER_OTLP_ENDPOINT:
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fitwise}
+      POSTGRES_USER: ${POSTGRES_USER:-fitwise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # No published port: only the backend reaches the database (least privilege, spec §12).
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    image: ${IMAGE_PREFIX:-fitwise}-backend:${TAG:-local}
+    build:
+      context: ./backend
+    environment: *backend-env
+    # The image command runs `alembic upgrade head` and then uvicorn (--no-access-log).
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # Ready = database reachable and migrations applied (GET /api/v1/readyz, 503 otherwise).
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/readyz', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  frontend:
+    image: ${IMAGE_PREFIX:-fitwise}-frontend:${TAG:-local}
+    build:
+      context: ./frontend
+    environment:
+      BACKEND_UPSTREAM: backend:8000
+      NGINX_RESOLVER: 127.0.0.11
+    ports:
+      - "${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-8088}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      # The SPA shell is served and the /api proxy reaches the backend.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ && wget -q -O /dev/null http://127.0.0.1:8080/api/v1/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /etc/nginx/conf.d:uid=101,gid=101,mode=0755
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # Throwaway PostgreSQL for `make test` (profile "test"): data in tmpfs, localhost only.
+  # Its superuser may CREATE DATABASE, which the integration tests need (one database per test).
+  db-test:
+    profiles: ["test"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: fitwise_test
+      POSTGRES_PASSWORD: fitwise_test # not a secret: ephemeral, bound to 127.0.0.1, no real data
+    ports:
+      - "127.0.0.1:${TEST_DB_PORT:-15432}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -U fitwise_test -d postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  db-data:

@@ -26,7 +26,9 @@ tests/integration/ real PostgreSQL via TEST_DATABASE_URL (one fresh database per
 
 ## Commands
 
-Run from `backend/` (the Makefile wraps these once it exists):
+From the repository root, `make up` runs the whole stack in Docker (migrations run on container
+start), `make lint` and `make test` wrap the commands below (`make test` starts a throwaway
+Postgres container and sets `TEST_DATABASE_URL`); see `make help`. Run from `backend/`:
 
 ```bash
 uv sync                                              # install deps into .venv
