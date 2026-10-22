@@ -23,6 +23,8 @@ FitWise is built by a small team of Claude Code agents coordinated by an orchest
 
 Agent definitions live in [`.claude/agents/`](../.claude/agents/). Each runs as a Claude Code subagent with its own context, so the orchestrator's session stays small and each agent sees only what its task needs.
 
+The **QA and PM write scopes below are enforced**, not just documented: a `PreToolUse` hook in [`.claude/settings.json`](../.claude/settings.json) ([`scope_guard.py`](../.claude/hooks/scope_guard.py), [ADR 0008](adr/0008-enforce-agent-write-scopes-with-a-hook.md)) blocks their `Edit`/`Write`/`NotebookEdit` calls and known shell write forms (`>`, `tee`, `sed -i`, `cp`/`mv`/`rm`, `git add`/`git commit`, …) outside their directories, with a message naming the allowed directories. Engineer, DevOps and the main session are not affected. Tests: `scripts/test-hooks.sh`.
+
 ## Roles
 
 ### Owner (human)
@@ -38,7 +40,7 @@ Agent definitions live in [`.claude/agents/`](../.claude/agents/). Each runs as 
 ### PM — [`pm.md`](../.claude/agents/pm.md)
 - **Owns:** the backlog and the spec's consistency.
 - **Does:** turns spec sections into issues with testable AC; applies the Definition of Ready; splits large issues; moves issues Backlog → Ready when dependencies close; proposes spec changes as `docs/` PRs; keeps the decisions log current.
-- **Writes:** issues, issue comments, `docs/` and `.github/ISSUE_TEMPLATE/` only. Never production code or tests.
+- **Writes:** issues, issue comments, `docs/` and `.github/ISSUE_TEMPLATE/` only. Never production code or tests. *Enforced by the scope-guard hook.*
 
 ### Engineer — [`engineer.md`](../.claude/agents/engineer.md)
 - **Owns:** implementation of `role:engineer` issues (backend, frontend, engines).
@@ -48,7 +50,7 @@ Agent definitions live in [`.claude/agents/`](../.claude/agents/). Each runs as 
 ### QA — [`qa.md`](../.claude/agents/qa.md)
 - **Owns:** independent verification. Nothing is merged without a QA PASS.
 - **Does:** starts from the issue and the spec, not the PR description; runs lint and tests; reproduces each AC with evidence; checks the project rules (privacy, migrations, spec updated); posts PASS/FAIL on the issue in the standard format.
-- **Writes:** tests only (commits prefixed `test:`) and issue/PR comments. Never changes production code — it reports defects.
+- **Writes:** tests only (`backend/tests/`, `frontend/tests/`, `e2e/`; commits prefixed `test:`) and issue/PR comments. Never changes production code — it reports defects. *Enforced by the scope-guard hook.*
 
 ### DevOps / SRE — [`devops.md`](../.claude/agents/devops.md)
 - **Owns:** `role:devops` issues: Docker/Compose, AWS, CI/CD, observability, alerts, the on-call responder and runbooks.
@@ -88,5 +90,7 @@ Use the pm agent to groom milestone M1 and move issues whose dependencies are cl
 Use the engineer agent on issue #6 in a worktree.
 Use the qa agent to verify PR #<n> for issue #6.
 ```
+
+Always start the PM and QA **as subagents** (as above, or with `claude --agent pm|qa`): the scope guard recognises them by the subagent's `agent_type`, so a PM or QA prompt pasted into a plain main session is not restricted.
 
 For parallel work, start up to three engineer/devops agents on independent Ready issues, each with worktree isolation, then send each PR to QA as it finishes.

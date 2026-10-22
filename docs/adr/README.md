@@ -12,6 +12,7 @@ Each ADR records one design decision with trade-offs: its context, the decision,
 | [0005](0005-contract-first-openapi.md) | Make openapi.yaml the API source of truth | Accepted |
 | [0006](0006-self-hosted-observability-on-prod.md) | Self-host the observability stack on the prod EC2 instance | Accepted |
 | [0007](0007-on-call-agent-with-allow-listed-mitigations.md) | Limit the on-call agent to allow-listed runtime mitigations | Accepted |
+| [0008](0008-enforce-agent-write-scopes-with-a-hook.md) | Enforce the QA and PM write scopes with a project PreToolUse hook | Accepted |
 
 ## Adding an ADR
 
