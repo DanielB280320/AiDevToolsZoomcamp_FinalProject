@@ -11,11 +11,15 @@ the main session has no ``agent_type``. For a blocked call the hook prints
 a ``permissionDecision: "deny"`` JSON object and exits 0; for an allowed
 call it prints nothing and exits 0. Unreadable input exits 2 (block).
 
-Covered tools: Write, Edit, MultiEdit, NotebookEdit (target path) and Bash
-(a deny-list of shell forms that write files, including ``git add`` and
-``git commit`` of out-of-scope files). PowerShell is blocked outright for
-restricted agents. See docs/adr/0008-enforce-agent-write-scopes-with-a-hook.md
-for the residual risks.
+The file tools (Write, Edit, MultiEdit, NotebookEdit) check the target path.
+Bash is checked with an **allow-list**: every simple command on the line
+(after splitting on ``;`` ``&&`` ``||`` ``|`` newlines, subshells and
+command substitution) must be on the agent's per-role allow-list, and
+anything the parser cannot confidently understand is DENIED (fail closed).
+See docs/adr/0008-enforce-agent-write-scopes-with-a-hook.md for the design
+and the residual risks (allow-listed tools such as ``make``/``pytest``/npm
+scripts can still run arbitrary repository code; the git-commit check and
+owner review are the backstop).
 
 Standard library only, so it runs from a fresh clone with any python3 >= 3.9.
 """
@@ -47,9 +51,11 @@ FILE_TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path
 # Device files that are always safe write targets.
 SAFE_DEVICES = ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty")
 
+ADR_HINT = "see ADR 0008 to request adding it (ADR + owner approval)"
+
 
 class Denied(Exception):
-    """Raised with a human-readable reason when a write is out of scope."""
+    """Raised with a human-readable reason when a call is out of scope or not allowed."""
 
 
 class Unexpandable(Denied):
@@ -177,6 +183,9 @@ class Word:
 
     def unquoted(self) -> list[bool]:
         return self.marks if len(self.marks) == len(self.text) else [True] * len(self.text)
+
+    def all_unquoted(self) -> bool:
+        return all(self.unquoted())
 
 
 @dataclass
@@ -388,26 +397,80 @@ def parse_shell(text: str) -> list[SimpleCommand]:
 
 
 # --------------------------------------------------------------------------
-# Bash command checks
+# Allow-list constants
 # --------------------------------------------------------------------------
 
-KEYWORDS = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "!", "{", "}", "case", "esac"}
-SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
+KEYWORDS = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "!", "{", "}",
+            "case", "esac", "for", "select", "in", "function"}
+# Loop headers (for/select NAME in LIST) do not run commands; they are skipped whole.
+LOOP_HEADERS = {"for", "select"}
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 MAX_EXPANSIONS = 256
+
+# A literal command name: no variable/substitution, no quoting, no glob/brace characters.
+LITERAL_NAME = re.compile(r"[A-Za-z0-9_./+-]+")
+
+# Read-only commands, allowed for both restricted agents with any arguments.
+READ_ONLY = {
+    "cat", "head", "tail", "less", "more", "wc", "grep", "egrep", "fgrep", "rg", "jq", "diff",
+    "ls", "printf", "echo", "test", "[", "true", "false", "pwd", "basename", "dirname",
+    "realpath", "stat", "date", "which", "sleep", "cut", "tr", "comm", "column", "nl",
+}
+# Read-only commands that can also write through an option; allowed only in read-only form.
+GUARDED_READERS = {"sort", "uniq", "sed", "find"}
+# Writers allowed only when every target they write is inside the agent's scope.
+WRITE_TOOLS = {"mkdir", "touch", "rm", "mv", "cp", "tee"}
+# Commands that create links; always denied for restricted agents (they can point out of scope).
+LINK_COMMANDS = {"ln", "link"}
+# Navigation builtins that change the working directory used for later checks.
+NAV = {"cd", "pushd", "popd"}
+
+# QA-only tools (engineers run everything; PM does not run the build tool chain).
+QA_TOOLS = {"make", "uv", "uvx", "npm", "npx", "node", "curl"}
+
+# Project scripts each agent may run directly (checked to live under scripts/).
+SCRIPTS = {"qa": {"issue-status.sh", "test-hooks.sh"}, "pm": {"issue-status.sh"}}
+
+# git subcommands that only read.
+GIT_READONLY = {
+    "log", "show", "diff", "status", "blame", "ls-files", "grep", "rev-parse", "branch",
+    "remote", "describe", "shortlog", "reflog", "for-each-ref", "symbolic-ref", "cat-file",
+    "ls-tree", "tag", "whatchanged", "name-rev", "merge-base", "config", "rev-list",
+    "cherry", "range-diff", "show-ref", "var", "count-objects", "verify-commit",
+}
+# git write subcommands allowed per role (with path/staging checks where relevant).
+GIT_WRITE = {
+    "qa": {"add", "stage", "commit", "push", "fetch", "worktree", "switch", "checkout", "restore"},
+    "pm": {"add", "stage", "commit", "push", "fetch", "worktree", "switch"},
+}
+
+NPM_SUBCOMMANDS = {"ci", "test", "run", "run-script", "exec"}
+NPX_PACKAGES = {"@redocly/cli", "redocly", "playwright", "@playwright/test", "tsc", "typescript",
+                "vitest", "openapi-typescript"}
+UV_RUN_TOOLS = {"pytest", "ruff", "mypy", "alembic"}
+UVX_TOOLS = {"ruff", "mypy", "openapi-spec-validator"}
+MAKE_TARGETS = {"lint", "test", "e2e"}
+MAKE_DENY_OPTS = {"-C", "--directory", "-f", "--file", "--makefile", "-o", "--old-file",
+                  "-W", "--what-if", "--new-file", "--assume-new", "--eval", "-I", "--include-dir"}
+NODE_EVAL_OPTS = {"-e", "--eval", "-p", "--print", "-pe", "--input-type"}
+CURL_DENY = {"-o", "--output", "-O", "--remote-name", "--remote-name-all", "--output-dir",
+             "--create-dirs", "-J", "--remote-header-name", "-D", "--dump-header", "--trace",
+             "--trace-ascii", "--etag-save", "-c", "--cookie-jar", "-K", "--config"}
+CURL_VALUE = {"-H", "--header", "-d", "--data", "--data-raw", "--data-binary", "--data-ascii",
+              "--data-urlencode", "-X", "--request", "-u", "--user", "-A", "--user-agent",
+              "-e", "--referer", "-b", "--cookie", "-F", "--form", "-x", "--proxy", "-m",
+              "--max-time", "--connect-timeout", "--retry", "--resolve", "-E", "--cert",
+              "--cacert", "--capath", "--key", "-T", "--upload-file", "-w", "--write-out"}
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "[::1]"}
+
+
+def _f(*names: str) -> frozenset[str]:
+    return frozenset(names)
 
 
 @dataclass(frozen=True)
 class OptSpec:
-    """Options of a wrapper command, which runs the command that follows them.
-
-    ``flags``/``values``: short option letters without/with a value.
-    ``optional``: short options whose value may only be attached (``xargs -i{}``).
-    ``chdir``/``output``: options whose value is a new working directory / a file it writes.
-    ``deny``: options that make the wrapped command impossible to verify.
-    ``positionals``: words between the options and the command (``timeout DURATION``).
-    Any other option is unknown, and the call is denied (fail closed).
-    """
+    """Options of a wrapper command, which runs the command that follows them."""
 
     flags: str = ""
     values: str = ""
@@ -418,86 +481,36 @@ class OptSpec:
     output: frozenset[str] = frozenset()
     deny: frozenset[str] = frozenset()
     positionals: int = 0
-    numeric: bool = False  # accepts -N (nice -10)
+    numeric: bool = False
 
 
-def _f(*names: str) -> frozenset[str]:
-    return frozenset(names)
-
-
+# The only wrappers on the allow-list: timeout (bounds an allowed command) and xargs
+# (runs an allowed command on stdin arguments, so any writer it runs is denied).
 WRAPPERS: dict[str, OptSpec] = {
-    "sudo": OptSpec(
-        flags="AbEHiKklnPSsVv", values="CDghpRrTtUu",
-        long_flags=_f("--askpass", "--background", "--preserve-env", "--set-home", "--login", "--remove-timestamp",
-                      "--reset-timestamp", "--list", "--non-interactive", "--preserve-groups", "--stdin", "--shell",
-                      "--validate", "--bell"),
-        long_values=_f("--close-from", "--chdir", "--group", "--host", "--prompt", "--chroot", "--role", "--type",
-                       "--command-timeout", "--other-user", "--user"),
-        chdir=_f("-D", "--chdir"), deny=_f("-e", "--edit", "-R", "--chroot")),
-    "doas": OptSpec(flags="Lns", values="Cu"),
-    "nice": OptSpec(values="n", long_values=_f("--adjustment"), numeric=True),
-    "nohup": OptSpec(),
-    "setsid": OptSpec(flags="cfw", long_flags=_f("--ctty", "--fork", "--wait")),
-    "command": OptSpec(flags="pvV"),
-    "builtin": OptSpec(),
-    "exec": OptSpec(flags="cl", values="a"),
-    "busybox": OptSpec(),
-    "stdbuf": OptSpec(values="ioe", long_values=_f("--input", "--output", "--error")),
-    "ionice": OptSpec(flags="t", values="cnpPu",
-                      long_flags=_f("--ignore"), long_values=_f("--class", "--classdata", "--pid", "--pgid", "--uid")),
-    "env": OptSpec(flags="i0v", values="uCS",
-                   long_flags=_f("--ignore-environment", "--null", "--debug"),
-                   long_values=_f("--unset", "--chdir", "--split-string"),
-                   chdir=_f("-C", "--chdir"), deny=_f("-S", "--split-string")),
-    "timeout": OptSpec(flags="v", values="sk", long_flags=_f("--preserve-status", "--foreground", "--verbose"),
+    "timeout": OptSpec(flags="v", values="sk",
+                       long_flags=_f("--preserve-status", "--foreground", "--verbose"),
                        long_values=_f("--signal", "--kill-after"), positionals=1),
-    # The bash keyword (time -p) and GNU time (-o FILE writes FILE).
-    "time": OptSpec(flags="pvaq", values="of", long_flags=_f("--portability", "--verbose", "--append", "--quiet"),
-                    long_values=_f("--output", "--format"), output=_f("-o", "--output")),
     "xargs": OptSpec(
         flags="0prtxo", values="adEILnPs", optional="eil",
-        long_flags=_f("--null", "--interactive", "--no-run-if-empty", "--verbose", "--exit", "--show-limits",
-                      "--open-tty"),
-        long_values=_f("--arg-file", "--delimiter", "--max-lines", "--max-args", "--max-procs", "--max-chars",
-                       "--process-slot-var"),
-        # Optional-value long options only take their value with "=".
-        chdir=_f()),
+        long_flags=_f("--null", "--interactive", "--no-run-if-empty", "--verbose", "--exit",
+                      "--show-limits", "--open-tty"),
+        long_values=_f("--arg-file", "--delimiter", "--max-lines", "--max-args", "--max-procs",
+                       "--max-chars", "--process-slot-var")),
 }
-# Long options that take an optional value, attached with "=" only.
-OPTIONAL_LONG = {"xargs": {"--eof", "--replace"}, "sudo": {"--preserve-env"}}
+OPTIONAL_LONG = {"xargs": {"--eof", "--replace"}}
 
-# Commands whose every positional argument is a path they create, change or delete.
-ALL_ARGS_WRITERS = {"rm", "rmdir", "touch", "mkdir", "truncate", "shred", "unlink", "mv", "link"}
-# Commands that write their last positional argument (or -t DIR).
-DEST_WRITERS = {"cp", "install", "ln", "rsync"}
-# Commands that first take a mode/owner, then paths.
-MODE_WRITERS = {"chmod", "chown", "chgrp"}
-# Options that take a separate value, per command (short and long forms).
 VALUE_OPTS = {
-    "truncate": {"-s", "--size", "-r", "--reference"},
-    "mkdir": {"-m", "--mode"},
+    "mkdir": {"-m", "--mode", "-Z", "--context"},
     "touch": {"-d", "--date", "-t", "-r", "--reference"},
-    "install": {"-m", "--mode", "-o", "--owner", "-g", "--group", "-S", "--suffix"},
-    "cp": {"-S", "--suffix"},
-    "mv": {"-S", "--suffix"},
-    "ln": {"-S", "--suffix"},
-    "shred": {"-n", "--iterations", "-s", "--size"},
+    "cp": {"-S", "--suffix", "-t", "--target-directory", "--preserve", "--no-preserve",
+           "-Z", "--context", "--sparse", "--reflink"},
+    "mv": {"-S", "--suffix", "-t", "--target-directory", "-Z", "--context"},
     "tee": set(),
+    "rm": set(),
 }
-ALWAYS_DENIED = {
-    "claude": "starting another Claude Code session would bypass the agent's scope",
-    "patch": "patch can write any file; edit in-scope files with the Edit tool instead",
-    "PowerShell": "PowerShell is not available to this agent",
-    "sudoedit": "sudoedit can write any file",
-    "su": "su runs a command that cannot be verified",
-    "runuser": "runuser runs a command that cannot be verified",
-    "parallel": "parallel builds commands from its input, so the files it writes cannot be verified",
-}
-# find actions that run a command or write files.
-FIND_EXEC = {"-exec", "-execdir", "-ok", "-okdir"}
-FIND_OUTPUT = {"-fprint": 1, "-fprint0": 1, "-fls": 1, "-fprintf": 2}
-# git subcommands that the checks verify from their arguments; with unknown (xargs/find) arguments they are denied.
-GIT_WRITE_SUBCOMMANDS = {"add", "stage", "commit", "mv", "rm", "restore", "checkout", "apply", "am"}
+
+_SED_W_CMD = re.compile(r"(?:^|[;{}\n])\s*(?:\d+(?:\s*,\s*\d+)?\s*)?[wWe](?:\s|$)")
+_SED_W_FLAG = re.compile(r"s(.).*?\1.*?\1[0-9gpiImMe]*[wWe]")
 
 
 def _short_has(word: str, letter: str) -> bool:
@@ -522,6 +535,15 @@ def _positionals(args: list[Word], value_opts: set[str]) -> list[Word]:
             continue
         out.append(w)
     return out
+
+
+def _option_value(args: list[Word], short: str, long: str) -> Word | None:
+    for idx, w in enumerate(args):
+        if w.text == short or w.text == long:
+            return args[idx + 1] if idx + 1 < len(args) else None
+        if w.text.startswith(long + "="):
+            return Word(w.text[len(long) + 1 :], w.dynamic)
+    return None
 
 
 # -- brace expansion and globbing --------------------------------------------
@@ -617,10 +639,19 @@ def _check_word(w: Word, cwd: str | None, ctx: Context, action: str) -> None:
             check_path(match, cwd, ctx, action)
 
 
+# --------------------------------------------------------------------------
+# Bash allow-list checker
+# --------------------------------------------------------------------------
+
+
 class BashChecker:
     def __init__(self, ctx: Context, cwd: str | None) -> None:
         self.ctx = ctx
         self.cwd = cwd
+
+    @property
+    def role(self) -> str:
+        return self.ctx.agent
 
     def check(self, command: str, depth: int = 0) -> None:
         if depth > 5:
@@ -644,46 +675,56 @@ class BashChecker:
 
         words = list(cmd.words)
         while words and (words[0].text in KEYWORDS or ASSIGNMENT.match(words[0].text)):
+            if words[0].text in LOOP_HEADERS:
+                return  # "for NAME in LIST" / "select NAME in LIST" run no commands here
             words.pop(0)
         if not words:
             return
+        self._require_literal_name(words[0])
         expanded, unknown = expand_words(words)
         self._check_argv(expanded, depth, unknown_args=unknown)
 
+    def _require_literal_name(self, w: Word) -> None:
+        if w.dynamic:
+            raise Denied(f"the command name {w.text!r} is built from a variable or command substitution and cannot be verified")
+        if not w.all_unquoted():
+            raise Denied(f"the command name {w.text!r} is quoted or escaped and cannot be verified")
+        if w.text != "[" and not LITERAL_NAME.fullmatch(w.text):
+            raise Denied(f"the command name {w.text!r} contains special characters and cannot be verified")
+
+    # -- wrapper unwrapping --------------------------------------------------
+    def _check_argv(self, words: list[Word], depth: int, unknown_args: bool) -> None:
+        while words:
+            name = os.path.basename(words[0].text)
+            if name not in WRAPPERS:
+                break
+            self._require_literal_name(words[0])
+            words = self._strip_wrapper(name, words[1:])
+            if name == "xargs":
+                unknown_args = True
+        self._check_command(words, depth, unknown_args)
+
     def _strip_wrapper(self, name: str, words: list[Word]) -> list[Word]:
-        """Drop a wrapper's own options (and env assignments); return the wrapped command."""
         spec = WRAPPERS[name]
         optional_long = OPTIONAL_LONG.get(name, set())
         i = 0
         while i < len(words):
             w = words[i]
             t = w.text
-            if name == "env" and ASSIGNMENT.match(t):
-                i += 1
-                continue
             if t == "--":
                 i += 1
                 break
-            if t == "-" and name == "env":
-                i += 1
-                continue
             if not t.startswith("-") or t == "-":
                 break
-            value: Word | None = None
-            opt = t
             if t.startswith("--"):
-                opt, eq, val = t.partition("=")
+                opt, eq, _ = t.partition("=")
                 if opt in spec.long_values:
-                    if eq:
-                        value = Word(val, w.dynamic)
-                    elif i + 1 < len(words):
+                    if not eq and i + 1 < len(words):
                         i += 1
-                        value = words[i]
                 elif opt in spec.long_flags or opt in optional_long:
                     pass
                 else:
                     raise Denied(f"{name} {opt}: unknown option, so the wrapped command cannot be verified")
-                self._wrapper_option(name, spec, opt, value)
                 i += 1
                 continue
             if spec.numeric and re.fullmatch(r"-\d+", t):
@@ -692,224 +733,291 @@ class BashChecker:
             k = 1
             while k < len(t):
                 ch = t[k]
-                opt = "-" + ch
                 if ch in spec.optional:
-                    self._wrapper_option(name, spec, opt, None)
                     break  # the rest of the bundle is the optional value
                 if ch in spec.values:
-                    if k + 1 < len(t):
-                        value = Word(t[k + 1 :], w.dynamic)
-                    elif i + 1 < len(words):
+                    if k + 1 >= len(t) and i + 1 < len(words):
                         i += 1
-                        value = words[i]
-                    self._wrapper_option(name, spec, opt, value)
                     break
                 if ch not in spec.flags:
-                    raise Denied(f"{name} {opt}: unknown option, so the wrapped command cannot be verified")
-                self._wrapper_option(name, spec, opt, None)
+                    raise Denied(f"{name} -{ch}: unknown option, so the wrapped command cannot be verified")
                 k += 1
             i += 1
-        rest = words[i:]
-        return rest[spec.positionals :]
+        return words[i:][spec.positionals :]
 
-    def _wrapper_option(self, name: str, spec: OptSpec, opt: str, value: Word | None) -> None:
-        if opt in spec.deny:
-            raise Denied(f"{name} {opt}: the wrapped command cannot be verified")
-        if opt in spec.output and value is not None:
-            _check_word(value, self.cwd, self.ctx, f"{name} {opt}")
-        if opt in spec.chdir:
-            if value is None or value.dynamic:
-                self.cwd = None
-            else:
-                try:
-                    self.cwd = resolve(value.text, self.cwd)
-                except Denied:
-                    self.cwd = None
-
-    def _check_argv(self, words: list[Word], depth: int, unknown_args: bool) -> None:
-        saved_cwd = self.cwd
-        chdir_by_wrapper = False
-        while words:
-            name = os.path.basename(words[0].text)
-            if name not in WRAPPERS:
-                break
-            before = self.cwd
-            words = self._strip_wrapper(name, words[1:])
-            chdir_by_wrapper = chdir_by_wrapper or self.cwd != before
-            if name == "xargs":
-                unknown_args = True
-        try:
-            self._check_command(words, depth, unknown_args)
-        finally:
-            if chdir_by_wrapper:
-                self.cwd = saved_cwd  # env -C / sudo -D only change the wrapped command's directory
-
+    # -- command dispatch ----------------------------------------------------
     def _check_command(self, words: list[Word], depth: int, unknown_args: bool) -> None:
         if not words:
             return
+        self._require_literal_name(words[0])
         name = os.path.basename(words[0].text)
         args = words[1:]
-        ctx, cwd = self.ctx, self.cwd
 
-        if name in ALWAYS_DENIED:
-            raise Denied(f"{name}: {ALWAYS_DENIED[name]}")
-        if unknown_args and (name in SHELLS or name in ("eval", "find")):
-            raise Denied(f"{name}: cannot verify a command whose arguments come from xargs, find or a brace expansion")
-        if name in ("cd", "pushd"):
-            pos = _positionals(args, set())
-            if not pos:
-                self.cwd = os.path.expanduser("~")
-            elif pos[0].dynamic or pos[0].text == "-" or len(pos) > 1 or _glob_matches(pos[0], cwd):
-                self.cwd = None
-            else:
-                try:
-                    self.cwd = resolve(pos[0].text, cwd)
-                except Denied:
-                    self.cwd = None
+        if name in NAV:
+            self._check_nav(name, args)
             return
-        if name == "popd":
-            self.cwd = None
+        if name in READ_ONLY:
             return
-        if name in SHELLS:
-            for idx, w in enumerate(args):
-                if w.text == "-c" or (w.text.startswith("-") and not w.text.startswith("--") and "c" in w.text):
-                    if idx + 1 < len(args):
-                        if args[idx + 1].dynamic:
-                            raise Denied(f"{name} -c: cannot verify a command built from variables")
-                        self.check(args[idx + 1].text, depth + 1)
-                    return
-            if not _positionals(args, {"-o", "+o", "-O", "+O"}):
-                raise Denied(f"{name}: cannot verify commands read from standard input")
-            return  # running a script file: residual risk, see ADR 0008
-        if name == "eval":
-            self.check(" ".join(w.text for w in args), depth + 1)
+        if name == "env":
+            if args:
+                self._not_allowed("env with arguments")
+            return
+        if name == "command":
+            if args and args[0].text in ("-v", "-V"):
+                return
+            self._not_allowed(name)
+        if name == "sort":
+            self._check_sort(args)
+            return
+        if name == "uniq":
+            self._check_uniq(args)
+            return
+        if name == "sed":
+            self._check_sed(args)
+            return
+        if name == "find":
+            self._check_find(args)
+            return
+        if name in LINK_COMMANDS:
+            raise Denied(f"{name}: creating links is not allowed for the {self.role} agent (a link can point out of scope)")
+        if name in ("mkdir", "touch", "rm", "mv"):
+            self._check_all_args_writer(name, args, unknown_args)
+            return
+        if name == "cp":
+            self._check_cp(args, unknown_args)
+            return
+        if name == "tee":
+            self._check_tee(args, unknown_args)
+            return
+        if name == "gh":
             return
         if name == "git":
             self._check_git(args, unknown_args)
             return
-        if name == "find":
-            self._check_find(args, depth)
+        if name in SCRIPTS.get(self.role, set()):
+            self._check_script(words[0])
             return
-
-        is_writer = (
-            name in ALL_ARGS_WRITERS
-            or name in DEST_WRITERS
-            or name in MODE_WRITERS
-            or name in ("tee", "dd")
-            or (name == "sed" and _sed_in_place(args))
-            or (name == "perl" and _perl_in_place(args))
-        )
-        if not is_writer:
+        if self.role == "qa" and name in QA_TOOLS:
+            getattr(self, f"_check_{name}")(args)
             return
-        if unknown_args:
-            raise Denied(f"{name}: cannot verify the files it would write (arguments from xargs, find -exec or a brace expansion)")
+        self._not_allowed(name)
 
-        action = name
-        if name in ALL_ARGS_WRITERS or name == "tee":
-            for w in _positionals(args, VALUE_OPTS.get(name, set())):
-                if name == "tee" and w.text == "-":
-                    continue
-                _check_word(w, cwd, ctx, action)
-        elif name in MODE_WRITERS:
-            pos = _positionals(args, set())
-            if any(a.text.startswith("--reference") for a in args):
-                targets = pos
-            else:
-                targets = pos[1:]
-            for w in targets:
-                _check_word(w, cwd, ctx, action)
-        elif name in DEST_WRITERS:
-            self._check_dest_writer(name, args)
-        elif name == "dd":
-            for w in args:
-                if w.text.startswith("of="):
-                    _check_word(Word(w.text[3:], w.dynamic, w.marks[3:]), cwd, ctx, "dd of=")
-        elif name == "sed":
-            for w in _sed_files(args):
-                _check_word(w, cwd, ctx, "sed -i")
-        elif name == "perl":
-            for w in _perl_files(args):
-                _check_word(w, cwd, ctx, "perl -i")
+    def _not_allowed(self, what: str) -> None:
+        raise Denied(f"{what} is not on the {self.role} allow-list; {ADR_HINT}")
 
-    def _check_dest_writer(self, name: str, args: list[Word]) -> None:
-        ctx, cwd = self.ctx, self.cwd
-        texts = [a.text for a in args]
-        target_dir = _option_value(args, "-t", "--target-directory")
-        pos = _positionals(args, VALUE_OPTS.get(name, set()) | {"-t", "--target-directory"})
-        if name == "install" and any(t == "--directory" or _short_has(t, "d") for t in texts):
-            for w in pos:  # install -d creates every directory it is given
-                _check_word(w, cwd, ctx, "install -d")
+    # -- navigation ----------------------------------------------------------
+    def _check_nav(self, name: str, args: list[Word]) -> None:
+        if name == "popd":
+            self.cwd = None
             return
-        if target_dir is not None:
-            dests, sources = [target_dir], pos
-        elif len(pos) == 1 and name == "ln":
-            # ln TARGET creates a link named after TARGET in the working directory.
-            dests, sources = [Word(os.path.basename(pos[0].text.rstrip("/")), pos[0].dynamic)], pos
+        pos = _positionals(args, set())
+        if not pos:
+            self.cwd = os.path.expanduser("~")
+        elif pos[0].dynamic or pos[0].text == "-" or len(pos) > 1 or _glob_matches(pos[0], self.cwd):
+            self.cwd = None
         else:
-            dests, sources = pos[-1:], pos[:-1]
-        for w in dests:
-            _check_word(w, cwd, ctx, action=name)
-        # A hard link shares the file's content: writing the in-scope name changes the original.
-        hard_link = (name == "ln" and not any(t in ("--symbolic",) or _short_has(t, "s") for t in texts)) or (
-            name == "cp" and any(t == "--link" or (_short_has(t, "l") and not t.startswith("-S")) for t in texts))
-        if hard_link:
-            for w in sources:
-                _check_word(w, cwd, ctx, f"{name} (hard link from)")
+            try:
+                self.cwd = resolve(pos[0].text, self.cwd)
+            except Denied:
+                self.cwd = None
 
-    # -- find ----------------------------------------------------------------
-    def _check_find(self, args: list[Word], depth: int) -> None:
-        i, follow = 0, False
+    # -- guarded readers -----------------------------------------------------
+    def _check_sort(self, args: list[Word]) -> None:
+        for w in args:
+            t = w.text
+            if t in ("-o", "--output") or t.startswith("--output=") or (t.startswith("-o") and t != "-o" and not t.startswith("--")):
+                raise Denied(f"sort {t}: writing to a file is not on the {self.role} allow-list; {ADR_HINT}")
+
+    def _check_uniq(self, args: list[Word]) -> None:
+        pos = _positionals(args, {"-f", "--skip-fields", "-s", "--skip-chars", "-w", "--check-chars"})
+        if len(pos) > 1:
+            raise Denied(f"uniq writing to a second file argument is not on the {self.role} allow-list; {ADR_HINT}")
+
+    def _check_sed(self, args: list[Word]) -> None:
+        in_place, scripts = _sed_scan(args)
+        if in_place:
+            raise Denied(f"sed -i: in-place editing is not on the {self.role} allow-list; {ADR_HINT}")
+        for s in scripts:
+            if _SED_W_CMD.search(s) or _SED_W_FLAG.search(s):
+                raise Denied(f"sed w/W/e command: writing or running files from a sed script is not on the {self.role} allow-list; {ADR_HINT}")
+
+    def _check_find(self, args: list[Word]) -> None:
+        for w in args:
+            t = w.text
+            if t in ("-exec", "-execdir", "-ok", "-okdir", "-delete") or t in ("-fprint", "-fprint0", "-fprintf", "-fls"):
+                raise Denied(f"find {t}: running commands or writing files is not on the {self.role} allow-list; {ADR_HINT}")
+
+    # -- writers -------------------------------------------------------------
+    def _check_all_args_writer(self, name: str, args: list[Word], unknown_args: bool) -> None:
+        if unknown_args:
+            raise Denied(f"{name}: cannot verify the files it would write (arguments from xargs or an unexpandable expansion)")
+        target_dir = _option_value(args, "-t", "--target-directory") if name == "mv" else None
+        pos = _positionals(args, VALUE_OPTS.get(name, set()))
+        targets = [target_dir] if target_dir is not None else pos
+        for w in targets:
+            if w is not None:
+                _check_word(w, self.cwd, self.ctx, name)
+
+    def _check_cp(self, args: list[Word], unknown_args: bool) -> None:
+        texts = [a.text for a in args]
+        if any(t in ("-s", "--symbolic-link") or _short_has(t, "s") for t in texts):
+            raise Denied(f"cp -s: creating symlinks is not allowed for the {self.role} agent")
+        if any(t == "--link" or _short_has(t, "l") for t in texts):
+            raise Denied(f"cp -l: creating hard links is not allowed for the {self.role} agent")
+        if unknown_args:
+            raise Denied("cp: cannot verify the destination (arguments from xargs or an unexpandable expansion)")
+        target_dir = _option_value(args, "-t", "--target-directory")
+        pos = _positionals(args, VALUE_OPTS.get("cp", set()))
+        dests = [target_dir] if target_dir is not None else pos[-1:]
+        for w in dests:
+            if w is not None:
+                _check_word(w, self.cwd, self.ctx, "cp")
+
+    def _check_tee(self, args: list[Word], unknown_args: bool) -> None:
+        if unknown_args:
+            raise Denied("tee: cannot verify the files it would write (arguments from xargs or an unexpandable expansion)")
+        for w in _positionals(args, set()):
+            if w.text == "-":
+                continue
+            _check_word(w, self.cwd, self.ctx, "tee")
+
+    def _check_script(self, word: Word) -> None:
+        try:
+            rel = repo_relative(resolve(word.text, self.cwd), self.ctx)
+        except Denied:
+            rel = None
+        if rel not in ("scripts/issue-status.sh", "scripts/test-hooks.sh"):
+            self._not_allowed(word.text)
+
+    # -- QA tool chain -------------------------------------------------------
+    def _check_make(self, args: list[Word]) -> None:
+        targets: list[str] = []
+        skip = False
+        for w in args:
+            t = w.text
+            if skip:
+                skip = False
+                continue
+            if t in MAKE_DENY_OPTS or t.split("=")[0] in MAKE_DENY_OPTS:
+                raise Denied(f"make {t}: cannot verify which makefile would run; {ADR_HINT}")
+            if t.startswith("-"):
+                continue
+            if "=" in t:
+                continue  # VAR=value assignment
+            targets.append(t)
+        if not targets:
+            raise Denied(f"make with no target runs the default target, which is not on the {self.role} allow-list; {ADR_HINT}")
+        bad = [t for t in targets if t not in MAKE_TARGETS]
+        if bad:
+            raise Denied(f"make {' '.join(bad)}: only {', '.join(sorted(MAKE_TARGETS))} are on the {self.role} allow-list; {ADR_HINT}")
+
+    def _check_uv(self, args: list[Word]) -> None:
+        i = 0
+        while i < len(args) and args[i].text.startswith("-"):
+            i += 1
+        if i >= len(args):
+            raise Denied(f"uv with no subcommand is not on the {self.role} allow-list; {ADR_HINT}")
+        sub = args[i].text
+        if sub == "sync":
+            return
+        if sub == "run":
+            j = i + 1
+            while j < len(args) and args[j].text.startswith("-"):
+                j += 1
+            if j >= len(args):
+                raise Denied(f"uv run with no command is not on the {self.role} allow-list; {ADR_HINT}")
+            tool = os.path.basename(args[j].text)
+            if tool not in UV_RUN_TOOLS:
+                raise Denied(f"uv run {tool}: only {', '.join(sorted(UV_RUN_TOOLS))} are on the {self.role} allow-list; {ADR_HINT}")
+            return
+        raise Denied(f"uv {sub}: only 'uv run' and 'uv sync' are on the {self.role} allow-list; {ADR_HINT}")
+
+    def _check_uvx(self, args: list[Word]) -> None:
+        pkg: str | None = None
+        i = 0
         while i < len(args):
             t = args[i].text
-            if t in ("-H", "-P"):
-                i += 1
-            elif t == "-L":
-                follow, i = True, i + 1
-            elif t == "-D":
-                i += 2
-            elif re.fullmatch(r"-O\d*", t):
-                i += 1
-            else:
+            if t == "--from" and i + 1 < len(args):
+                pkg = args[i + 1].text
                 break
-        starts: list[Word] = []
-        while i < len(args) and not (args[i].text.startswith("-") or args[i].text in ("(", ")", "!", ",")):
-            starts.append(args[i])
+            if t.startswith("--from="):
+                pkg = t.split("=", 1)[1]
+                break
+            if t.startswith("-"):
+                i += 1
+                continue
+            pkg = t
+            break
+        if pkg is None:
+            raise Denied(f"uvx with no tool is not on the {self.role} allow-list; {ADR_HINT}")
+        if os.path.basename(pkg) not in UVX_TOOLS:
+            raise Denied(f"uvx {pkg}: only {', '.join(sorted(UVX_TOOLS))} are on the {self.role} allow-list; {ADR_HINT}")
+
+    def _check_npm(self, args: list[Word]) -> None:
+        sub = next((w.text for w in args if not w.text.startswith("-")), None)
+        if sub not in NPM_SUBCOMMANDS:
+            raise Denied(f"npm {sub or '(default)'}: only {', '.join(sorted(NPM_SUBCOMMANDS))} are on the {self.role} allow-list; {ADR_HINT}")
+
+    def _check_npx(self, args: list[Word]) -> None:
+        pkg: str | None = None
+        i = 0
+        while i < len(args):
+            t = args[i].text
+            if t in ("-p", "--package") and i + 1 < len(args):
+                pkg = args[i + 1].text
+                break
+            if t.startswith("--package="):
+                pkg = t.split("=", 1)[1]
+                break
+            if t.startswith("-"):
+                i += 1
+                continue
+            pkg = t
+            break
+        if pkg is None or pkg not in NPX_PACKAGES:
+            raise Denied(f"npx {pkg or '(none)'}: only {', '.join(sorted(NPX_PACKAGES))} are on the {self.role} allow-list; {ADR_HINT}")
+
+    def _check_node(self, args: list[Word]) -> None:
+        for w in args:
+            t = w.text
+            if t == "--":
+                return
+            if t in NODE_EVAL_OPTS or t.startswith(("--eval", "--print")):
+                raise Denied(f"node {t}: evaluating inline code is not on the {self.role} allow-list; {ADR_HINT}")
+            if not t.startswith("-"):
+                return  # running a script file (residual risk, see ADR 0008)
+
+    def _check_curl(self, args: list[Word]) -> None:
+        urls: list[str] = []
+        i = 0
+        while i < len(args):
+            t = args[i].text
+            if t in CURL_DENY or t.split("=")[0] in CURL_DENY:
+                raise Denied(f"curl {t}: writing files is not on the {self.role} allow-list; {ADR_HINT}")
+            if t in ("--url",) and i + 1 < len(args):
+                urls.append(args[i + 1].text)
+                i += 2
+                continue
+            if t.startswith("--url="):
+                urls.append(t.split("=", 1)[1])
+                i += 1
+                continue
+            if t in CURL_VALUE:
+                i += 2
+                continue
+            if t.startswith("-") and t != "-":
+                i += 1
+                continue
+            urls.append(t)
             i += 1
-        if not starts:
-            starts = [Word(".")]
-        expr = args[i:]
-        follow = follow or any(w.text == "-follow" for w in expr)
-        j = 0
-        while j < len(expr):
-            t = expr[j].text
-            if t in FIND_EXEC:
-                k = j + 1
-                while k < len(expr) and expr[k].text not in (";", "+"):
-                    k += 1
-                saved = self.cwd
-                if t in ("-execdir", "-okdir"):
-                    self.cwd = None  # runs in each file's directory
-                try:
-                    # The command gets the found files as arguments, so any writer is denied.
-                    self._check_argv(expr[j + 1 : k], depth + 1, unknown_args=True)
-                finally:
-                    self.cwd = saved
-                j = k + 1
-            elif t == "-delete":
-                if follow:
-                    raise Denied("find -L/-follow -delete: cannot verify which files it deletes")
-                for w in starts:
-                    _check_word(w, self.cwd, self.ctx, "find -delete")
-                j += 1
-            elif t in FIND_OUTPUT:
-                if j + 1 < len(expr):
-                    _check_word(expr[j + 1], self.cwd, self.ctx, f"find {t}")
-                j += 1 + FIND_OUTPUT[t]
-            else:
-                j += 1
+        if not urls:
+            raise Denied(f"curl without a target URL is not on the {self.role} allow-list; {ADR_HINT}")
+        for u in urls:
+            if not _is_local_url(u):
+                raise Denied(f"curl {u}: only localhost/127.0.0.1 URLs are on the {self.role} allow-list; {ADR_HINT}")
 
     # -- git -----------------------------------------------------------------
-    def _check_git(self, args: list[Word], unknown_args: bool = False) -> None:
+    def _check_git(self, args: list[Word], unknown_args: bool) -> None:
         ctx = self.ctx
         cwd = self.cwd
         i = 0
@@ -919,7 +1027,17 @@ class BashChecker:
                 target = args[i + 1]
                 cwd = None if target.dynamic else resolve(target.text, cwd)
                 i += 2
-            elif opt in ("-c", "--git-dir", "--work-tree", "--namespace"):
+            elif opt == "-c" and i + 1 < len(args):
+                val = args[i + 1].text
+                if val.startswith(("core.hooksPath", "alias.", "core.fsmonitor", "include.", "includeIf.")):
+                    raise Denied(f"git -c {val.split('=')[0]}: configuring code execution is not on the {self.role} allow-list; {ADR_HINT}")
+                i += 2
+            elif opt.startswith("-c") and len(opt) > 2:
+                val = opt[2:]
+                if val.startswith(("core.hooksPath", "alias.", "core.fsmonitor", "include.", "includeIf.")):
+                    raise Denied(f"git -c {val.split('=')[0]}: configuring code execution is not on the {self.role} allow-list; {ADR_HINT}")
+                i += 1
+            elif opt in ("--git-dir", "--work-tree", "--namespace"):
                 if opt in ("--git-dir", "--work-tree"):
                     raise Denied(f"git {opt}: cannot verify which work tree is written")
                 i += 2
@@ -931,18 +1049,18 @@ class BashChecker:
             return
         sub = args[i].text
         rest = args[i + 1 :]
-        if unknown_args and sub in GIT_WRITE_SUBCOMMANDS:
-            raise Denied(f"git {sub}: cannot verify the files it would change (arguments from xargs, find -exec or a brace expansion)")
-
+        if sub in GIT_READONLY or sub == "fetch":
+            return
+        if sub not in GIT_WRITE.get(self.role, set()):
+            self._not_allowed(f"git {sub}")
+        if sub in ("push", "switch", "worktree"):
+            return  # publish commits / change branch / manage worktrees: no repo-file write to check
+        if unknown_args and sub in ("add", "stage", "commit"):
+            raise Denied(f"git {sub}: cannot verify the files it would change (arguments from xargs or an unexpandable expansion)")
         if sub in ("add", "stage"):
             self._git_add(rest, cwd)
         elif sub == "commit":
             self._git_commit(rest, cwd)
-        elif sub in ("mv", "rm"):
-            for w in _positionals(rest, set()):
-                _check_word(w, cwd, ctx, f"git {sub}")
-        elif sub in ("apply", "am"):
-            raise Denied(f"git {sub}: applying patches can write any file")
         elif sub == "restore":
             for w in _positionals(rest, {"-s", "--source"}):
                 _check_word(w, cwd, ctx, "git restore")
@@ -960,7 +1078,6 @@ class BashChecker:
         opts = [w.text for w in rest if w.text not in ("-n", "--dry-run")]
         proc = _git(["add", "--dry-run", *opts], cwd)
         if proc.returncode != 0:
-            # Fall back to checking the pathspecs as paths.
             for w in _positionals(rest, {"--chmod", "--pathspec-from-file"}):
                 _check_word(w, cwd, self.ctx, "git add")
             return
@@ -1020,78 +1137,68 @@ class BashChecker:
         check_path(os.path.join(repo[0], rel), None, self.ctx, action)
 
 
-def _option_value(args: list[Word], short: str, long: str) -> Word | None:
-    for idx, w in enumerate(args):
-        if w.text == short or w.text == long:
-            return args[idx + 1] if idx + 1 < len(args) else None
-        if w.text.startswith(long + "="):
-            return Word(w.text[len(long) + 1 :], w.dynamic)
-    return None
+def _is_local_url(url: str) -> bool:
+    host = re.sub(r"^[A-Za-z][A-Za-z0-9+.-]*://", "", url)
+    host = host.split("/")[0].split("?")[0]
+    if "@" in host:
+        host = host.rsplit("@", 1)[1]
+    if host.startswith("["):  # IPv6 literal, with optional :port after ]
+        end = host.find("]")
+        host = host[: end + 1] if end != -1 else host
+    else:
+        host = host.split(":")[0]
+    return host in LOCAL_HOSTS
 
 
-def _sed_options(args: list[Word]) -> tuple[bool, bool, list[Word]]:
-    """Return (in_place, has_script_option, positional words) for a sed argv."""
-    in_place = has_script = False
-    pos: list[Word] = []
-    skip = False
+def _sed_scan(args: list[Word]) -> tuple[bool, list[str]]:
+    """Return (in_place, list of sed script strings) for a sed argv."""
+    in_place = False
+    scripts: list[str] = []
+    positionals: list[Word] = []
+    expect: str | None = None
     for w in args:
         t = w.text
-        if skip:
-            skip = False
+        if expect is not None:
+            if expect == "script":
+                scripts.append(t)
+            expect = None
             continue
         if t.startswith("--"):
             if t.startswith("--in-place"):
                 in_place = True
-            elif t in ("--expression", "--file"):
-                has_script = skip = True
-            elif t.startswith(("--expression=", "--file=")):
-                has_script = True
-            elif t == "--line-length":
-                skip = True
+            elif t.startswith("--expression="):
+                scripts.append(t.split("=", 1)[1])
+            elif t == "--expression":
+                expect = "script"
+            elif t.startswith("--file="):
+                scripts.append("")  # file script: treat as opaque, but it is a script source
+            elif t in ("--file", "--line-length"):
+                expect = "value"
         elif t.startswith("-") and t != "-":
-            for k, ch in enumerate(t[1:]):
-                if ch == "i":  # the rest of the bundle is the backup suffix
+            k = 1
+            while k < len(t):
+                ch = t[k]
+                if ch == "i":
                     in_place = True
                     break
-                if ch in "efl":
-                    has_script = has_script or ch in "ef"
-                    skip = k == len(t) - 2  # value is the next word
+                if ch in "ef":
+                    rest = t[k + 1 :]
+                    if rest:
+                        if ch == "e":
+                            scripts.append(rest)
+                    else:
+                        expect = "script" if ch == "e" else "value"
                     break
+                if ch == "l":
+                    if k + 1 >= len(t):
+                        expect = "value"
+                    break
+                k += 1
         else:
-            pos.append(w)
-    return in_place, has_script, pos
-
-
-def _sed_in_place(args: list[Word]) -> bool:
-    return _sed_options(args)[0]
-
-
-def _sed_files(args: list[Word]) -> list[Word]:
-    _, has_script, pos = _sed_options(args)
-    return pos if has_script else pos[1:]
-
-
-def _perl_in_place(args: list[Word]) -> bool:
-    return any(w.text.startswith("-") and not w.text.startswith("--") and "i" in w.text[1:].split("e")[0]
-               for w in args)
-
-
-def _perl_files(args: list[Word]) -> list[Word]:
-    has_e = False
-    pos: list[Word] = []
-    skip = False
-    for w in args:
-        if skip:
-            skip = False
-            continue
-        t = w.text
-        if t.startswith("-") and not t.startswith("--") and t != "-":
-            if t.endswith(("e", "E")):
-                has_e = True
-                skip = True
-            continue
-        pos.append(w)
-    return pos if has_e else pos[1:]
+            positionals.append(w)
+    if not scripts and positionals:
+        scripts.append(positionals[0].text)
+    return in_place, scripts
 
 
 # --------------------------------------------------------------------------
@@ -1123,11 +1230,12 @@ def decide(event: dict[str, Any]) -> str | None:
         elif tool == "Bash":
             BashChecker(ctx, event.get("cwd")).check(str(tool_input.get("command", "")))
         elif tool == "PowerShell":
-            raise Denied(f"PowerShell: {ALWAYS_DENIED['PowerShell']}")
+            raise Denied(f"PowerShell is not on the {agent} allow-list")
     except Denied as exc:
         return (
             f"FitWise scope guard blocked this {tool} call. The {agent} agent may only write under "
-            f"{ctx.scope_text()} (docs/team.md, ADR 0008). Reason: {exc}. {HINTS[agent]}"
+            f"{ctx.scope_text()} and run an allow-listed set of commands (docs/team.md, ADR 0008). "
+            f"Reason: {exc}. {HINTS[agent]}"
         )
     except Exception as exc:  # noqa: BLE001 - fail closed for restricted agents
         return f"FitWise scope guard could not verify this {tool} call ({type(exc).__name__}: {exc}); blocked for the {agent} agent."

@@ -23,7 +23,7 @@ FitWise is built by a small team of Claude Code agents coordinated by an orchest
 
 Agent definitions live in [`.claude/agents/`](../.claude/agents/). Each runs as a Claude Code subagent with its own context, so the orchestrator's session stays small and each agent sees only what its task needs.
 
-The **QA and PM write scopes below are enforced**, not just documented: a `PreToolUse` hook in [`.claude/settings.json`](../.claude/settings.json) ([`scope_guard.py`](../.claude/hooks/scope_guard.py), [ADR 0008](adr/0008-enforce-agent-write-scopes-with-a-hook.md)) blocks their `Edit`/`Write`/`NotebookEdit` calls and known shell write forms (`>`, `tee`, `sed -i`, `cp`/`mv`/`rm`, `git add`/`git commit`, …) outside their directories, with a message naming the allowed directories. Engineer, DevOps and the main session are not affected. Tests: `scripts/test-hooks.sh`.
+The **QA and PM write scopes below are enforced**, not just documented: a `PreToolUse` hook in [`.claude/settings.json`](../.claude/settings.json) ([`scope_guard.py`](../.claude/hooks/scope_guard.py), [ADR 0008](adr/0008-enforce-agent-write-scopes-with-a-hook.md)) blocks their `Edit`/`Write`/`NotebookEdit` calls outside their directories, and checks every `Bash` command against a **per-role allow-list**: only a small, reviewed set of commands QA/PM actually need may run, writers must target their own directories, and anything else — an unknown program, a dynamic command name, an interpreter, a shell write out of scope — is denied (fail closed) with a message naming the command and the allowed directories. Engineer, DevOps and the main session are not affected. Tests: `scripts/test-hooks.sh`.
 
 ## Roles
 
