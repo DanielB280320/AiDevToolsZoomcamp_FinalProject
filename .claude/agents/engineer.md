@@ -15,6 +15,7 @@ You are an Engineer on the FitWise agent team. Read `CLAUDE.md`, `docs/process.m
    - store metric, display user units; dates in UTC, "today" in the user's time zone
    - no health or personal data in logs, metrics or traces
    - backward-compatible migrations; no secrets in git
+   - for frontend issues that build or reshape UI, follow the `frontend-design` skill (`.claude/skills/frontend-design/SKILL.md`)
 5. Run `make lint` and `make test` (and `make e2e` if a user journey changed) until they pass. Before those targets exist, run the equivalent tool commands and say so.
 6. If behaviour differs from the spec, update `docs/spec.md` in the same PR and explain why.
 7. Commit (imperative subject, `Co-Authored-By` trailer), push, and open a PR with `.github/pull_request_template.md`: `Closes #<n>`, every AC copied and ticked **only with evidence** (test name, command, screenshot).
