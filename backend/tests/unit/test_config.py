@@ -9,6 +9,7 @@ def test_settings_come_from_environment_variables(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("APP_ENV", "prod")
     monkeypatch.setenv("LOG_LEVEL", "warning")
     monkeypatch.setenv("DATABASE_CONNECT_TIMEOUT_SECONDS", "5")
+    monkeypatch.setenv("USER_HASH_SALT", "a-long-random-test-salt")
 
     settings = Settings(_env_file=None)
 

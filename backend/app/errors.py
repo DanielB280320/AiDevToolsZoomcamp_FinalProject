@@ -7,9 +7,9 @@
 * Unknown routes and other framework HTTP errors keep their status with a stable `code`.
 * Anything else becomes a bare 500 `internal_error`: no stack trace, exception message or request
   data reaches the client, and only the exception type is logged (spec §6.5).
+* Every problem carries `request_id` = the request's trace id, to find its logs and trace.
 """
 
-import logging
 from collections.abc import Mapping, Sequence
 from http import HTTPStatus
 from typing import Any
@@ -17,14 +17,16 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from opentelemetry import trace
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.schemas.problem import FieldError, Problem
+from app.telemetry import get_logger
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Stable codes for statuses raised by the framework itself (routing, method checks).
 _STATUS_CODES: Mapping[int, str] = {
@@ -93,6 +95,12 @@ class ProblemError(Exception):
         self.headers = dict(headers) if headers is not None else None
 
 
+def current_request_id() -> str | None:
+    """The active trace id (32 hex chars), the same `trace_id` as in the request's log lines."""
+    span_context = trace.get_current_span().get_span_context()
+    return format(span_context.trace_id, "032x") if span_context.is_valid else None
+
+
 def problem_response(
     status: int,
     code: str,
@@ -109,6 +117,7 @@ def problem_response(
         code=code,
         detail=detail if detail is not None else _DEFAULT_DETAILS.get(code),
         errors=list(errors) if errors is not None else None,
+        request_id=current_request_id(),
     )
     return JSONResponse(
         problem.model_dump(exclude_none=True),
@@ -213,10 +222,7 @@ class UnhandledErrorMiddleware:
         except Exception as exc:
             if response_started:
                 raise
-            logger.error(
-                "unhandled exception",
-                extra={"error_type": type(exc).__name__, "http_method": scope.get("method")},
-            )
+            logger.error("unhandled exception", error_type=type(exc).__name__)
             await problem_response(500, "internal_error")(scope, receive, send)
 
 

@@ -18,3 +18,4 @@ class Problem(ResponseModel):
     code: str
     detail: str | None = None
     errors: list[FieldError] | None = None
+    request_id: str | None = None
