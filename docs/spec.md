@@ -619,6 +619,7 @@ Coverage target: ≥ 90 % lines for `backend/app/engines/`, ≥ 75 % backend ove
 | Manual "Rollback production" | Redeploy `PREVIOUS_TAG` (also used by the on-call agent's script) |
 
 Migrations must be backward compatible with the previous release (expand → migrate → contract) so rollback never needs a down-migration.
+For the same reason `GET /readyz` reports `migrations: ok` when the database is at **or ahead of** the release's Alembic head (ahead = a newer release migrated it and this one was rolled back); it reports `pending` (503) only when a revision this release ships is not applied.
 
 ## 14. Observability
 
