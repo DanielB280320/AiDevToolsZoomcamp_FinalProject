@@ -632,6 +632,8 @@ For the same reason `GET /readyz` reports `migrations: ok` when the database is 
   - `fitwise_suggestions_generated_total{kind, rule}`, `fitwise_suggestions_decided_total{kind, decision}`
   - `fitwise_off_search_total{outcome}`
 - **Logs**: structured JSON to stdout → Collector → Loki, each line with `trace_id`, `span_id`, `env`, `route`, `user_hash`; allow-listed fields only (§6.5).
+- **Privacy rules in the pipeline**: `route` is always the route template (`unmatched` for unknown paths), never the raw path; the app writes its own access log (route, method, status, duration — no query string) instead of uvicorn's; spans keep only allow-listed attributes and lose exception messages and status descriptions; `user_hash` = HMAC-SHA256 of the user id keyed by `USER_HASH_SALT` (required in dev/prod); `Problem.request_id` = the request's `trace_id`. Health probes are measured but not traced or access-logged when healthy.
+- **Export**: OTLP/HTTP to `OTEL_EXPORTER_OTLP_ENDPOINT`; when unset nothing is exported and no network call is made (tests, `make up` without the observability stack). `env`, `service.name` and `service.version` (git SHA) are resource attributes.
 - **Correlation**: Grafana links metric exemplars → Tempo traces → Loki logs by `trace_id`.
 - **Dashboards** (provisioned as code): "Key journey" (rate, errors, p95 per logging endpoint), "Engines" (suggestions by rule/decision), "Service health".
 - Both environments send telemetry, labelled `env=dev|prod`.

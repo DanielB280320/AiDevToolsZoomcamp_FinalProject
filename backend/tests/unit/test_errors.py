@@ -51,6 +51,16 @@ def client(offline_app: FastAPI) -> Iterator[TestClient]:
         yield test_client
 
 
+def _without_request_id(body: Any) -> dict[str, Any]:
+    """The problem minus `request_id`, after checking it is a 32-hex trace id."""
+    assert isinstance(body, dict)
+    request_id = body.pop("request_id")
+    assert isinstance(request_id, str)
+    assert len(request_id) == 32
+    assert int(request_id, 16) != 0
+    return body
+
+
 def _problem(response_json: Any, status: int, code: str) -> dict[str, Any]:
     assert isinstance(response_json, dict)
     assert_matches_schema(response_json, "Problem")
@@ -155,7 +165,7 @@ def test_problem_error_raised_by_a_service_is_rendered(client: TestClient) -> No
 
     assert response.status_code == 409
     assert response.headers["content-type"] == PROBLEM_MEDIA_TYPE
-    assert response.json() == {
+    assert _without_request_id(response.json()) == {
         "type": "/problems/email_taken",
         "title": "Conflict",
         "status": 409,
@@ -174,7 +184,7 @@ def test_unhandled_exception_returns_bare_500_without_details(
 
     assert response.status_code == 500
     assert response.headers["content-type"] == PROBLEM_MEDIA_TYPE
-    assert response.json() == {
+    assert _without_request_id(response.json()) == {
         "type": "/problems/internal_error",
         "title": "Internal Server Error",
         "status": 500,
