@@ -5,7 +5,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 
-from app.config import get_settings
+from app.config import DatabaseSettings
 from app.models import Base
 
 config = context.config
@@ -17,7 +17,7 @@ target_metadata = Base.metadata
 
 def _database_url() -> str:
     url = config.attributes.get("database_url")
-    return str(url) if url else get_settings().database_url
+    return str(url) if url else DatabaseSettings().database_url.get_secret_value()
 
 
 def run_migrations_offline() -> None:

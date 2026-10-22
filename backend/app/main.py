@@ -9,7 +9,8 @@ from app.config import Settings, get_settings
 from app.db import make_engine, make_session_factory
 from app.errors import install_error_handlers
 from app.migrations import load_migration_scripts
-from app.routers import health
+from app.routers import auth, health, me
+from app.services.clock import SystemClock
 from app.telemetry import (
     SERVICE_NAME,
     Telemetry,
@@ -43,8 +44,9 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     app = FastAPI(
         title="FitWise API",
         version="1.0.0",
-        openapi_url=f"{API_PREFIX}/openapi.json",
-        docs_url=f"{API_PREFIX}/docs",
+        # Not served in prod; openapi.yaml is the published contract.
+        openapi_url=f"{API_PREFIX}/openapi.json" if settings.serves_api_docs else None,
+        docs_url=f"{API_PREFIX}/docs" if settings.serves_api_docs else None,
         redoc_url=None,
         swagger_ui_oauth2_redirect_url=None,
         lifespan=lifespan,
@@ -53,11 +55,14 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
     app.state.migration_scripts = load_migration_scripts()
+    app.state.clock = SystemClock()
 
     install_error_handlers(app)
     install_telemetry(app, engine, telemetry)
 
     api = APIRouter(prefix=API_PREFIX)
     api.include_router(health.router)
+    api.include_router(auth.router)
+    api.include_router(me.router)
     app.include_router(api)
     return app

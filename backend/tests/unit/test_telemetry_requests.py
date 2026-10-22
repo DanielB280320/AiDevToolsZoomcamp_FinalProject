@@ -12,7 +12,6 @@ from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import SpanKind, StatusCode
 
-from app.config import Settings
 from app.telemetry import bind_user, build_telemetry
 from app.telemetry import setup as telemetry_setup
 from app.telemetry.metrics import UNMATCHED_ROUTE
@@ -215,12 +214,11 @@ def test_resource_carries_env_service_name_and_version(captured: Captured) -> No
 
 @pytest.mark.parametrize("env", ["local", "dev", "prod"])
 def test_resource_env_and_version_come_from_settings(env: str) -> None:
-    settings = Settings(
-        database_url=unreachable_database_url(),
-        app_env=env,  # type: ignore[arg-type]
+    settings = make_settings(
+        unreachable_database_url(),
+        app_env=env,
         app_version="3f2a9c1",
-        user_hash_salt="a-long-random-test-salt",  # type: ignore[arg-type]
-        _env_file=None,
+        user_hash_salt="a-long-random-test-salt",
     )
     telemetry = build_telemetry(settings)
 
@@ -278,10 +276,8 @@ def test_with_an_otlp_endpoint_traces_and_metrics_go_to_the_collector_sanitized(
 
     monkeypatch.setattr(telemetry_setup, "OTLPSpanExporter", span_exporter)
     monkeypatch.setattr(telemetry_setup, "OTLPMetricExporter", metric_exporter)
-    settings = Settings(
-        database_url=unreachable_database_url(),
-        otel_exporter_otlp_endpoint="http://otel-collector:4318/",
-        _env_file=None,
+    settings = make_settings(
+        unreachable_database_url(), otel_exporter_otlp_endpoint="http://otel-collector:4318/"
     )
 
     telemetry = build_telemetry(settings)
