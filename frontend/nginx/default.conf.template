@@ -1,0 +1,76 @@
+# FitWise nginx: serves the built SPA and reverse-proxies /api to the backend (spec §11).
+# Rendered at container start by the nginx image entrypoint (envsubst, only ${BACKEND_*} and
+# ${NGINX_*}); every other $variable below is nginx's own.
+
+# Privacy (CLAUDE.md rule 6, spec §6.5): log only allow-listed request fields. $uri is the
+# path without the query string (food/coach search `q` never reaches the log); no client IP,
+# user agent, referrer, cookies or headers.
+log_format fitwise_access escape=json
+  '{"time":"$time_iso8601","source":"nginx","method":"$request_method","path":"$uri",'
+  '"status":$status,"bytes":$body_bytes_sent,"duration_s":$request_time,'
+  '"upstream_s":"$upstream_response_time"}';
+
+# Container health checks come from loopback every few seconds: don't log them.
+map $remote_addr $fitwise_loggable {
+  127.0.0.1 0;
+  default   1;
+}
+
+# Docker's embedded DNS: re-resolve the backend so a restarted/recreated backend container
+# (new IP, e.g. oncall/ops/restart.sh) is picked up without restarting nginx.
+resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
+
+server {
+  listen 8080;
+  server_name _;
+  server_tokens off;
+
+  access_log /dev/stdout fitwise_access if=$fitwise_loggable;
+
+  root /usr/share/nginx/html;
+  index index.html;
+
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "DENY" always;
+  add_header Referrer-Policy "same-origin" always;
+
+  gzip on;
+  gzip_types text/css application/javascript application/json image/svg+xml;
+  gzip_min_length 1024;
+
+  # API: everything under /api goes to the backend unchanged (it serves /api/v1/...).
+  location /api/ {
+    set $backend_upstream "${BACKEND_UPSTREAM}";
+    proxy_pass http://$backend_upstream;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Connection "";
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 60s;
+    client_max_body_size 2m;
+  }
+
+  location = /api {
+    return 308 /api/;
+  }
+
+  # Hashed build assets never change: cache for a year. Missing assets are a real 404.
+  location /assets/ {
+    expires 1y;
+    try_files $uri =404;
+  }
+
+  # The SPA shell must always be revalidated so a new release is picked up.
+  location = /index.html {
+    expires -1;
+  }
+
+  # SPA routing: any other path that is not a file (e.g. /today) serves index.html.
+  location / {
+    expires -1;
+    try_files $uri /index.html;
+  }
+}

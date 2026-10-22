@@ -1,0 +1,11 @@
+# The image is built from package*.json, .npmrc, index.html, public/, src/, nginx/ and configs.
+# Never ship local env files (secrets), installed modules or build output.
+**/.env
+**/.env.*
+node_modules/
+dist/
+coverage/
+tests/
+*.local
+Dockerfile
+.dockerignore

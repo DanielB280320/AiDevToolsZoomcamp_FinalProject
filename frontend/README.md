@@ -1,6 +1,10 @@
 # FitWise frontend
 
-React + TypeScript SPA built with Vite (spec §7.1). Requires Node.js 24 (`.nvmrc`).
+React + TypeScript SPA built with Vite (spec §7.1). Requires Node.js 24 (`.nvmrc`;
+`engine-strict` in `.npmrc` makes `npm ci` fail on older versions). From the repository root,
+`make up` serves the built SPA through nginx (`frontend/Dockerfile`, `nginx/default.conf.template`,
+which proxies `/api` to the backend and falls back to `index.html` for client routes) and
+`make lint` / `make test` wrap the commands below.
 
 ```bash
 npm ci

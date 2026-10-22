@@ -1,0 +1,4 @@
+# Local configuration with real values (copied from .env.example). Never commit.
+.env
+.env.*
+!.env.example
