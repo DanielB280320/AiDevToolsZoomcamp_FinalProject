@@ -1,0 +1,28 @@
+{
+  "app": {
+    "name": "FitWise",
+    "homeLink": "FitWise home",
+    "skipToContent": "Skip to content"
+  },
+  "footer": {
+    "disclaimer": "FitWise provides general fitness and nutrition estimates, not medical advice. Consult a professional before starting a new training or diet program."
+  },
+  "home": {
+    "title": "Train and eat to one plan",
+    "lead": "FitWise turns your body metrics and goal into calorie and macro targets, a weekly training plan and a meal plan, then shows how each day went against it.",
+    "status": {
+      "heading": "Service status",
+      "checking": "Checking the FitWise service.",
+      "ok": "The FitWise service is running.",
+      "down": "The FitWise service can't be reached. Try again in a minute."
+    }
+  },
+  "notFound": {
+    "title": "This page doesn't exist",
+    "body": "The address may be mistyped, or the page has moved.",
+    "backHome": "Go to the home page"
+  },
+  "errors": {
+    "unexpected": "Something went wrong on our side. Try again in a minute."
+  }
+}
