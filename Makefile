@@ -65,10 +65,29 @@ ps: ## Show service status and health
 logs: ## Follow the logs of all services
 	$(COMPOSE) logs -f
 
+# Observability (#17, spec §14): compose.observability.yaml layered on compose.yaml, so the app
+# runs next to the collector, Prometheus, Loki, Tempo and Grafana, and the backend exports to them.
+COMPOSE_OBS = $(COMPOSE) -f compose.yaml -f compose.observability.yaml
+
 .PHONY: up-obs
-up-obs: ## Start the observability stack (not yet: #17)
-	@echo "make up-obs: the observability stack is not implemented yet (#17)." >&2
-	@exit 1
+up-obs: .env ## Start the app plus collector, Prometheus, Loki, Tempo, Grafana; returns when healthy
+	$(COMPOSE_OBS) up --build --wait
+	@echo "Grafana: http://localhost:$$($(COMPOSE_OBS) port grafana 3000 | sed 's/.*://')  (GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD from .env)"
+
+.PHONY: down-obs
+down-obs: ## Stop the app and the observability stack (volumes kept)
+	$(COMPOSE_OBS) --profile test down --remove-orphans
+
+.PHONY: clean-obs
+clean-obs: ## Stop both and DELETE the telemetry volumes (Prometheus, Loki, Tempo, Grafana)
+	$(COMPOSE_OBS) rm --stop --force otel-collector prometheus loki tempo grafana obs-probe
+	@project=$$($(COMPOSE_OBS) config | sed -n 's/^name: //p'); \
+	for v in prometheus-data loki-data tempo-data grafana-data; do \
+	  docker volume rm -f "$${project}_$$v" >/dev/null && echo "removed volume $${project}_$$v"; done
+
+.PHONY: check-obs
+check-obs: ## Smoke: one request reaches Prometheus (+exemplar), Tempo and Loki; no sensitive data (after up-obs)
+	COMPOSE="$(COMPOSE_OBS)" scripts/check-obs.sh
 
 .PHONY: check-log-privacy
 check-log-privacy: ## Smoke: no query/ids/IP/referrer/token in logs, valid JSON; backend up AND down

@@ -1,0 +1,197 @@
+# FitWise observability stack (spec §11, §14; ADR 0006). Layered on top of compose.yaml:
+#
+#   make up-obs   = docker compose -f compose.yaml -f compose.observability.yaml up --build --wait
+#   make down-obs = the same files, down (volumes kept); make clean-obs deletes the volumes
+#
+# Adds the OTel Collector, Prometheus, Loki, Tempo and Grafana, a readiness probe for the two
+# images that ship no shell (collector, Loki), and points the backend at the collector. All
+# configuration and dashboards come from observability/; nothing is configured by hand.
+# Only Grafana (and, for a backend run outside Docker, the collector's OTLP/HTTP port) are
+# published, on 127.0.0.1 by default. Running this stack on prod is #67.
+#
+# Every image is pinned. Upgrades: change the tag here, run `make up-obs` and `make check-obs`.
+
+x-obs-defaults: &obs-defaults
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  # --- Application overrides (merged into compose.yaml's services) ----------------------------
+  backend:
+    environment:
+      # Export traces and metrics to the collector (spec §14 Export).
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      # Push metrics every 15 s (SDK default 60 s) to match Prometheus' 15 s evaluation step.
+      OTEL_METRIC_EXPORT_INTERVAL: "15000"
+    # Logs go to the collector through Docker's fluentd driver (the collector's fluent_forward
+    # receiver); only this service uses it, so no other container's logs reach the collector.
+    # The address is resolved by the Docker daemon, hence the published loopback port. Async:
+    # the backend starts and runs even while the collector is down (lines are then buffered,
+    # and dropped once the buffer is full). `docker compose logs backend` keeps working (dual
+    # logging, Docker >= 20.10).
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: 127.0.0.1:${FLUENT_FORWARD_PORT:-24224}
+        fluentd-async: "true"
+        tag: fitwise.backend
+
+  # --- Observability services ------------------------------------------------------------------
+  otel-collector:
+    <<: *obs-defaults
+    image: otel/opentelemetry-collector-contrib:0.161.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      # Inserted as `env` only when a signal does not carry one already.
+      FITWISE_ENV: ${APP_ENV:-local}
+    volumes:
+      - ./observability/collector:/etc/otelcol:ro
+    cap_drop: [ALL]
+    read_only: true
+    ports:
+      # Docker's fluentd log driver (backend logs) connects from the host: loopback only.
+      - "127.0.0.1:${FLUENT_FORWARD_PORT:-24224}:24224"
+      # Optional: lets a backend started outside Docker (uv run uvicorn) export to
+      # http://127.0.0.1:${OTLP_HTTP_PORT}. Containers use http://otel-collector:4318.
+      - "127.0.0.1:${OTLP_HTTP_PORT:-14318}:4318"
+    mem_limit: 256m
+    # No healthcheck: the image has no shell or HTTP client; `obs-probe` checks :13133.
+
+  prometheus:
+    <<: *obs-defaults
+    image: prom/prometheus:v3.15.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROM_RETENTION_TIME:-15d}
+      - --storage.tsdb.retention.size=${PROM_RETENTION_SIZE:-2GB}
+      - --web.enable-otlp-receiver
+      - --enable-feature=exemplar-storage
+    volumes:
+      - ./observability/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    read_only: true
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+
+  loki:
+    <<: *obs-defaults
+    image: grafana/loki:3.7.8
+    command: ["-config.file=/etc/loki/loki.yaml", "-config.expand-env=true"]
+    environment:
+      LOKI_RETENTION: ${LOKI_RETENTION:-168h}
+    volumes:
+      - ./observability/loki:/etc/loki:ro
+      - loki-data:/loki
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    # No healthcheck: distroless image; `obs-probe` checks /ready.
+
+  tempo:
+    <<: *obs-defaults
+    image: grafana/tempo:3.1.0
+    command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
+    environment:
+      TEMPO_RETENTION: ${TEMPO_RETENTION:-72h}
+    volumes:
+      - ./observability/tempo:/etc/tempo:ro
+      - tempo-data:/var/tempo
+    # Tempo writes its WAL/blocks to the volume and runs as root in the image; the volume is
+    # created root-owned, so no uid change is needed.
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "/tempo", "-health"]
+      interval: 5s
+      timeout: 3s
+      retries: 36
+      start_period: 15s
+
+  grafana:
+    <<: *obs-defaults
+    image: grafana/grafana:13.2.3
+    environment:
+      # Credentials come from .env (see .env.example), never from git.
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env (see .env.example)}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_BASIC_ENABLED: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_SERVER_ROOT_URL: http://localhost:${GRAFANA_PORT:-3030}
+      GF_LOG_LEVEL: warn
+      GF_LOG_MODE: console
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_BIND:-127.0.0.1}:${GRAFANA_PORT:-3030}:3000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 384m
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+      obs-probe:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 20s
+
+  # Readiness of the two images without a shell, so `up --wait` returns only once the collector
+  # accepts telemetry and Loki is ready. It holds no data and publishes nothing.
+  obs-probe:
+    <<: *obs-defaults
+    image: busybox:1.37.0
+    command: ["sleep", "2147483647"]
+    read_only: true
+    cap_drop: [ALL]
+    user: "65534:65534"
+    mem_limit: 16m
+    depends_on:
+      - otel-collector
+      - loki
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O /dev/null http://otel-collector:13133/ && wget -q -O /dev/null http://loki:3100/ready
+      interval: 5s
+      timeout: 3s
+      # Generous: on a loaded host the collector binary (~300 MB) can take minutes to start.
+      retries: 60
+      start_period: 10s
+
+volumes:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:

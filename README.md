@@ -30,6 +30,7 @@ all targets.
 | `make check-log-privacy` | Smoke check (stack running) that no query string, user UUID or numeric id in a path, client IP, referrer or token reaches container logs, and that nginx access lines are valid JSON; with the backend up and down |
 | `make contract-smoke` | Contract smoke (stack running): schemathesis checks the responses of every operation the backend serves against `openapi.yaml`, with a throwaway signed-in athlete |
 | `make scan` | Security scans: `scan-secrets` (gitleaks, full history; run from a regular clone), `scan-deps` (pip-audit, npm audit), `scan-images` (Trivy, HIGH/CRITICAL with a fix) |
+| `make up-obs` | The app plus the observability stack (OTel Collector, Prometheus, Loki, Tempo, Grafana at `http://localhost:${GRAFANA_PORT}`, default 3030); the backend exports to it. `make check-obs` verifies metric/exemplar/trace/log correlation and the privacy gate; `make down-obs` / `make clean-obs` stop it. See [observability/README.md](observability/README.md) |
 | `make build TAG=<sha>` | Build `<IMAGE_PREFIX>-backend:<TAG>` and `<IMAGE_PREFIX>-frontend:<TAG>` |
 
 ### CI
@@ -53,6 +54,10 @@ values in its `.env`:
 COMPOSE_PROJECT_NAME=fitwise-21
 HTTP_PORT=8121
 TEST_DB_PORT=15421
+# only for `make up-obs`:
+GRAFANA_PORT=3121
+OTLP_HTTP_PORT=14321
+FLUENT_FORWARD_PORT=24321
 ```
 
 or, for a single command, in the environment (it takes precedence over `.env`):

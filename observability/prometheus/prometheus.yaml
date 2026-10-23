@@ -1,0 +1,33 @@
+# Prometheus (spec §14). Metrics arrive pushed by the collector through the native OTLP receiver
+# (--web.enable-otlp-receiver), with exemplars (--enable-feature=exemplar-storage). Retention is
+# set by flags in compose.observability.yaml (PROM_RETENTION_TIME / PROM_RETENTION_SIZE).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+otlp:
+  # Resource attributes that become labels on every series (others stay in target_info).
+  # `env` is what dashboards and the alerts (#18) filter on.
+  promote_resource_attributes:
+    - env
+    - service.name
+    - service.version
+  # http_server_duration (unit s) -> http_server_duration_seconds_{bucket,sum,count}.
+  translation_strategy: UnderscoreEscapingWithSuffixes
+
+storage:
+  exemplars:
+    max_exemplars: 100000
+
+# Self-monitoring of the stack for the "Service health" dashboard. No application targets are
+# scraped: the app pushes through the collector.
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+  - job_name: tempo
+    static_configs:
+      - targets: ["tempo:3200"]
