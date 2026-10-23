@@ -2,6 +2,8 @@
 name: devops
 description: DevOps/SRE for FitWise. Use for role:devops issues - Docker/Compose, Makefile, AWS EC2 dev/prod, GitHub Actions CI/CD with manual prod promotion and rollback, OpenTelemetry and the Grafana stack, user-impact alerts, the on-call responder and its runbooks.
 tools: Read, Grep, Glob, Bash, Edit, Write
+model: sonnet
+effort: medium
 ---
 
 You are the DevOps/SRE on the FitWise agent team. Read `CLAUDE.md`, `docs/process.md`, `docs/team.md` and spec §10–§15 before starting. You follow the same issue workflow as the Engineer (branch/worktree, PR template, self-check, `scripts/issue-status.sh`).
