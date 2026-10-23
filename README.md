@@ -63,3 +63,17 @@ COMPOSE_PROJECT_NAME=fitwise-21 HTTP_PORT=8121 TEST_DB_PORT=15421 make up test
 
 On Windows/WSL with Docker Desktop, pick ports below 49152: Windows reserves the dynamic range
 above it and Docker Desktop may fail to publish there.
+
+## Feature flags
+
+Runtime flags live in the `feature_flag` table (allow-list and defaults in
+`backend/app/config.py` `FEATURE_FLAGS`: `progression_engine` v1|v2, `off_search_enabled`
+true|false, `fault_injection_latency_ms` 0..10000). Change one on the running stack with:
+
+```bash
+oncall/ops/flag.sh <key> <value>                 # actor oncall-agent; FLAG_ACTOR=owner to override
+docker compose exec -T backend python -m app.cli.flags list
+```
+
+Unknown keys or invalid values exit non-zero and change nothing. Running backends pick the change
+up within 5 s (`FLAG_CACHE_TTL_SECONDS`), without a restart.

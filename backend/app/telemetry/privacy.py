@@ -76,6 +76,13 @@ LOG_EVENT_FIELDS: Final = frozenset(
         "decision",
         "engine",
         "count",
+        # Feature-flag changes (ops CLI). Key and values come from the closed allow-list in
+        # `app.config.FEATURE_FLAGS`; `actor` is a validated label (`oncall-agent`, `owner`),
+        # never a person's name or email. Nothing user-related.
+        "flag_key",
+        "flag_old_value",
+        "flag_new_value",
+        "actor",
     }
 )
 

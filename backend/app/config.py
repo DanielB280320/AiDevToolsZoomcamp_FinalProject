@@ -3,8 +3,11 @@
 Every setting is documented in `backend/.env.example`.
 """
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from functools import lru_cache
-from typing import Literal
+from types import MappingProxyType
+from typing import Final, Literal
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -113,3 +116,42 @@ class Settings(DatabaseSettings):
 def get_settings() -> Settings:
     """Settings from the process environment, loaded once."""
     return Settings()  # database_url and jwt_secret are required, from the environment
+
+
+# --------------------------------------------------------------------------------------------
+# Feature flags (spec §8 `FeatureFlag`, F6, F11.5, §15.2, §15.3). Not environment settings: they
+# live in the `feature_flag` table, are changed at runtime with the ops CLI
+# (`python -m app.cli.flags`, wrapped by `oncall/ops/flag.sh`) and read by services through the
+# cached `app.services.flags.FlagReader`. Engines never read flags; services pass them in.
+
+
+@dataclass(frozen=True)
+class FlagSpec:
+    """An allow-listed flag: its default, and either a closed set of values or an integer range.
+
+    Values are stored as text. A stored value outside the spec (written by hand, or by a newer
+    release that knows more values) reads as the default.
+    """
+
+    default: str
+    choices: tuple[str, ...] = ()
+    int_max: int | None = None  # set for non-negative integer flags: 0..int_max inclusive
+
+
+# Upper bound of the demo latency fault (S3). Above the 1 s KeyJourneyLatency threshold (§15.1),
+# below any proxy timeout, so the demo slows requests without failing them.
+FAULT_INJECTION_LATENCY_MS_MAX: Final = 10_000
+# A flag change is seen by every running backend within this many seconds (cache TTL). The
+# on-call runbooks rely on "a flag change takes effect within 10 s"; keep it well below that.
+FLAG_CACHE_TTL_SECONDS: Final = 5
+
+FEATURE_FLAGS: Final[Mapping[str, FlagSpec]] = MappingProxyType(
+    {
+        # F11.5: progression engine version; unknown stored values fall back to v1.
+        "progression_engine": FlagSpec(default="v1", choices=("v1", "v2")),
+        # F6: Open Food Facts search; off -> the search degrades to `available: false` (D44).
+        "off_search_enabled": FlagSpec(default="true", choices=("true", "false")),
+        # §15.3 S3, demo only, off by default: delay (ms) added to the §15.1 logging routes.
+        "fault_injection_latency_ms": FlagSpec(default="0", int_max=FAULT_INJECTION_LATENCY_MS_MAX),
+    }
+)

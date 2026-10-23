@@ -8,9 +8,11 @@ from fastapi import APIRouter, FastAPI
 from app.config import Settings, get_settings
 from app.db import make_engine, make_session_factory
 from app.errors import install_error_handlers
+from app.fault_injection import FaultInjectionMiddleware
 from app.migrations import load_migration_scripts
 from app.routers import auth, health, me
 from app.services.clock import SystemClock
+from app.services.flags import FlagReader
 from app.telemetry import (
     SERVICE_NAME,
     Telemetry,
@@ -56,7 +58,12 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     app.state.session_factory = make_session_factory(engine)
     app.state.migration_scripts = load_migration_scripts()
     app.state.clock = SystemClock()
+    # Reads the clock through app.state so a test's FakeClock also drives the flag cache TTL.
+    app.state.flags = FlagReader(app.state.session_factory, now=lambda: app.state.clock.now())
 
+    # Innermost middleware: the injected delay is inside the error handler and the telemetry
+    # middleware, so it is measured like real latency (spec §15.3 S3).
+    app.add_middleware(FaultInjectionMiddleware)
     install_error_handlers(app)
     install_telemetry(app, engine, telemetry)
 
