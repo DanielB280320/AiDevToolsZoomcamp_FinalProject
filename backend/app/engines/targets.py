@@ -249,7 +249,12 @@ def compute_targets(
     goal: Goal,
     planned_exercise_kcal_per_week: float,
 ) -> TargetsResult:
-    """Daily calorie and macro targets (F3.1 to F3.6) with a human-readable explanation."""
+    """Daily calorie and macro targets (F3.1 to F3.6) with a human-readable explanation.
+
+    `planned_exercise_kcal_per_week` is the planned **weekly** total as an unrounded float: pass
+    `PlannedWeeklyKcal.weekly_kcal_exact` from the F13.2 engine (#84), not its daily value. This
+    engine divides by 7 itself and rounds only the final outputs, so nothing is rounded twice.
+    """
     sex, lifestyle, goal = Sex(sex), Lifestyle(lifestyle), Goal(goal)
     if not math.isfinite(planned_exercise_kcal_per_week) or planned_exercise_kcal_per_week < 0:
         raise ValueError(

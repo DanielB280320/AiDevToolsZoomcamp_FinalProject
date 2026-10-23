@@ -356,6 +356,15 @@ def test_planned_exercise_is_weekly_divided_by_seven() -> None:
     assert r.kcal == 2136 + 100
 
 
+def test_unrounded_weekly_exercise_is_rounded_only_once() -> None:
+    # 4.2 kcal/week → 0.6/day. Exact: (2136 + 0.6) × 0.8 = 1709.28 → 1709.
+    # Rounding the daily value first would give (2136 + 1) × 0.8 = 1709.6 → 1710.
+    r = _targets(goal=Goal.CUTTING, planned_exercise_kcal_per_week=4.2)
+    assert r.kcal == 1709
+    assert r.planned_exercise_kcal_per_day == 1
+    assert r.inputs["planned_exercise_kcal_per_week"] == 4.2
+
+
 # ─────────────────────────────── F3.6 floor ───────────────────────────────
 
 
