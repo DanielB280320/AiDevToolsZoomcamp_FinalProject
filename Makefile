@@ -157,14 +157,16 @@ scan: ## All scans: secrets, dependencies, images
 	if [ $$rc -ne 0 ]; then echo "make scan: FAILED (see output above)" >&2; fi; \
 	exit $$rc
 
-# Scans the whole git history. Intentional fake credentials in tests carry a `gitleaks:allow`
-# comment; historical findings reviewed as fake are listed in .gitleaksignore.
+# Scans the whole history of the checked-out commit (HEAD), not other branches: a leak on some
+# other branch must fail that branch's PR, not every PR. Findings print redacted. Intentional
+# fake credentials in tests carry a `gitleaks:allow` comment; historical findings reviewed as
+# fake are listed in .gitleaksignore.
 .PHONY: scan-secrets
-scan-secrets: ## gitleaks over the full git history (needs a regular clone, not a worktree)
+scan-secrets: ## gitleaks over the full history of HEAD (needs a regular clone, not a worktree)
 	@if [ ! -d .git ]; then \
 	  echo "scan-secrets: .git is not a directory (git worktree?); run it from a regular clone." >&2; exit 1; fi
 	docker run --rm --user "$$(id -u):$$(id -g)" -v "$$PWD:/repo" $(GITLEAKS_IMAGE) \
-	  git /repo --redact --no-banner --exit-code 1
+	  git /repo --log-opts=HEAD --redact --verbose --no-banner --exit-code 1
 
 .PHONY: scan-deps
 scan-deps: check-uv $(NPM_STAMP) ## pip-audit (locked backend deps) and npm audit (high and above)
