@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 import yaml
 
+from app.telemetry import privacy
 from app.telemetry.privacy import (
     LOG_BASE_FIELDS,
     LOG_EVENT_FIELDS,
@@ -28,9 +29,8 @@ CONFIG = Path(__file__).resolve().parents[3] / "observability" / "collector" / "
 # attributes; the other base fields are kept as attributes under these names.
 BASE_FIELD_ATTRIBUTES = {"service": "service.name", "version": "service.version", "env": "env"}
 RECORD_FIELDS = {"timestamp", "level", "message", "trace_id", "span_id"}
-# `revision` is added to LOG_EVENT_FIELDS by #89 (migration step), which merges around the same
-# time as this file; the collector already lets it through. Empty this set once #89 is merged.
-COLLECTOR_AHEAD_OF_APP: frozenset[str] = frozenset({"revision"}) - LOG_EVENT_FIELDS
+# Fields the collector lets through before the app logs them (none at the moment).
+COLLECTOR_AHEAD_OF_APP: frozenset[str] = frozenset()
 
 
 @pytest.fixture(scope="module")
@@ -95,11 +95,31 @@ def test_log_statements_read_only_allow_listed_fields(config: dict[str, Any]) ->
 def test_log_body_becomes_the_message_only(config: dict[str, Any]) -> None:
     statements = _statements(config, "transform/logs", "log_statements")
     body_sets = [s for s in statements if s.startswith("set(log.body")]
-    assert body_sets == [
+    assert body_sets[:2] == [
         'set(log.body, "")',
         'set(log.body, log.cache["message"]) where IsString(log.cache["message"])',
     ]
-    assert statements[-2:] == body_sets, "the body is replaced last, after every field is copied"
+    last = statements.index(body_sets[1])
+    assert statements.index(body_sets[0]) == last - 1, "the body is replaced after every field"
+    assert all("log.body" not in s for s in statements[: last - 1] if "ParseJSON" not in s)
+
+
+def test_log_message_is_scrubbed_like_the_app(config: dict[str, Any]) -> None:
+    statements = _statements(config, "transform/logs", "log_statements")
+    last = statements.index(
+        'set(log.body, log.cache["message"]) where IsString(log.cache["message"])'
+    )
+    after = statements[last + 1 :]
+    patterns = [(re.search(r'replace_pattern\(log\.body, "(.*)", "(.*)"\)$', s), s) for s in after]
+    found = [(m.group(1).replace("\\\\", "\\"), m.group(2)) for m, _ in patterns if m]
+    assert found == [
+        (privacy._EMAIL.pattern, "[email]"),
+        (privacy._BEARER.pattern, "Bearer [token]"),
+        (privacy._JWT.pattern, "[token]"),
+    ]
+    cap = after[len(found)]
+    assert f"Substring(log.body, 0, {privacy.MAX_STRING_LENGTH})" in cap
+    assert f"Len(log.body) > {privacy.MAX_STRING_LENGTH}" in cap
 
 
 def test_unparsed_lines_are_dropped_before_export(config: dict[str, Any]) -> None:

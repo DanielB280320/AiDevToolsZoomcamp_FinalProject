@@ -97,6 +97,12 @@ check-log-privacy: ## Smoke: no query/ids/IP/referrer/token in logs, valid JSON;
 contract-smoke: check-uv ## Contract smoke: schemathesis vs openapi.yaml on served operations (stack running)
 	COMPOSE="$(COMPOSE)" scripts/contract-smoke.sh
 
+# Rollback guard (#82, D50): the previous release's backend image starts on this branch's schema
+# without the migration step. Builds both images; own Compose project, no published ports.
+.PHONY: rollback-compat
+rollback-compat: ## Rollback guard: previous image (PREV_REF, default merge-base with origin/main) on the new schema
+	COMPOSE="$(COMPOSE)" scripts/rollback-compat.sh $(PREV_REF)
+
 .PHONY: seed-demo
 seed-demo: ## Load the demo athlete + coach (not yet: #51)
 	@echo "make seed-demo: demo data is not implemented yet (#51)." >&2

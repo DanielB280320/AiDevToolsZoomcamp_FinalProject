@@ -173,6 +173,85 @@ jobs:
         if: always()
         run: docker compose down --volumes --remove-orphans
 
+  e2e:
+    name: End-to-end (Playwright smoke, Chromium)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      TAG: ${{ github.sha }}
+      # Official Playwright image, same version as e2e/package-lock.json (@playwright/test 1.63.0),
+      # pinned by index digest like the other tool images in the Makefile.
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Create .env from .env.example (local placeholders only)
+        run: cp .env.example .env
+      # Same build as the images job; the shared GHA cache scopes make this mostly cache hits.
+      - name: Build both images from compose.yaml (no push)
+        run: |
+          docker buildx bake -f compose.yaml --pull --load \
+            --set backend.cache-from=type=gha,scope=backend \
+            --set frontend.cache-from=type=gha,scope=frontend \
+            backend frontend
+      - name: Start the stack
+        run: docker compose up --no-build --wait --wait-timeout 180
+      - name: Playwright smoke test (official container, Chromium)
+        # Host network: the stack is published on 127.0.0.1:HTTP_PORT (default 8088).
+        run: |
+          docker run --rm --network host --ipc=host -v "$PWD/e2e:/e2e" -w /e2e \
+            -e CI=true -e E2E_BASE_URL=http://127.0.0.1:8088 \
+            "$PLAYWRIGHT_IMAGE" sh -c 'npm ci --no-audit --no-fund && npx playwright test'
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+      - name: Stop the stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  # Rollback guard (#82; spec §13, D50, ADR 0009): the previous release's backend image must start
+  # on the schema this change migrates to, the way a rollback starts it (no migration step).
+  # The previous release is HEAD^1: the PR's base for the pull_request merge commit, the previous
+  # main commit on push. Runs when migrations, the backend image or compose files change; other
+  # changes cannot break it, so the job then succeeds without building anything.
+  rollback-compat:
+    name: Rollback compatibility (previous image on the new schema)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # HEAD^1 = the previous release
+          persist-credentials: false
+      - name: Does this change touch the schema or the backend start path?
+        id: changes
+        run: |
+          if git diff --quiet HEAD^1 HEAD -- \
+              backend/alembic backend/alembic.ini backend/Dockerfile backend/pyproject.toml \
+              backend/uv.lock backend/app/migrate.py backend/app/migrations.py backend/app/seed.py \
+              backend/app/config.py backend/app/main.py 'compose*.yaml' \
+              scripts/rollback-compat.sh .github/workflows/ci.yml; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No migration, image or compose change: rollback guard not needed."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Previous image on the new schema, started the rollback way
+        if: steps.changes.outputs.run == 'true'
+        run: make rollback-compat PREV_REF=HEAD^1
+
   hook-tests:
     name: Agent hook tests
     runs-on: ubuntu-24.04
@@ -200,6 +279,8 @@ jobs:
       - secret-scan
       - dependency-scan
       - images
+      - e2e
+      - rollback-compat
       - hook-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 2

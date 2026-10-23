@@ -51,7 +51,13 @@ class DatabaseSettings(BaseSettings):
         return value
 
 
-class Settings(DatabaseSettings):
+class ProcessSettings(DatabaseSettings):
+    """What any FitWise process needs: the database plus its environment, log level and release.
+
+    The one-shot migration step (`python -m app.migrate`) uses exactly this: it needs no JWT
+    secret or telemetry key (least privilege, spec §11, D50).
+    """
+
     app_env: Environment = Field(default="local", description="Deployment environment name.")
     log_level: LogLevel = Field(default="INFO", description="Root log level of the app.")
     app_version: str = Field(
@@ -60,6 +66,14 @@ class Settings(DatabaseSettings):
         max_length=64,
         description="Release version (the image's git SHA); OTel resource `service.version`.",
     )
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _upper_log_level(cls, value: object) -> object:
+        return value.upper() if isinstance(value, str) else value
+
+
+class Settings(ProcessSettings):
     otel_exporter_otlp_endpoint: str | None = Field(
         default=None,
         description="OTLP/HTTP base URL of the collector, e.g. http://otel-collector:4318. "
@@ -105,11 +119,6 @@ class Settings(DatabaseSettings):
                 "user_hash_salt (USER_HASH_SALT) of >= 16 chars is required in dev/prod"
             )
         return self
-
-    @field_validator("log_level", mode="before")
-    @classmethod
-    def _upper_log_level(cls, value: object) -> object:
-        return value.upper() if isinstance(value, str) else value
 
 
 @lru_cache

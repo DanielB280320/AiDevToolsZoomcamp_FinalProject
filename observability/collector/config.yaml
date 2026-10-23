@@ -86,6 +86,12 @@ processors:
           # The message only (a constant template written by the app logger); "" if absent.
           - set(log.body, "")
           - set(log.body, log.cache["message"]) where IsString(log.cache["message"])
+          # Free-text guard mirroring scrub_text (backend/app/telemetry/privacy.py): mask emails and
+          # tokens, then cap the length. Kept in sync by test_collector_allow_lists.py.
+          - replace_pattern(log.body, "[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+", "[email]")
+          - replace_pattern(log.body, "(?i)\\bbearer\\s+\\S+", "Bearer [token]")
+          - replace_pattern(log.body, "\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+", "[token]")
+          - set(log.body, Concat([Substring(log.body, 0, 256), "..."], "")) where Len(log.body) > 256
 
   # A line that is not a JSON object from the app logger (a traceback printed before logging is
   # configured, a stray print) never went through the allow-list: drop it.

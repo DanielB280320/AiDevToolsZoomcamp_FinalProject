@@ -1,0 +1,17 @@
+{
+  "name": "fitwise-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "FitWise end-to-end journeys (Playwright). Run with `make e2e`; see README.md.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "smoke": "playwright test smoke.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

@@ -39,15 +39,49 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # One-shot migration step (spec §11, §13; D50, ADR 0009): `alembic upgrade head`, then the
+  # F4.1 seed, from the same image tag as the backend; then it exits (0 = ok). It needs the
+  # database only: no JWT secret or user-hash salt (least privilege).
+  #   make up / docker compose up --wait   runs it first: the backend depends on it.
+  #   forward deploy (deploy/deploy.sh):   TAG=<sha> docker compose run --rm migrate
+  #                                        && TAG=<sha> docker compose up -d --no-deps --wait backend frontend
+  #     (step first and on its own, so a failed migration leaves the old backend serving)
+  #   rollback (deploy/rollback.sh):       TAG=<PREVIOUS_TAG> docker compose up -d --no-deps --wait backend frontend
+  #     (--no-deps skips the step: the previous image starts on the newer schema as it is)
+  migrate:
+    image: ${IMAGE_PREFIX:-fitwise}-backend:${TAG:-local}
+    # No `build:` here: the `backend` service builds this image (compose builds before it
+    # creates any container), and deploy hosts pull it once for both services.
+    command: ["python", "-m", "app.migrate"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-fitwise}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}@db:5432/${POSTGRES_DB:-fitwise}
+      DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-3}
+      APP_ENV: ${APP_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      APP_VERSION: ${APP_VERSION:-${TAG:-local}}
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
   backend:
     image: ${IMAGE_PREFIX:-fitwise}-backend:${TAG:-local}
     build:
       context: ./backend
     environment: *backend-env
-    # The image command runs `alembic upgrade head` and then uvicorn (--no-access-log).
+    # The image command only starts uvicorn (--no-access-log): no migrations, no seed. A restart
+    # (`docker compose restart backend`, restart policy) never touches the schema.
     depends_on:
       db:
         condition: service_healthy
+      # Starts only after the migration step exited 0; a failed migration fails `up --wait`.
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       # Ready = database reachable and migrations applied (GET /api/v1/readyz, 503 otherwise).
       test:
