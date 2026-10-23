@@ -64,6 +64,10 @@ deploy/          EC2 bootstrap, compose overrides, deploy/rollback scripts
 docs/            spec, process, team, architecture, adr/, runbooks/
 ```
 
+## Agent models
+
+Engineer and DevOps agents implement already-groomed issues on **Sonnet with medium effort**, set in their `.claude/agents/*.md` frontmatter; don't override it when starting them. See [docs/team.md](docs/team.md#models-and-effort).
+
 ## Rules for every agent
 
 1. **Spec first.** Implement what the issue and `docs/spec.md` say. Behaviour changes need a spec update in the same PR.

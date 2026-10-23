@@ -94,3 +94,15 @@ Use the qa agent to verify PR #<n> for issue #6.
 Always start the PM and QA **as subagents** (as above, or with `claude --agent pm|qa`): the scope guard recognises them by the subagent's `agent_type`, so a PM or QA prompt pasted into a plain main session is not restricted.
 
 For parallel work, start up to three engineer/devops agents on independent Ready issues, each with worktree isolation, then send each PR to QA as it finishes.
+
+### Models and effort
+
+Implementation runs on a cheaper model: the issues are already groomed with acceptance criteria, so the engineer and DevOps agents only have to implement them (owner decision, 2026-10-23).
+
+| Agent | Model | Effort | Where it is set |
+|---|---|---|---|
+| engineer | Sonnet | medium | `model:` / `effort:` in [`engineer.md`](../.claude/agents/engineer.md) frontmatter |
+| devops | Sonnet | medium | `model:` / `effort:` in [`devops.md`](../.claude/agents/devops.md) frontmatter |
+| pm, qa | inherit the main session's model | default | not pinned |
+
+The orchestrator does **not** pass a `model` or `effort` override when starting engineer or DevOps agents, so the frontmatter is what applies. Change the model only by editing the frontmatter in a PR and updating this table.
