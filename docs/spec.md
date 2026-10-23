@@ -173,7 +173,7 @@ Training calories are **not** included in the lifestyle factor; they are added f
 - Athletes and coaches can create **custom exercises** (private to the creator and, for coaches, usable in their athletes' plans).
 
 **AC**
-- [ ] F4.1 Seed data loads idempotently on startup/migration.
+- [ ] F4.1 Seed data loads idempotently in the migration step (§11, D50); running it again changes nothing.
 - [ ] F4.2 Catalog is searchable by name and filterable by muscle group, equipment and type.
 - [ ] F4.3 Custom exercises are not visible to unrelated users.
 
@@ -595,7 +595,7 @@ Coverage target: ≥ 90 % lines for `backend/app/engines/`, ≥ 75 % backend ove
 
 ## 11. Containerization and local run
 
-- `make up` → `docker compose up --build --wait`: Postgres, backend (runs migrations + seed on start), frontend (nginx serving the built SPA and proxying `/api`).
+- `make up` → `docker compose up --build --wait`: Postgres, a one-shot **migration step** (`alembic upgrade head`, then the idempotent F4.1 seed), backend, frontend (nginx serving the built SPA and proxying `/api`). The backend starts only after the migration step succeeds, and it **only starts the app**. It never migrates or seeds on start ([D50](#19-decisions-log), [ADR 0009](adr/0009-separate-migration-step.md)).
 - `make up-obs` adds the observability stack locally.
 - Seeded demo data command: `make seed-demo` (one athlete with 8 weeks of history, one coach).
 - Health checks on every service; `docker compose up --wait` succeeds only when all are healthy.
@@ -620,6 +620,15 @@ Coverage target: ≥ 90 % lines for `backend/app/engines/`, ≥ 75 % backend ove
 
 Migrations must be backward compatible with the previous release (expand → migrate → contract) so rollback never needs a down-migration.
 For the same reason `GET /readyz` reports `migrations: ok` when the database is at **or ahead of** the release's Alembic head (ahead = a newer release migrated it and this one was rolled back); it reports `pending` (503) only when a revision this release ships is not applied.
+
+Where migrations run ([D50](#19-decisions-log), [ADR 0009](adr/0009-separate-migration-step.md)):
+
+| Situation | Migration step (`alembic upgrade head` + F4.1 seed, from the image being deployed) |
+|---|---|
+| Local `make up` | Runs before the backend starts |
+| Deploy to dev, promote to prod (`deploy/deploy.sh <sha>`) | Runs before the backend starts. If it fails, the deploy fails and the backend isn't started on the new tag |
+| Rollback to `PREVIOUS_TAG` (automatic after a failed prod smoke test, "Rollback production", on-call `rollback.sh`) | **Skipped.** The previous backend starts against the newer schema as it is. No down-migration |
+| Backend restart (on-call `restart`, container restart policy) | Not involved. The backend never migrates on start |
 
 ## 14. Observability
 
@@ -771,6 +780,7 @@ Decisions with architectural trade-offs have an ADR in [`docs/adr/`](adr/README.
 | D47 | `target_balance_kcal` (goal's target daily balance) = target kcal − (baseline + average daily planned exercise kcal). Exercise muscle groups are a fixed enum (chest, back, shoulders, biceps, triceps, forearms, core, quads, hamstrings, glutes, calves, full_body, cardio). Custom exercises/foods/meals are visible to their creator and the creator's active-link counterpart |
 | D48 | Account deletion is `POST /me/delete` with the current password in a JSON body, not `DELETE /me` with a body: request bodies on `DELETE` have no defined semantics (RFC 9110) and some proxies and clients drop them. Wrong password → 403; F18 unchanged |
 | D49 | *Proposed (PM, implemented in #8; awaiting owner confirmation).* F1.6 sign-in lockout: failures are counted per email, case-insensitively, whether or not an account exists, in a sliding 15-minute window. Once 5 failures are in the window, **every** sign-in for that email returns `429 rate_limited` with `Retry-After` (seconds until the oldest of them leaves the window), **even with the correct password**, and is not evaluated or counted. Answering 200 to a correct password during the lockout would turn the 429 into a password oracle. A successful sign-in clears the count. Failures are stored as a SHA-256 of the lower-cased email, never the email itself, and only for the window |
+| D50 | Migrations and the F4.1 seed run as a **separate one-shot step** from the image being deployed, before the backend starts: on `make up` and on forward deploys. A rollback to `PREVIOUS_TAG` **skips** the step. The backend container only starts the app and never migrates or seeds on start (§11, §13; [ADR 0009](adr/0009-separate-migration-step.md); #82) |
 
 ## 20. Assumptions and open questions
 
