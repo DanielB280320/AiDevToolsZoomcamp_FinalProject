@@ -1,0 +1,7 @@
+# Reviewed gitleaks findings in past commits: all are fake credentials in test fixtures, now
+# marked inline with `gitleaks:allow`. Format: <commit>:<file>:<rule>:<line> (gitleaks fingerprint).
+# Add an entry only for a reviewed false positive that is already in history; a real leaked
+# secret must be rotated, not ignored.
+d863ed6f42f9b14bc53af6f70f7e789ee8daed34:backend/tests/integration/test_auth_privacy.py:generic-api-key:13
+33294d25f59361900a59aa9ef1c4620adbb17f7e:backend/tests/unit/test_qa_telemetry_privacy.py:generic-api-key:40
+33294d25f59361900a59aa9ef1c4620adbb17f7e:backend/tests/unit/test_telemetry_logs.py:generic-api-key:31

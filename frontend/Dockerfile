@@ -4,7 +4,7 @@
 # environment variables (BACKEND_UPSTREAM, NGINX_RESOLVER; see the root .env.example).
 
 ARG NODE_VERSION=24
-ARG NGINX_VERSION=1.29
+ARG NGINX_VERSION=1.30
 
 # ---- build: Node 24 (frontend/.nvmrc), locked dependencies, type-check + vite build ----
 FROM node:${NODE_VERSION}-alpine AS build

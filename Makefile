@@ -19,6 +19,12 @@ FRONTEND := frontend
 E2E := e2e
 NPM_STAMP := $(FRONTEND)/node_modules/.package-lock.json
 
+# Pinned linter/scanner versions; CI calls these same targets (#11). Images pinned by digest.
+REDOCLY_CLI := @redocly/cli@2.70.0
+PIP_AUDIT := pip-audit==2.10.1
+GITLEAKS_IMAGE := ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+TRIVY_IMAGE := ghcr.io/aquasecurity/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+
 # --------------------------------------------------------------------------------------------
 ##@ Stack
 
@@ -68,6 +74,10 @@ up-obs: ## Start the observability stack (not yet: #17)
 check-log-privacy: ## Smoke: no query/ids/IP/referrer/token in logs, valid JSON; backend up AND down
 	COMPOSE="$(COMPOSE)" scripts/check-log-privacy.sh
 
+.PHONY: contract-smoke
+contract-smoke: check-uv ## Contract smoke: schemathesis vs openapi.yaml on served operations (stack running)
+	COMPOSE="$(COMPOSE)" scripts/contract-smoke.sh
+
 .PHONY: seed-demo
 seed-demo: ## Load the demo athlete + coach (not yet: #51)
 	@echo "make seed-demo: demo data is not implemented yet (#51)." >&2
@@ -111,10 +121,11 @@ test-frontend: $(NPM_STAMP) ## Frontend Vitest + RTL
 	cd $(FRONTEND) && npm test
 
 .PHONY: lint
-lint: ## ruff (lint + format check), mypy, eslint, tsc
+lint: ## ruff (lint + format check), mypy, eslint, tsc, API client drift, openapi.yaml lint
 	@rc=0; \
 	$(MAKE) lint-backend || rc=1; \
 	$(MAKE) lint-frontend || rc=1; \
+	$(MAKE) lint-openapi || rc=1; \
 	if [ $$rc -ne 0 ]; then echo "make lint: FAILED (see output above)" >&2; fi; \
 	exit $$rc
 
@@ -125,9 +136,52 @@ lint-backend: check-uv ## ruff check, ruff format --check, mypy
 	cd $(BACKEND) && uv run --locked mypy
 
 .PHONY: lint-frontend
-lint-frontend: $(NPM_STAMP) ## eslint, tsc --noEmit
+lint-frontend: $(NPM_STAMP) ## eslint, tsc --noEmit, generated API client up to date
 	cd $(FRONTEND) && npm run lint
 	cd $(FRONTEND) && npm run typecheck
+	cd $(FRONTEND) && npm run check:api
+
+.PHONY: lint-openapi
+lint-openapi: check-node ## openapi.yaml lint with Redocly (rules in redocly.yaml; 0 errors)
+	npx --yes $(REDOCLY_CLI) lint openapi.yaml
+
+# --------------------------------------------------------------------------------------------
+##@ Security scans (spec §6.4)
+
+.PHONY: scan
+scan: ## All scans: secrets, dependencies, images
+	@rc=0; \
+	$(MAKE) scan-secrets || rc=1; \
+	$(MAKE) scan-deps || rc=1; \
+	$(MAKE) scan-images || rc=1; \
+	if [ $$rc -ne 0 ]; then echo "make scan: FAILED (see output above)" >&2; fi; \
+	exit $$rc
+
+# Scans the whole git history. Intentional fake credentials in tests carry a `gitleaks:allow`
+# comment; historical findings reviewed as fake are listed in .gitleaksignore.
+.PHONY: scan-secrets
+scan-secrets: ## gitleaks over the full git history (needs a regular clone, not a worktree)
+	@if [ ! -d .git ]; then \
+	  echo "scan-secrets: .git is not a directory (git worktree?); run it from a regular clone." >&2; exit 1; fi
+	docker run --rm --user "$$(id -u):$$(id -g)" -v "$$PWD:/repo" $(GITLEAKS_IMAGE) \
+	  git /repo --redact --no-banner --exit-code 1
+
+.PHONY: scan-deps
+scan-deps: check-uv $(NPM_STAMP) ## pip-audit (locked backend deps) and npm audit (high and above)
+	cd $(BACKEND) && uv export --locked --format requirements-txt --no-emit-project --quiet \
+	  | uvx --quiet $(PIP_AUDIT) --strict --disable-pip --require-hashes -r /dev/stdin
+	cd $(FRONTEND) && npm audit --audit-level=high
+
+# Fails on HIGH/CRITICAL OS or library vulnerabilities that have a fix available.
+.PHONY: scan-images
+scan-images: .env ## Trivy scan of the backend and frontend images (build them first: make build)
+	@for image in $$($(COMPOSE) config --images backend frontend | grep -E -- '-(backend|frontend):'); do \
+	  echo "trivy: $$image"; \
+	  docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v fitwise-trivy-cache:/root/.cache \
+	    $(TRIVY_IMAGE) image --quiet --scanners vuln --ignore-unfixed --severity HIGH,CRITICAL \
+	    --exit-code 1 --db-repository mirror.gcr.io/aquasec/trivy-db,ghcr.io/aquasecurity/trivy-db \
+	    "$$image" || exit 1; \
+	done
 
 # --------------------------------------------------------------------------------------------
 ##@ End-to-end

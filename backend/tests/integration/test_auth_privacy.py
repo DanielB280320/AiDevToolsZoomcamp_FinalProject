@@ -10,7 +10,7 @@ from app.services import accounts
 from tests.integration.auth_helpers import Api, problem, signup_body
 
 EMAIL = "Secret.Person@x.test"
-PASSWORD = "hunter2-very-secret-pw"
+PASSWORD = "hunter2-very-secret-pw"  # gitleaks:allow (fake test credential)
 WRONG_PASSWORD = "wrong-secret-guess-77"
 DISPLAY_NAME = "Zebulon Privatename"
 
