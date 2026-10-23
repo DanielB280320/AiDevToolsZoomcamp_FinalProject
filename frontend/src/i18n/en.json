@@ -4,17 +4,123 @@
     "homeLink": "FitWise home",
     "skipToContent": "Skip to content"
   },
+  "nav": {
+    "signOut": "Sign out",
+    "signingOut": "Signing out…",
+    "signOutFailed": "You're still signed in: FitWise couldn't be reached. Check your connection and try again."
+  },
   "footer": {
     "disclaimer": "FitWise provides general fitness and nutrition estimates, not medical advice. Consult a professional before starting a new training or diet program."
   },
   "home": {
     "title": "Train and eat to one plan",
     "lead": "FitWise turns your body metrics and goal into calorie and macro targets, a weekly training plan and a meal plan, then shows how each day went against it.",
+    "cta": {
+      "signUp": "Create an account",
+      "signIn": "Sign in"
+    },
     "status": {
       "heading": "Service status",
       "checking": "Checking the FitWise service.",
       "ok": "The FitWise service is running.",
       "down": "The FitWise service can't be reached. Try again in a minute."
+    }
+  },
+  "auth": {
+    "signIn": {
+      "title": "Sign in",
+      "lead": "Pick up your plan for today: log sets and meals and see how the day is going.",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "switchPrompt": "New to FitWise?",
+      "switchLink": "Create an account"
+    },
+    "signUp": {
+      "title": "Create your account",
+      "lead": "Athletes get calorie targets, a training plan and a meal plan from these details. Coaches review and adjust their athletes' plans.",
+      "submit": "Create account",
+      "submitting": "Creating account…",
+      "switchPrompt": "Already have an account?",
+      "switchLink": "Sign in"
+    },
+    "fields": {
+      "email": {
+        "label": "Email"
+      },
+      "password": {
+        "label": "Password",
+        "newHint": "At least 10 characters."
+      },
+      "displayName": {
+        "label": "Display name",
+        "hint": "Shown on your account and to the coach or athletes you link with."
+      },
+      "role": {
+        "legend": "I'm joining as",
+        "hint": "This can't be changed later.",
+        "athlete": "Athlete",
+        "athleteDetail": "I train and log my own days",
+        "coach": "Coach",
+        "coachDetail": "I guide athletes' plans"
+      },
+      "birthDate": {
+        "label": "Date of birth",
+        "hint": "You must be 18 or older to use FitWise."
+      },
+      "units": {
+        "legend": "Units",
+        "hint": "How weights and sizes are shown. You can change this later.",
+        "metric": "Metric",
+        "metricDetail": "kg and cm",
+        "imperial": "Imperial",
+        "imperialDetail": "lb, ft and in"
+      },
+      "timezone": {
+        "label": "Time zone",
+        "hint": "Decides when your day starts and ends. Taken from this device."
+      },
+      "disclaimer": {
+        "label": "I've read this and accept it"
+      }
+    },
+    "validation": {
+      "emailRequired": "Enter your email address.",
+      "emailInvalid": "Enter an email address like name@example.com.",
+      "passwordRequired": "Enter your password.",
+      "passwordTooShort": "Use at least {{count}} characters.",
+      "passwordTooLong": "Use at most {{count}} characters.",
+      "displayNameRequired": "Enter a display name.",
+      "displayNameTooLong": "Use at most {{count}} characters.",
+      "roleRequired": "Choose athlete or coach.",
+      "birthDateRequired": "Enter your date of birth.",
+      "unitsRequired": "Choose metric or imperial.",
+      "timezoneRequired": "Choose your time zone.",
+      "disclaimerRequired": "Accept the disclaimer to create an account."
+    },
+    "errors": {
+      "underage": "This date of birth makes you younger than 18. FitWise is for adults only.",
+      "emailTaken": "An account with this email already exists. Sign in instead, or use another email.",
+      "invalidCredentials": "Email or password is incorrect.",
+      "invalidRequest": "Some details weren't accepted. Check the form and try again.",
+      "rateLimited": {
+        "seconds_one": "Too many attempts. Try again in {{count}} second.",
+        "seconds_other": "Too many attempts. Try again in {{count}} seconds.",
+        "minutes_one": "Too many attempts. Try again in {{count}} minute.",
+        "minutes_other": "Too many attempts. Try again in {{count}} minutes.",
+        "later": "Too many attempts. Try again later."
+      }
+    }
+  },
+  "session": {
+    "checking": "Checking that you're signed in…",
+    "loadFailed": "FitWise couldn't load your account. Check your connection and try again.",
+    "retry": "Try again"
+  },
+  "today": {
+    "greeting": "Hi, {{name}}",
+    "placeholder": {
+      "athlete": "Today's session, meals and energy balance will appear here once your plan is set up.",
+      "coach": "Your athletes and their latest days will appear here."
     }
   },
   "notFound": {
@@ -23,6 +129,7 @@
     "backHome": "Go to the home page"
   },
   "errors": {
-    "unexpected": "Something went wrong on our side. Try again in a minute."
+    "unexpected": "FitWise couldn't complete the request because of a problem on the server. Try again in a minute.",
+    "network": "FitWise can't be reached. Check your connection and try again."
   }
 }

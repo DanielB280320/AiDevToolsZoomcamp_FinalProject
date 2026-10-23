@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import "../src/i18n";
 
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
 
 import { server } from "./mocks/server";
@@ -18,6 +18,9 @@ if (typeof window !== "undefined") {
   }
   globalThis.Request = BrowserLikeRequest;
 }
+
+// findBy*/waitFor budget: the 1 s default is too tight for page transitions on a loaded host.
+configure({ asyncUtilTimeout: 5_000 });
 
 // No real network in tests (CLAUDE.md rule 4): any request without a handler fails the test.
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));

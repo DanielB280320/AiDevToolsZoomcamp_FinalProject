@@ -28,4 +28,10 @@ npm run check:api     # fails if src/api/schema.d.ts is out of date (CI)
   Lint fails on literal JSX text and user-facing attributes (spec §6.2).
 - **Layout**: mobile-first; check 360 px and 1280 px (spec §6.1). Every route renders inside
   `AppShell` (header, content, footer with the §6.3 disclaimer).
+- **Session**: `src/api/session.ts` holds the signed-in user (`GET /me`, query key `["me"]`).
+  Signed-in pages sit under `RequireAuth` (a 401 redirects to `/sign-in`) and read the user with
+  `useSignedInUser()`. API failures are `ApiError`s (`src/api/errors.ts`, with `Retry-After`);
+  forms map them with `problemToFormErrors` (`src/auth/forms.ts`).
 - **Tests** live in `tests/`. Requests without an MSW handler fail the test; no real network.
+  `renderApp(path)` renders the real routes and returns the router for location assertions;
+  `tests/mocks/fixtures.ts` builds `Me` and problem responses.
