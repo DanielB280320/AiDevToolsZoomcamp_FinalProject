@@ -527,9 +527,25 @@ def test_explanation_katch_mcardle_names_formula_and_numbers() -> None:
         "0.6 g/kg",
         "43.5 g",
         "121.4 g",
-        "-379",
+        "= −379 kcal/day",
     ):
         assert fragment in r.explanation, fragment
+
+
+@pytest.mark.parametrize(
+    ("overrides", "fragment"),
+    [
+        ({"goal": Goal.CUTTING}, "= −427 kcal/day"),  # 1709 − 2136
+        ({"goal": Goal.MAINTENANCE}, "= 0 kcal/day"),
+        ({"goal": Goal.MUSCLE_GAIN}, "= 214 kcal/day"),  # 2350 − 2136
+    ],
+)
+def test_explanation_balance_uses_typographic_minus(
+    overrides: dict[str, Any], fragment: str
+) -> None:
+    r = _targets(**overrides)
+    assert fragment in r.explanation
+    assert "-" not in r.explanation.replace("Mifflin-St", "").replace("Katch-McArdle", "")
 
 
 def test_explanation_mifflin_names_formula_and_inputs() -> None:

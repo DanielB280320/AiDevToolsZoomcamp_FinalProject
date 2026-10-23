@@ -121,6 +121,11 @@ def _num(value: float) -> str:
     return f"{value:g}" if abs(value) < 1e6 else f"{value:.0f}"
 
 
+def _signed_int(value: int) -> str:
+    """Integer with a typographic minus sign (U+2212), matching the rest of the explanation."""
+    return f"−{-value}" if value < 0 else str(value)
+
+
 def _signed_pct(fraction: float) -> str:
     pct = abs(fraction) * 100
     sign = "−" if fraction < 0 else "+"
@@ -326,7 +331,7 @@ def compute_targets(
     parts.append(f"{protein_text}; {fat_rule}; {carbs_text}.")
     parts.append(
         f"Target balance = {kcal} − ({baseline_kcal} + {exercise_kcal_per_day}) = "
-        f"{target_balance_kcal} kcal/day. All values are estimates."
+        f"{_signed_int(target_balance_kcal)} kcal/day. All values are estimates."
     )
 
     inputs: dict[str, Any] = {
