@@ -19,3 +19,72 @@ DEFAULT_REST_SECONDS = 90
 # Planned weekly exercise kcal is spread evenly over the week for the daily target (spec F3.4).
 PLANNED_EXERCISE_KCAL_DAYS = 7
 # --- end F13.2 ---------------------------------------------------------------------------------
+
+# ============================================================================================
+# F3 Targets engine (#21) — used by app/engines/targets.py. Keep this block self-contained:
+# other engines append their own blocks below it.
+# ============================================================================================
+
+# F3.1 Katch-McArdle: BMR = 370 + 21.6 × LBM_kg.
+KATCH_MCARDLE_INTERCEPT_KCAL = 370.0
+KATCH_MCARDLE_KCAL_PER_KG_LBM = 21.6
+
+# F3.1 Mifflin-St Jeor: BMR = 10·kg + 6.25·cm − 5·age + s.
+MIFFLIN_KCAL_PER_KG = 10.0
+MIFFLIN_KCAL_PER_CM = 6.25
+MIFFLIN_KCAL_PER_YEAR = -5.0
+# F3.1 sex constant s; "unspecified" (prefer not to say) uses the midpoint.
+MIFFLIN_SEX_CONSTANT_KCAL: dict[str, float] = {
+    "male": 5.0,
+    "female": -161.0,
+    "unspecified": -78.0,
+}
+
+# F3.2 lifestyle (non-exercise) activity factors. Training kcal are added separately.
+LIFESTYLE_FACTORS: dict[str, float] = {
+    "sedentary": 1.20,
+    "lightly_active": 1.30,
+    "active": 1.45,
+    "very_active": 1.60,
+}
+
+# F3.3 US Navy body-fat estimate (cm, log10): BF% = 495 / (a − b·log10(x) + c·log10(height)) − 450,
+# with x = waist − neck (male) or waist + hip − neck (female / unspecified).
+NAVY_NUMERATOR = 495.0
+NAVY_OFFSET = 450.0
+NAVY_MALE_COEFFICIENTS = (1.0324, 0.19077, 0.15456)
+NAVY_FEMALE_COEFFICIENTS = (1.29579, 0.35004, 0.22100)
+
+# F3.4 goal adjustment (fraction of baseline + planned exercise).
+GOAL_ADJUSTMENTS: dict[str, float] = {
+    "cutting": -0.20,
+    "recomposition": -0.10,
+    "muscle_gain": 0.10,
+    "maintenance": 0.0,
+    "wellness": 0.0,
+}
+# F3.4 protein per goal (g per kg body weight).
+PROTEIN_G_PER_KG: dict[str, float] = {
+    "cutting": 2.2,
+    "recomposition": 2.2,
+    "muscle_gain": 1.8,
+    "maintenance": 1.6,
+    "wellness": 1.4,
+}
+# F3.4 planned exercise kcal are given per week (F13.2) and averaged over 7 days.
+DAYS_PER_WEEK = 7
+
+# F3.5 macros: fat = max(25 % of target kcal, 0.6 g/kg); carbs = the rest (minimum 0).
+FAT_SHARE_OF_KCAL = 0.25
+FAT_MIN_G_PER_KG = 0.6
+# F3.5 energy per gram.
+KCAL_PER_G_PROTEIN = 4.0
+KCAL_PER_G_CARBS = 4.0
+KCAL_PER_G_FAT = 9.0
+
+# F3.6 calorie floor per sex (kcal/day).
+CALORIE_FLOOR_KCAL: dict[str, int] = {
+    "male": 1500,
+    "female": 1200,
+    "unspecified": 1350,
+}
