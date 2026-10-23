@@ -83,6 +83,7 @@ LOG_EVENT_FIELDS: Final = frozenset(
         "flag_old_value",
         "flag_new_value",
         "actor",
+        "revision",  # Alembic revision id (hex), logged by the migration step (D50)
     }
 )
 
