@@ -1,0 +1,7 @@
+/** Client routes. Both roles land on Today after sign-in in M1 (#9). */
+export const paths = {
+  home: "/",
+  signIn: "/sign-in",
+  signUp: "/sign-up",
+  today: "/today",
+} as const;

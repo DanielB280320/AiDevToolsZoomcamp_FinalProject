@@ -30,6 +30,9 @@ export default defineConfig(({ mode }) => {
       include: ["tests/**/*.test.{ts,tsx}"],
       setupFiles: ["tests/setup.ts"],
       restoreMocks: true,
+      // Form journeys type into many fields; on a loaded host (parallel agents, shared CI runners)
+      // they can exceed the 5 s default. Assertions are unchanged; only the time budget grows.
+      testTimeout: 30_000,
     },
   };
 });

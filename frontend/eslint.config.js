@@ -60,6 +60,35 @@ export default tseslint.config(
     },
   },
   {
+    // The API client pins the base URL (/api/v1), cookie credentials and fetch in one place
+    // (src/api/client.ts). openapi-fetch lets a single call override them, so callers may not
+    // pass `baseUrl`, `credentials` or `fetch` per request, nor build a second client.
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/api/client.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "openapi-fetch",
+              message: "Use `api` from src/api/client.ts; it pins the base URL and credentials.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.property.name=/^(GET|PUT|POST|DELETE|OPTIONS|HEAD|PATCH|TRACE|request)$/] > ObjectExpression > Property:matches([key.name=/^(baseUrl|credentials|fetch)$/], [key.value=/^(baseUrl|credentials|fetch)$/])",
+          message:
+            "Don't override baseUrl, credentials or fetch per request; src/api/client.ts sets them for every call.",
+        },
+      ],
+    },
+  },
+  {
     files: ["scripts/**/*.mjs", "*.config.{js,ts}", "tests/**/*.{ts,tsx}"],
     languageOptions: { globals: globals.node },
   },

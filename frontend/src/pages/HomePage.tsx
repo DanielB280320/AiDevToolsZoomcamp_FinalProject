@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import { api } from "../api/client";
+import { paths } from "../paths";
 
 function useServiceHealth() {
   return useQuery({
@@ -32,6 +34,21 @@ export function HomePage() {
         {t("home.title")}
       </h1>
       <p className="mt-4 text-step-1 text-slate">{t("home.lead")}</p>
+
+      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+        <Link
+          to={paths.signUp}
+          className="inline-flex min-h-12 items-center justify-center rounded-md bg-spruce px-6 py-3 font-semibold text-chalk no-underline hover:bg-spruce-dark"
+        >
+          {t("home.cta.signUp")}
+        </Link>
+        <Link
+          to={paths.signIn}
+          className="inline-flex min-h-12 items-center justify-center font-semibold text-spruce underline underline-offset-4 hover:text-spruce-dark"
+        >
+          {t("home.cta.signIn")}
+        </Link>
+      </div>
 
       <section aria-labelledby="service-status" className="mt-10 border-l-4 border-line pl-4">
         <h2 id="service-status" className="font-display text-step-1 font-semibold">
