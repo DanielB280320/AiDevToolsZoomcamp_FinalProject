@@ -228,7 +228,7 @@ flowchart LR
 
 | Environment | Where | How it gets code | What runs | Access |
 |---|---|---|---|---|
-| **Local** | Developer or agent machine | Working tree / worktree | `make up`: Postgres, backend (migrations + seed on start), frontend (nginx). `make up-obs` adds the observability stack. `make seed-demo` loads a demo athlete and coach. | `localhost` |
+| **Local** | Developer or agent machine | Working tree / worktree | `make up`: Postgres, a one-shot migration step (migrations + seed), then the backend (app only) and frontend (nginx). `make up-obs` adds the observability stack. `make seed-demo` loads a demo athlete and coach. | `localhost` |
 | **CI** | GitHub Actions runners | Every PR and every merge to `main` | Lint, type-check, unit + integration tests against a Postgres service, frontend tests, OpenAPI validation, dependency scan, secret scan, image build. Integration tests use the Open Food Facts fake. | n/a |
 | **Image registry** | GHCR | Built once per commit on merge to `main` | Images tagged with the git SHA; the same image is promoted from dev to prod. | Pulled by the EC2 hosts |
 | **dev** | `fitwise-dev` EC2, Docker Compose | Auto-deploy on every merge to `main`, then smoke test (`/readyz` + e2e smoke) | App stack + OTel Collector, forwarding to prod | Public DNS over HTTP, port 80 |
@@ -238,6 +238,7 @@ Release mechanics ([spec §12](spec.md#12-deployment-aws), [§13](spec.md#13-cic
 
 - Each host keeps `CURRENT_TAG` and `PREVIOUS_TAG`. Rollback means redeploying `PREVIOUS_TAG`, either from the "Rollback production" workflow or from the on-call agent's `rollback.sh`.
 - Because migrations are expand → migrate → contract, the previous release always works against the current schema and rollback never needs a down-migration.
+- Migrations and the seed run as a separate one-shot step from the image being deployed, before the backend starts. Forward deploys run it; a rollback skips it. The backend never migrates on start, so an older image can always start on a newer schema ([ADR 0009](adr/0009-separate-migration-step.md), D50).
 - Security groups: 80 open; 22 restricted to the owner's IP and GitHub Actions deploy (or SSM); Grafana restricted to the owner's IP; the prod OTLP port open only to the dev instance. Elastic IPs keep the addresses stable.
 - Configuration and secrets (JWT secret, DB credentials, API keys) come from environment variables / GitHub Environment secrets; `.env.example` documents them and nothing secret is committed.
 
@@ -273,6 +274,7 @@ Each decision is recorded in the [spec decisions log](spec.md#19-decisions-log);
 | [0006](adr/0006-self-hosted-observability-on-prod.md) | Self-host Prometheus, Loki, Tempo and Grafana on the prod EC2 | D32, D34 |
 | [0007](adr/0007-on-call-agent-with-allow-listed-mitigations.md) | On-call agent limited to flag / rollback / restart, then issue + fix PR | D33 |
 | [0008](adr/0008-enforce-agent-write-scopes-with-a-hook.md) | QA and PM write scopes guarded by a project `PreToolUse` hook (`.claude/hooks/scope_guard.py`) | [team.md](team.md#roles), #60 |
+| [0009](adr/0009-separate-migration-step.md) | Migrations + seed run as a separate one-shot step before the backend starts; rollback skips it | D50 |
 
 Other decisions that shape the code but need no separate ADR, because the spec states them fully:
 
