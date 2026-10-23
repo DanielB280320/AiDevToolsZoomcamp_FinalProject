@@ -128,7 +128,7 @@ echo "  GET  /me (signed in) -> ${code}"
 # Bypass the app logger: write to the backend's stdout directly (what a stray print would do).
 $COMPOSE exec -T backend sh -c "
   echo 'NONJSON ${marker}raw Traceback with ${email}' > /proc/1/fd/1
-  echo '{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\",\"level\":\"info\",\"message\":\"injected ${marker}inject\",\"logger\":\"app.check\",\"trace_id\":null,\"span_id\":null,\"env\":\"${app_env}\",\"service\":\"fitwise-backend\",\"version\":\"check\",\"route\":\"/check\",\"email\":\"${email}\",\"weight_kg\":81.5,\"note\":\"${marker}note\"}' > /proc/1/fd/1
+  echo '{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\",\"level\":\"info\",\"message\":\"injected ${marker}inject for ${email} Bearer abc.def\",\"logger\":\"app.check\",\"trace_id\":null,\"span_id\":null,\"env\":\"${app_env}\",\"service\":\"fitwise-backend\",\"version\":\"check\",\"route\":\"/check\",\"email\":\"${email}\",\"weight_kg\":81.5,\"note\":\"${marker}note\"}' > /proc/1/fd/1
 " || fail "could not write to the backend's stdout"
 
 injected() {
@@ -150,11 +150,11 @@ sleep 20 # one more metric export + batch flush
 all_logs=$(loki query_range --data-urlencode "query={service_name=~\".+\"}" \
   --data-urlencode "start=${start_ns}" --data-urlencode "limit=5000" || echo QUERY_FAILED)
 [[ "$all_logs" == QUERY_FAILED ]] && fail "Loki bulk query failed"
-injected_line=$(grep -o "\"injected ${marker}inject\"" <<<"$all_logs" || true)
-# The marker may appear only inside the one message we injected on purpose ("injected <marker>inject").
+injected_line=$(grep -o "\"injected ${marker}inject for \[email\] Bearer \[token\]\"" <<<"$all_logs" || true)
+# The marker may appear only inside the one message we injected on purpose; its email and token are masked by the collector.
 leaks=$(sed "s/injected ${marker}inject//g" <<<"$all_logs" | grep -o "${marker}[A-Za-z]*" | sort -u || true)
 [[ -z "$leaks" ]] && pass "Loki: marker absent outside the injected message" || fail "Loki contains: ${leaks}"
-grep -qi "${marker,,}@example.com\|@example.com" <<<"$all_logs" && fail "Loki contains an email" || pass "Loki: no email"
+grep -qi "${marker,,}@example.com\|@example.com" <<<"$all_logs" && fail "Loki contains an email" || pass "Loki: no email (the injected message had its email and Bearer token masked)"
 grep -q '"weight_kg"\|"note"\|"email"' <<<"$all_logs" && fail "Loki kept a forbidden field (email/weight_kg/note)" ||
   pass "Loki: forbidden fields of the injected line were stripped by the collector"
 grep -q 'NONJSON' <<<"$all_logs" && fail "Loki contains the non-JSON line" || pass "Loki: non-JSON line dropped"
