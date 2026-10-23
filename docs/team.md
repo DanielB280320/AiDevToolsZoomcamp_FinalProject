@@ -50,7 +50,7 @@ The **QA and PM write scopes below are guarded**, not just documented (a guardra
 ### QA — [`qa.md`](../.claude/agents/qa.md)
 - **Owns:** independent verification. Nothing is merged without a QA PASS.
 - **Does:** starts from the issue and the spec, not the PR description; runs lint and tests; reproduces each AC with evidence; checks the project rules (privacy, migrations, spec updated); posts PASS/FAIL on the issue in the standard format.
-- **Writes:** tests only (`backend/tests/`, `frontend/tests/`, `e2e/`; commits prefixed `test:`) and issue/PR comments. Never changes production code — it reports defects. *Enforced by the scope-guard hook.*
+- **Writes:** tests only (`backend/tests/`, `frontend/tests/`, `e2e/`; commits prefixed `test:`) and issue/PR comments. Never changes production code — it reports defects. *Guarded by the scope-guard hook.*
 
 ### DevOps / SRE — [`devops.md`](../.claude/agents/devops.md)
 - **Owns:** `role:devops` issues: Docker/Compose, AWS, CI/CD, observability, alerts, the on-call responder and runbooks.

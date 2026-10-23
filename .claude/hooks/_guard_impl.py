@@ -493,15 +493,28 @@ DOCKER_GLOBAL_VALUE = {"-H", "--host", "-c", "--context", "-l", "--log-level", "
 DOCKER_COMPOSE_VALUE = {"-p", "--project-name", "--profile", "--env-file", "--progress", "--ansi",
                         "--parallel"}
 NODE_EVAL_OPTS = {"-e", "--eval", "-p", "--print", "-pe", "--input-type"}
-CURL_DENY = {"-o", "--output", "-O", "--remote-name", "--remote-name-all", "--output-dir",
+CURL_DENY = {"-O", "--remote-name", "--remote-name-all", "--output-dir",
              "--create-dirs", "-J", "--remote-header-name", "-D", "--dump-header", "--trace",
-             "--trace-ascii", "--etag-save", "-c", "--cookie-jar", "-K", "--config"}
+             "--trace-ascii", "--etag-save", "-c", "--cookie-jar", "-K", "--config",
+             # reach a host other than the one in the URL (the localhost-only rule would not hold)
+             "-x", "--proxy", "--preproxy", "--connect-to", "--resolve", "--socks4", "--socks4a",
+             "--socks5", "--socks5-hostname", "--doh-url"}
+# curl output flags whose target is checked like a redirect (scratchpad, /dev/null, in-scope).
+CURL_OUTPUT = {"-o", "--output"}
 CURL_VALUE = {"-H", "--header", "-d", "--data", "--data-raw", "--data-binary", "--data-ascii",
               "--data-urlencode", "-X", "--request", "-u", "--user", "-A", "--user-agent",
-              "-e", "--referer", "-b", "--cookie", "-F", "--form", "-x", "--proxy", "-m",
-              "--max-time", "--connect-timeout", "--retry", "--resolve", "-E", "--cert",
+              "-e", "--referer", "-b", "--cookie", "-F", "--form", "-m",
+              "--max-time", "--connect-timeout", "--retry", "-E", "--cert",
               "--cacert", "--capath", "--key", "-T", "--upload-file", "-w", "--write-out"}
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "[::1]"}
+# gh: the built-in top-level commands (anything else is an alias or an extension) and the
+# persistent flags that take a separate value, so `gh pr -R x merge` reads as `pr merge`.
+GH_COMMANDS = {
+    "auth", "browse", "codespace", "gist", "issue", "org", "pr", "project", "release", "repo",
+    "cache", "run", "workflow", "alias", "api", "attestation", "completion", "config", "extension",
+    "gpg-key", "label", "ruleset", "search", "secret", "ssh-key", "status", "variable", "help", "version",
+}
+GH_VALUE_FLAGS = {"-R", "--repo", "--hostname"}  # persistent flags only; others never precede a subcommand
 
 
 def _f(*names: str) -> frozenset[str]:
@@ -966,7 +979,26 @@ class BashChecker:
             i += 1
 
     def _check_gh(self, args: list[Word]) -> None:
-        subs = [w.text for w in args if not w.text.startswith("-")]
+        # Skip gh's global flags (and their values) wherever they appear, so `gh pr -R x merge`
+        # and `gh pr --repo x merge` are read as `pr merge`.
+        subs: list[str] = []
+        i = 0
+        while i < len(args):
+            t = args[i].text
+            if t in GH_VALUE_FLAGS:
+                i += 2
+                continue
+            if t.startswith("-"):
+                i += 1
+                continue
+            subs.append(t)
+            i += 1
+        if not subs:
+            return  # `gh`, `gh --version`, `gh --help`
+        if subs[0] not in GH_COMMANDS:
+            # Unknown first word: an alias (`gh co` = `pr checkout`) or an extension. Fail closed.
+            raise Denied(f"gh {subs[0]} is not a known gh command (aliases and extensions are not on the "
+                         f"{self.role} allow-list); {ADR_HINT}")
         pair = tuple(subs[:2])
         # The cheap, natural holes QA found; gh is otherwise left open (guardrail, see ADR 0008).
         blocked = {("repo", "clone"), ("run", "download"), ("pr", "merge"), ("pr", "checkout")}
@@ -1105,6 +1137,11 @@ class BashChecker:
             t = args[i].text
             if t in CURL_DENY or t.split("=")[0] in CURL_DENY:
                 raise Denied(f"curl {t}: writing files is not on the {self.role} allow-list; {ADR_HINT}")
+            if t in CURL_OUTPUT or t.startswith("--output="):
+                val = t.split("=", 1)[1] if "=" in t else (args[i + 1].text if i + 1 < len(args) else "")
+                self._curl_output_target(val, args[i + 1] if "=" not in t and i + 1 < len(args) else None)
+                i += 1 if "=" in t else 2
+                continue
             if t in ("-w", "--write-out") or t.startswith("--write-out="):
                 val = t.split("=", 1)[1] if "=" in t else (args[i + 1].text if i + 1 < len(args) else "")
                 if "%output{" in val:
@@ -1126,18 +1163,29 @@ class BashChecker:
                 i += 1
                 continue
             if t.startswith("-") and t != "-":
-                # A short-option cluster: deny an output letter (o/O/D/c/K), attached or not.
+                # A short-option cluster: -o checks its target; -x/O/D/c/K are denied, attached or not.
+                consumed_next = False
                 for pos, ch in enumerate(t[1:]):
-                    if ch in "oODcK":
+                    if ch == "o":
+                        attached = t[pos + 2 :]
+                        nxt = args[i + 1] if i + 1 < len(args) else None
+                        self._curl_output_target(attached or (nxt.text if nxt else ""), None if attached else nxt)
+                        consumed_next = not attached
+                        break
+                    if ch == "x":
+                        raise Denied(f"curl -x: a proxy is not on the {self.role} allow-list (localhost only); {ADR_HINT}")
+                    if ch in "ODcK":
                         raise Denied(f"curl -{ch}: writing a file is not on the {self.role} allow-list; {ADR_HINT}")
                     if ch == "w":
                         val = t[pos + 2 :] or (args[i + 1].text if i + 1 < len(args) else "")
                         if "%output{" in val:
                             raise Denied(f"curl -w %output{{…}} writes a file, which is not on the {self.role} allow-list; {ADR_HINT}")
+                        consumed_next = pos + 2 >= len(t)
                         break  # the rest of the cluster / next word is the -w value
                     if ("-" + ch) in CURL_VALUE:
+                        consumed_next = pos + 2 >= len(t)
                         break  # this letter consumes the rest of the cluster / the next word
-                i += 1
+                i += 2 if consumed_next else 1
                 continue
             urls.append(t)
             i += 1
@@ -1146,6 +1194,12 @@ class BashChecker:
         for u in urls:
             if not _is_local_url(u):
                 raise Denied(f"curl {u}: only localhost/127.0.0.1 URLs are on the {self.role} allow-list; {ADR_HINT}")
+
+    def _curl_output_target(self, path: str, word: Word | None) -> None:
+        """`curl -o PATH`: allowed where a redirect may write (scratchpad, /dev/null, the scope)."""
+        if not path:
+            raise Denied(f"curl -o without a file is not on the {self.role} allow-list; {ADR_HINT}")
+        _check_word(word if word is not None else Word(path), self.cwd, self.ctx, "curl -o")
 
     def _check_docker(self, args: list[Word]) -> None:
         i = 0
@@ -1230,6 +1284,9 @@ class BashChecker:
                 key = (args[i + 1].text if opt == "-c" and i + 1 < len(args) else opt[2:]).split("=")[0]
                 raise Denied(f"git -c {key}: setting config on the command line is not on the {self.role} allow-list "
                              f"(several keys run code); {ADR_HINT}")
+            elif opt == "--config-env" or opt.startswith("--config-env="):
+                raise Denied(f"git --config-env: setting config from the environment is not on the {self.role} allow-list "
+                             f"(several keys run code); {ADR_HINT}")
             elif opt in ("--git-dir", "--work-tree", "--namespace"):
                 if opt in ("--git-dir", "--work-tree"):
                     raise Denied(f"git {opt}: cannot verify which work tree is written")
@@ -1248,12 +1305,25 @@ class BashChecker:
             if any(w.text in read_flags or w.text.startswith("--get") for w in rest):
                 return
             raise Denied(f"git config (writing) is not on the {self.role} allow-list; only --get/--list reads are; {ADR_HINT}")
+        if sub == "branch":
+            # Listing is fine; force-moving/renaming/copying a branch (e.g. `branch -f main HEAD`) is not.
+            for w in rest:
+                t = w.text
+                if t in ("-f", "--force", "-m", "-M", "--move", "-c", "-C", "--copy") or (
+                        t.startswith("-") and not t.startswith("--") and any(ch in t[1:] for ch in "fmMcC")):
+                    raise Denied(f"git branch {t} is not on the {self.role} allow-list; {ADR_HINT}")
+            return
+        if sub == "remote":
+            pos = [w.text for w in rest if not w.text.startswith("-")]
+            if pos and pos[0] in ("add", "set-url", "rename", "remove", "rm", "set-head", "set-branches", "prune"):
+                raise Denied(f"git remote {pos[0]} is not on the {self.role} allow-list (it reconfigures where pushes go); {ADR_HINT}")
+            return
         if sub in GIT_READONLY or sub == "fetch":
             return
         if sub not in GIT_WRITE.get(self.role, set()):
             self._not_allowed(f"git {sub}")
         if sub == "push":
-            self._check_git_push(rest)
+            self._check_git_push(rest, cwd)
             return
         if sub == "switch":
             return  # change branch: no repo-file write to check
@@ -1290,21 +1360,27 @@ class BashChecker:
                 for w in rest[words.index("--") + 1 :]:
                     _check_word(w, cwd, ctx, "git checkout --")
 
-    def _check_git_push(self, rest: list[Word]) -> None:
-        for w in rest:
-            t = w.text
-            if t in ("--force", "-f", "--force-with-lease", "--force-if-includes") or t.startswith("--force-with-lease"):
-                raise Denied(f"git push --force is not on the {self.role} allow-list; {ADR_HINT}")
-            if t in ("--delete", "-d", "--mirror") or t.startswith(("--receive-pack", "--exec")):
-                raise Denied(f"git push {t} is not on the {self.role} allow-list; {ADR_HINT}")
-            if "://" in t or re.match(r"^[\w.-]+@[\w.-]+:", t):
-                raise Denied(f"git push to an explicit URL ({t}) is not on the {self.role} allow-list; push to a named remote; {ADR_HINT}")
-            if t.startswith("+"):
-                raise Denied(f"git push with a force refspec ({t}) is not on the {self.role} allow-list; {ADR_HINT}")
-            if not t.startswith("-"):
-                dst = t.split(":")[-1].replace("refs/heads/", "")
-                if dst in ("main", "master"):
-                    raise Denied(f"git push to {dst} is not on the {self.role} allow-list (protected branch); {ADR_HINT}")
+    def _check_git_push(self, rest: list[Word], cwd: str | None) -> None:
+        """QA/PM may only push their current branch, and it must not be main/master:
+        `git push [-u|--set-upstream] [origin [<current-branch>|HEAD]]`. Everything else is denied,
+        so a forgotten branch, a partial refspec (`HEAD:heads/main`), `--all`/`--mirror`/`--tags`,
+        a delete (`:x`), a force or another remote can't move a protected branch by accident."""
+        where = cwd or self.cwd
+        branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], where).stdout.strip() if where else ""
+        if not branch or branch == "HEAD":
+            raise Denied(f"git push: cannot determine the current branch (detached HEAD?); {ADR_HINT}")
+        if branch in ("main", "master"):
+            raise Denied(f"git push from {branch} is not on the {self.role} allow-list; "
+                         f"push from your own branch (git switch -c <type>/<issue>-<slug>); {ADR_HINT}")
+        opts = [w.text for w in rest if w.text.startswith("-")]
+        pos = [w.text for w in rest if not w.text.startswith("-")]
+        bad_opts = [o for o in opts if o not in ("-u", "--set-upstream")]
+        if bad_opts:
+            raise Denied(f"git push {' '.join(bad_opts)} is not on the {self.role} allow-list; "
+                         f"only `git push [-u] origin <current-branch>|HEAD` is; {ADR_HINT}")
+        if len(pos) > 2 or (pos and pos[0] != "origin") or (len(pos) == 2 and pos[1] not in (branch, "HEAD")):
+            raise Denied(f"git push {' '.join(pos)} is not on the {self.role} allow-list; "
+                         f"only `git push [-u] origin {branch}|HEAD` (the current branch) is; {ADR_HINT}")
 
     def _check_git_worktree(self, rest: list[Word], cwd: str | None) -> None:
         pos = _positionals(rest, set())
