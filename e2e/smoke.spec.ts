@@ -73,7 +73,8 @@ test("smoke: sign up a new athlete, see Today, sign out, sign in again", async (
     await expect(page.getByRole("radio", { name: /^Metric/ })).toBeChecked();
     await expect(page.getByLabel("Time zone", { exact: true })).toHaveValue(USER_TIME_ZONE);
 
-    await expect(page.getByText(/not medical advice/)).toBeVisible();
+    // The same text is also in the page footer; check the one inside the form the user must accept.
+    await expect(page.getByRole("form", { name: "Create your account" }).getByText(/not medical advice/)).toBeVisible();
     const disclaimer = page.getByRole("checkbox", { name: "I've read this and accept it" });
     await disclaimer.check();
     await expect(disclaimer).toBeChecked();
