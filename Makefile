@@ -168,8 +168,10 @@ scan-secrets: ## gitleaks over the full git history (needs a regular clone, not 
 
 .PHONY: scan-deps
 scan-deps: check-uv $(NPM_STAMP) ## pip-audit (locked backend deps) and npm audit (high and above)
+	reqs=$$(mktemp); trap 'rm -f "$$reqs"' EXIT; \
 	cd $(BACKEND) && uv export --locked --format requirements-txt --no-emit-project --quiet \
-	  | uvx --quiet $(PIP_AUDIT) --strict --disable-pip --require-hashes -r /dev/stdin
+	  --output-file "$$reqs" && \
+	uvx --quiet $(PIP_AUDIT) --progress-spinner off --strict --disable-pip --require-hashes -r "$$reqs"
 	cd $(FRONTEND) && npm audit --audit-level=high
 
 # Fails on HIGH/CRITICAL OS or library vulnerabilities that have a fix available.
