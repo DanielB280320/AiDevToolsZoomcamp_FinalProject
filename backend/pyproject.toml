@@ -30,6 +30,7 @@ dev = [
     "jsonschema>=4.26.0",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "pyyaml>=6.0.3",
     "ruff>=0.17.1",
     "types-jsonschema>=4.26.0.20261006",
@@ -46,8 +47,9 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "C4", "RUF", "S", "N", "T20"]
 ignore = []
-# Engine explanations are user-facing and write formulas the way the spec does ("MET × 3.5 …").
-allowed-confusables = ["×"]
+# Engine explanations are user-facing math text written like the spec and the contract examples
+# ("MET × 3.5 …", openapi.yaml TargetsAna "370 + 21.6 × LBM", "(1 − 20 %)").
+allowed-confusables = ["×", "−"]
 
 [tool.ruff.lint.isort]
 # The local alembic/ migrations directory must not make the alembic package look first-party.

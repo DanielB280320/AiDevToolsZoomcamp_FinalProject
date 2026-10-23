@@ -94,18 +94,22 @@ test: ## Backend unit + integration (Postgres container) and frontend tests
 	if [ $$rc -ne 0 ]; then echo "make test: FAILED (see output above)" >&2; fi; \
 	exit $$rc
 
+# Spec §10: line coverage of the pure engines must stay >= 90 %. Scoped to app/engines so the
+# threshold does not depend on the rest of the backend. Plain `uv run pytest` stays unaffected.
+PYTEST_COV := --cov=app.engines --cov-branch --cov-report=term-missing --cov-fail-under=90
+
 # TEST_DATABASE_URL already set (e.g. a CI service container) -> use it as is.
 # Otherwise start the throwaway `db-test` container and point the tests at it.
 .PHONY: test-backend
-test-backend: check-uv ## Backend pytest (unit + integration)
+test-backend: check-uv ## Backend pytest (unit + integration) + engines coverage >= 90 %
 ifdef TEST_DATABASE_URL
-	cd $(BACKEND) && uv run --locked pytest
+	cd $(BACKEND) && uv run --locked pytest $(PYTEST_COV)
 else
 	@$(MAKE) test-db-up
 	port=$$($(COMPOSE) --profile test port db-test 5432 | sed 's/.*://'); \
 	cd $(BACKEND) && \
 	TEST_DATABASE_URL="postgresql+psycopg://fitwise_test:fitwise_test@127.0.0.1:$$port/postgres" \
-	uv run --locked pytest
+	uv run --locked pytest $(PYTEST_COV)
 endif
 
 .PHONY: test-db-up
