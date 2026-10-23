@@ -34,7 +34,11 @@ ENV PATH=/app/.venv/bin:$PATH \
 USER 10001:10001
 EXPOSE 8000
 
-# Migrate first (backward-compatible migrations only, spec §13), then serve.
+# The container only starts the app: it never migrates or seeds (spec §11, §13; D50, ADR 0009).
+# Migrations + the F4.1 seed run in the one-shot migration step from this same image:
+#   python -m app.migrate        (compose service `migrate`; the backend starts after it exits 0)
+# A rollback to PREVIOUS_TAG skips that step, so an older image always starts on a newer schema;
+# /readyz reports `migrations: pending` (503) until the step has run on an older database.
 # --no-access-log: uvicorn's access log records full query strings (e.g. food search `q`),
 # which must never reach logs (CLAUDE.md rule 6). The allow-listed access logger comes in #16.
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--proxy-headers", "--forwarded-allow-ips=*"]
