@@ -272,6 +272,7 @@ Each decision is recorded in the [spec decisions log](spec.md#19-decisions-log);
 | [0005](adr/0005-contract-first-openapi.md) | `openapi.yaml` is the API source of truth; the frontend client is generated | §7.1, §9 |
 | [0006](adr/0006-self-hosted-observability-on-prod.md) | Self-host Prometheus, Loki, Tempo and Grafana on the prod EC2 | D32, D34 |
 | [0007](adr/0007-on-call-agent-with-allow-listed-mitigations.md) | On-call agent limited to flag / rollback / restart, then issue + fix PR | D33 |
+| [0008](adr/0008-enforce-agent-write-scopes-with-a-hook.md) | QA and PM write scopes guarded by a project `PreToolUse` hook (`.claude/hooks/scope_guard.py`) | [team.md](team.md#roles), #60 |
 
 Other decisions that shape the code but need no separate ADR, because the spec states them fully:
 
