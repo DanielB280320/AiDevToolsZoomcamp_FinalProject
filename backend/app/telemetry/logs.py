@@ -21,7 +21,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Final
+from typing import Final, TextIO
 from uuid import UUID
 
 from opentelemetry import trace
@@ -150,13 +150,16 @@ def get_logger(name: str) -> StructuredLogger:
     return StructuredLogger(logging.getLogger(name))
 
 
-def configure_logging(*, level: str, env: str, service: str, version: str) -> None:
-    """Send the root logger (and uvicorn's) to stdout as allow-listed JSON. Idempotent."""
+def configure_logging(
+    *, level: str, env: str, service: str, version: str, stream: TextIO | None = None
+) -> None:
+    """Send the root logger (and uvicorn's) to stdout (or `stream`) as allow-listed JSON.
+    Idempotent."""
     root = logging.getLogger()
     for handler in list(root.handlers):
         if getattr(handler, _HANDLER_MARKER, False):
             root.removeHandler(handler)
-    handler = logging.StreamHandler(sys.stdout)
+    handler = logging.StreamHandler(stream or sys.stdout)
     handler.setFormatter(JsonFormatter(env=env, service=service, version=version))
     setattr(handler, _HANDLER_MARKER, True)
     root.addHandler(handler)
