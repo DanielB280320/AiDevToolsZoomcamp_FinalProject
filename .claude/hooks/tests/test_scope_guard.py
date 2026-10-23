@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 HOOK = Path(__file__).resolve().parents[1] / "scope_guard.py"
+IMPL = Path(__file__).resolve().parents[1] / "_guard_impl.py"
 SETTINGS = Path(__file__).resolve().parents[2] / "settings.json"
 
 ALLOW, DENY = "allow", "deny"
@@ -465,6 +466,87 @@ BASH_CASES = [
     ("qa-newline-sep-out", "qa", "make test\ntouch backend/app/x", DENY),
     ("qa-quoted-name", "qa", "\"touch\" backend/app/x", DENY),
     ("qa-escaped-name", "qa", "t\\ouch backend/app/x", DENY),
+    # == round 4 (guardrail re-scope): close the cheap, natural holes QA found ==
+    # unquoted heredoc body with a substitution
+    ("qa-heredoc-subst-cmd", "qa", "cat <<EOF\n$(touch backend/app/x)\nEOF", DENY),
+    ("qa-heredoc-subst-backtick", "qa", "cat <<EOF\n`touch backend/app/x`\nEOF", DENY),
+    ("qa-heredoc-subst-brace", "qa", "cat <<EOF\n${IFS}\nEOF", DENY),
+    ("qa-heredoc-quoted-ok", "qa", "cat <<'EOF'\n$(touch backend/app/x) literal\nEOF", ALLOW),
+    ("qa-heredoc-unquoted-plain", "qa", "gh issue create --body-file - <<EOF\nplain > ; && | {a,b} body\nEOF", ALLOW),
+    # gh holes
+    ("qa-gh-repo-clone", "qa", "gh repo clone owner/repo backend/app/x", DENY),
+    ("qa-gh-run-download", "qa", "gh run download 1 -D backend/app", DENY),
+    ("qa-gh-pr-merge", "qa", "gh pr merge 73 --squash", DENY),
+    ("qa-gh-pr-checkout", "qa", "gh pr checkout 73", DENY),
+    ("pm-gh-pr-merge", "pm", "gh pr merge 73", DENY),
+    ("qa-gh-api-o", "qa", "gh api repos/x/y -o backend/app/out.json", DENY),
+    ("qa-gh-ok", "qa", "gh pr view 73 && gh issue comment 60 --body ok", ALLOW),
+    # git worktree add into out-of-scope path
+    ("qa-worktree-into-app", "qa", "git worktree add backend/app/x HEAD", DENY),
+    ("qa-worktree-into-tests", "qa", "git worktree add backend/tests/wt HEAD", ALLOW),
+    ("qa-worktree-outside-ok", "qa", "git worktree add /tmp/wt-x origin/feat/y", ALLOW),
+    # git config writes
+    ("qa-git-config-write", "qa", "git config core.fsmonitor 'touch backend/app/x; echo'", DENY),
+    ("qa-git-config-pager", "qa", "git config core.pager 'sh -c x'", DENY),
+    ("qa-git-config-get", "qa", "git config --get user.email", ALLOW),
+    ("qa-git-config-list", "qa", "git config --list", ALLOW),
+    # git -c any key
+    ("qa-git-c-diff-external", "qa", "git -c diff.external='sh -c x' diff HEAD~1 HEAD", DENY),
+    ("qa-git-c-pager", "qa", "git -c core.pager=touch show", DENY),
+    ("qa-git-c-attached", "qa", "git -ccore.sshCommand=x fetch", DENY),
+    ("qa-git-c-quotepath", "qa", "git -c core.quotePath=false status", DENY),
+    # git push protections
+    ("qa-push-main", "qa", "git push origin main", DENY),
+    ("qa-push-head-main", "qa", "git push origin HEAD:main", DENY),
+    ("qa-push-master-refs", "qa", "git push origin HEAD:refs/heads/master", DENY),
+    ("qa-push-force", "qa", "git push --force origin feat/x", DENY),
+    ("qa-push-f", "qa", "git push -f origin feat/x", DENY),
+    ("qa-push-delete", "qa", "git push --delete origin feat/x", DENY),
+    ("qa-push-force-refspec", "qa", "git push origin +HEAD:feat/x", DENY),
+    ("qa-push-receive-pack", "qa", "git push --receive-pack='touch backend/app/x; git-receive-pack' /tmp/r HEAD:x", DENY),
+    ("qa-push-exec", "qa", "git push --exec=/tmp/e origin HEAD", DENY),
+    ("qa-push-feature-ok", "qa", "git push -u origin HEAD", ALLOW),
+    ("qa-push-feature-branch-ok", "qa", "git push origin feat/60-x", ALLOW),
+    # env-prefix / make-variable overrides
+    ("qa-compose-file-prefix", "qa", "COMPOSE_FILE=/tmp/evil.yaml docker compose up", DENY),
+    ("qa-makefiles-prefix", "qa", "MAKEFILES=/tmp/evil.mk make test", DENY),
+    ("qa-makeflags-prefix", "qa", "MAKEFLAGS=-f/tmp/evil.mk make test", DENY),
+    ("qa-shell-prefix", "qa", "SHELL=/tmp/evil make test", DENY),
+    ("qa-ldpreload-prefix", "qa", "LD_PRELOAD=/tmp/e.so make test", DENY),
+    ("qa-make-shell-var", "qa", "make test SHELL=/bin/bash .SHELLFLAGS=/tmp/e.sh", DENY),
+    ("qa-make-makefiles-var", "qa", "make test MAKEFILES=/tmp/evil.mk", DENY),
+    ("qa-make-plain-var-ok", "qa", "make test FOO=bar", ALLOW),
+    ("qa-path-prefix-ok", "qa", "PATH=/home/x/node24/bin:$PATH npm test", ALLOW),
+    ("qa-testdb-prefix-ok", "qa", "TEST_DATABASE_URL=postgresql://x@127.0.0.1/db make test", ALLOW),
+    # export denylist
+    ("qa-export-shell", "qa", "export SHELL=/tmp/evil", DENY),
+    ("qa-export-compose", "qa", "export COMPOSE_FILE=/tmp/e.yaml", DENY),
+    # attached curl output flags
+    ("qa-curl-o-attached", "qa", "curl -sobackend/app/x http://localhost:8765/", DENY),
+    ("qa-curl-o-cluster", "qa", "curl -sLo backend/app/x http://localhost:8765/", DENY),
+    ("qa-curl-big-O", "qa", "curl -O http://localhost:8765/f", DENY),
+    ("qa-curl-D-attached", "qa", "curl -Dbackend/app/h http://localhost:8765/", DENY),
+    ("qa-curl-w-output", "qa", "curl -s -w '%output{backend/app/x}hi' http://localhost:8765/", DENY),
+    ("qa-curl-w-output-long", "qa", "curl --write-out '%output{backend/app/x}' http://localhost:8765/", DENY),
+    ("qa-curl-plain-get-ok", "qa", "curl -sSL http://localhost:8000/healthz", ALLOW),
+    ("qa-curl-w-plain-ok", "qa", "curl -s -w '%{http_code}' http://localhost:8000/healthz", ALLOW),
+    # /proc/self/cwd write
+    ("qa-proc-self-cwd", "qa", "cd backend/app && mkdir /proc/self/cwd/e2e && echo x > /proc/self/cwd/e2e/f.py", DENY),
+    ("qa-proc-pid-root", "qa", "touch /proc/1/root/backend/tests/x", DENY),
+    # node reading from stdin
+    ("qa-node-stdin-pipe", "qa", "echo 'require(\"fs\").writeFileSync(\"backend/app/x\",\"\")' | node", DENY),
+    ("qa-node-heredoc", "qa", "node <<'JS'\nrequire('fs')\nJS", DENY),
+    ("qa-node-dash", "qa", "node -", DENY),
+    ("qa-node-dashdash-script", "qa", "node -- frontend/scripts/generate-api.mjs", ALLOW),
+    # tool output flags
+    ("qa-npx-tsc-outdir", "qa", "npx tsc --outDir backend/app", DENY),
+    ("qa-npx-tsc-outfile", "qa", "npx tsc --outFile backend/app/b.js", DENY),
+    ("qa-npx-openapi-o", "qa", "npx openapi-typescript openapi.yaml -o backend/app/s.ts", DENY),
+    ("qa-npm-run-outdir", "qa", "npm run build -- --outDir ../backend/app", DENY),
+    ("qa-compose-build-output", "qa", "docker compose build --output type=local,dest=backend/app .", DENY),
+    ("qa-compose-config-o", "qa", "docker compose config -o backend/app/x", DENY),
+    ("qa-npx-tsc-outdir-inscope", "qa", "npx tsc --outDir frontend/tests/gen", ALLOW),
+    ("qa-npx-tsc-noemit-ok", "qa", "npx tsc --noEmit", ALLOW),
     # -- unaffected agents --
     ("engineer-redirect", "engineer", "echo x > backend/app/main.py", ALLOW),
     ("devops-sed", "devops", "sed -i 's/a/b/' .claude/settings.json", ALLOW),
@@ -611,10 +693,10 @@ class ScopeGuardTest(unittest.TestCase):
 
     def test_brace_expansion_matches_bash(self) -> None:
         """The hook expands unquoted {a,b} groups the way bash does (and leaves quoted ones alone)."""
-        spec = importlib.util.spec_from_file_location("scope_guard", HOOK)
+        spec = importlib.util.spec_from_file_location("_guard_impl", IMPL)
         assert spec and spec.loader
         guard = importlib.util.module_from_spec(spec)
-        sys.modules["scope_guard"] = guard  # dataclasses need the module registered
+        sys.modules["_guard_impl"] = guard  # dataclasses need the module registered
         spec.loader.exec_module(guard)
         for word in ["a{b,c}d", "{a,b}{c,d}", "x{,}y", "a{b,c{d,e}}f", '"{a,b}"', "{a}", "\\{a,b\\}",
                      '{a,"b,c"}', "pre/{x,../y}/z", "'{'a,b}", "{a,b'}'}", "plain", "{}"]:

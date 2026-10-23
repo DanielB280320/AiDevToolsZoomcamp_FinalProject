@@ -23,7 +23,7 @@ FitWise is built by a small team of Claude Code agents coordinated by an orchest
 
 Agent definitions live in [`.claude/agents/`](../.claude/agents/). Each runs as a Claude Code subagent with its own context, so the orchestrator's session stays small and each agent sees only what its task needs.
 
-The **QA and PM write scopes below are enforced**, not just documented: a `PreToolUse` hook in [`.claude/settings.json`](../.claude/settings.json) ([`scope_guard.py`](../.claude/hooks/scope_guard.py), [ADR 0008](adr/0008-enforce-agent-write-scopes-with-a-hook.md)) blocks their `Edit`/`Write`/`NotebookEdit` calls outside their directories, and checks every `Bash` command against a **per-role allow-list**: only a small, reviewed set of commands QA/PM actually need may run, writers must target their own directories, and anything else — an unknown program, a dynamic command name, an interpreter, a shell write out of scope — is denied (fail closed) with a message naming the command and the allowed directories. Engineer, DevOps and the main session are not affected. Tests: `scripts/test-hooks.sh`.
+The **QA and PM write scopes below are guarded**, not just documented (a guardrail against accidental out-of-scope writes, not a security boundary; ADR 0008): a `PreToolUse` hook in [`.claude/settings.json`](../.claude/settings.json) ([`scope_guard.py`](../.claude/hooks/scope_guard.py), [ADR 0008](adr/0008-enforce-agent-write-scopes-with-a-hook.md)) blocks their `Edit`/`Write`/`NotebookEdit` calls outside their directories, and checks every `Bash` command against a **per-role allow-list**: only a small, reviewed set of commands QA/PM actually need may run, writers must target their own directories, and anything else — an unknown program, a dynamic command name, an interpreter, a shell write out of scope — is denied (fail closed) with a message naming the command and the allowed directories. The hook is a guardrail, not a boundary: a determined agent can still write through tools that run repository code, so the real backstops are the git add/commit check, QA's self-check and the owner's PR review. Engineer, DevOps and the main session are not affected. Tests: `scripts/test-hooks.sh`.
 
 ## Roles
 
@@ -40,7 +40,7 @@ The **QA and PM write scopes below are enforced**, not just documented: a `PreTo
 ### PM — [`pm.md`](../.claude/agents/pm.md)
 - **Owns:** the backlog and the spec's consistency.
 - **Does:** turns spec sections into issues with testable AC; applies the Definition of Ready; splits large issues; moves issues Backlog → Ready when dependencies close; proposes spec changes as `docs/` PRs; keeps the decisions log current.
-- **Writes:** issues, issue comments, `docs/` and `.github/ISSUE_TEMPLATE/` only. Never production code or tests. *Enforced by the scope-guard hook.*
+- **Writes:** issues, issue comments, `docs/` and `.github/ISSUE_TEMPLATE/` only. Never production code or tests. *Guarded by the scope-guard hook.*
 
 ### Engineer — [`engineer.md`](../.claude/agents/engineer.md)
 - **Owns:** implementation of `role:engineer` issues (backend, frontend, engines).

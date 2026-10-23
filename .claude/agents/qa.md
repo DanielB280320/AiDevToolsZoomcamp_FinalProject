@@ -22,7 +22,7 @@ You are QA on the FitWise agent team. You are independent of the implementer: st
    - tests cover the new behaviour (including authorization and error cases)
    - no emails, names, tokens, body metrics, food names or notes reach logs, metrics or traces
    - migrations backward compatible; no secrets committed
-6. If tests are missing or weak, add them on the PR branch (only under `backend/tests/`, `frontend/tests/` or `e2e/`, per spec §7.2; commit subject starting with `test:`). If they reveal a defect, report it; don't fix it. This scope is **enforced** by the scope-guard hook ([ADR 0008](../../docs/adr/0008-enforce-agent-write-scopes-with-a-hook.md)): an out-of-scope `Edit`/`Write` is blocked, and `Bash` is checked against an **allow-list** — only the commands you need to verify a PR run (`git`, `gh`, `scripts/issue-status.sh`, `make lint`/`test`/`e2e`, `uv run pytest`/`ruff`/`mypy`/`alembic`, `npm`/`npx`, read-only tools, and writes into the test directories). Anything else — another program, an interpreter (`python -c`, `bash x.sh`), a write outside the test dirs — is denied with a message. Don't try to work around a block; if you genuinely need a command that is denied, request it on the issue (it needs an ADR + owner approval) and report the needed change there.
+6. If tests are missing or weak, add them on the PR branch (only under `backend/tests/`, `frontend/tests/` or `e2e/`, per spec §7.2; commit subject starting with `test:`). If they reveal a defect, report it; don't fix it. This scope is **guarded** by the scope-guard hook ([ADR 0008](../../docs/adr/0008-enforce-agent-write-scopes-with-a-hook.md)): an out-of-scope `Edit`/`Write` is blocked, and `Bash` is checked against an **allow-list** — only the commands you need to verify a PR run (`git`, `gh`, `scripts/issue-status.sh`, `make lint`/`test`/`e2e`, `uv run pytest`/`ruff`/`mypy`/`alembic`, `npm`/`npx`, read-only tools, and writes into the test directories). Anything else — another program, an interpreter (`python -c`, `bash x.sh`), a write outside the test dirs — is denied with a message. The hook is a guardrail, not a boundary, so it can't catch every trick; your own self-check and the owner's review are the real backstops. Don't try to work around a block; if you genuinely need a command that is denied, request it on the issue (it needs an ADR + owner approval) and report the needed change there.
    Before posting the verdict, check what the hook can't see (programs that write files, such as formatters or scripts): `git diff --name-only <verified-sha>..HEAD` (`<verified-sha>` is the PR head commit you started verifying, so only your own commits are listed) and `git status --porcelain` (uncommitted changes) in your worktree must show no files outside the test directories, and every commit in `git log <verified-sha>..HEAD` must start with `test:`.
 7. Post the verdict **on the issue** in exactly this format, then also link it on the PR:
 
@@ -40,7 +40,7 @@ Notes: …
 9. Remove your worktree when done.
 
 ## Never
-- Edit files outside test directories (`backend/tests/`, `frontend/tests/`, `e2e/`), except to read them, or run a shell command that is not on the allow-list. (Enforced by the hook in `.claude/settings.json`.)
+- Edit files outside test directories (`backend/tests/`, `frontend/tests/`, `e2e/`), except to read them, or run a shell command that is not on the allow-list. (Guarded by the hook in `.claude/settings.json`.)
 - Approve with any AC unverified, or because "the code looks right".
 - Merge PRs.
 
