@@ -23,13 +23,14 @@ all targets.
 
 | Command | What it does |
 |---|---|
-| `make up` | `docker compose up --build --wait`; the backend runs `alembic upgrade head` before serving |
+| `make up` | `docker compose up --build --wait`: db, the one-shot `migrate` step (migrations + seed), then backend and frontend |
 | `make test` | Backend unit + integration tests (throwaway Postgres container on `127.0.0.1:${TEST_DB_PORT}`, default 15432) and frontend tests. Uses `TEST_DATABASE_URL` instead if it is already set |
 | `make lint` | ruff, ruff format --check, mypy, eslint, tsc, generated API client up to date (`npm run check:api`), `openapi.yaml` lint (Redocly) |
 | `make e2e` | Playwright project in `e2e/` against the running stack (`BASE_URL`, #65) |
 | `make check-log-privacy` | Smoke check (stack running) that no query string, user UUID or numeric id in a path, client IP, referrer or token reaches container logs, and that nginx access lines are valid JSON; with the backend up and down |
 | `make contract-smoke` | Contract smoke (stack running): schemathesis checks the responses of every operation the backend serves against `openapi.yaml`, with a throwaway signed-in athlete |
 | `make scan` | Security scans: `scan-secrets` (gitleaks, full history; run from a regular clone), `scan-deps` (pip-audit, npm audit), `scan-images` (Trivy, HIGH/CRITICAL with a fix) |
+| `make rollback-compat` | Rollback guard: builds the previous release's backend image (`PREV_REF`, default the merge-base with `origin/main`) and this tree's, migrates with the new one, rolls back without the migration step and checks `readyz` (own Compose project, nothing published) |
 | `make build TAG=<sha>` | Build `<IMAGE_PREFIX>-backend:<TAG>` and `<IMAGE_PREFIX>-frontend:<TAG>` |
 
 ### CI
@@ -38,8 +39,27 @@ all targets.
 to `main`, using the make targets above: backend lint and tests (Postgres 16 service), frontend
 lint/type-check/client drift/tests, OpenAPI lint, secret and dependency scans, both image builds
 with a Trivy scan (never pushed), then the stack is started for `make contract-smoke` and
-`make check-log-privacy`. `main` requires the aggregate check **CI passed**. Intentional fake
+`make check-log-privacy`. When a change touches migrations, the backend image or `compose*.yaml`,
+the job **Rollback compatibility** runs `make rollback-compat` against the PR's base. `main` requires the aggregate check **CI passed**. Intentional fake
 credentials in tests need a trailing `# gitleaks:allow` comment.
+
+### Migrations, deploys and rollbacks
+
+Migrations and the F4.1 seed run only in the one-shot `migrate` service, from the same image as
+the backend (`python -m app.migrate`). The backend container only starts the app; it never
+migrates or seeds, so a restart never touches the schema and an older image can always start
+on a newer schema (spec §11, §13; D50, ADR 0009).
+
+| Situation | Command |
+|---|---|
+| Local | `make up` (the backend waits for `migrate` to exit 0) |
+| Forward deploy | `TAG=<sha> docker compose run --rm migrate && TAG=<sha> docker compose up -d --no-deps --wait backend frontend` |
+| Rollback | `TAG=<PREVIOUS_TAG> docker compose up -d --no-deps --wait backend frontend` (no migration step, no down-migration) |
+| Restart | `docker compose restart backend` (no migration step) |
+
+The forward deploy runs the step on its own first: if a migration fails, it exits non-zero and
+the running backend keeps serving the old tag. A plain `docker compose up` would also run the
+step first, but it replaces the old backend container before the step finishes.
 
 ### Several stacks side by side
 
