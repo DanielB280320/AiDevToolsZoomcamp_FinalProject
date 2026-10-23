@@ -37,7 +37,7 @@ LEAK_MARKERS = {
     "body_fat_pct": "23.7177",
     "food_name": "Smoked Paprika Tofu",
     "note": "left knee hurts after squats",
-    "password": "pw-qa75-correct-horse",
+    "password": "pw-qa75-correct-horse",  # gitleaks:allow (fake)
     "authorization": "Bearer eyJxYTc1.eyJzZWNyZXQ.qa75sig",
     "cookie": "fitwise_session=qa75-cookie-value",
     "set_cookie": "fitwise_session=qa75-set-cookie-value",

@@ -1,0 +1,214 @@
+# Pull-request pipeline (spec §13, §6.4, §10; issue #11).
+# Every job calls the same make target a developer runs locally, so CI and laptops cannot drift.
+# Branch protection on `main` requires the single aggregate check "CI passed" (job `ci-passed`),
+# so jobs can be added or renamed here without touching the protection rule.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per PR / branch; a new push cancels the outdated run (never on main).
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FORCE_COLOR: "1"
+  UV_VERSION: "0.12.9"
+
+jobs:
+  backend-lint:
+    name: Backend lint (ruff, mypy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: make lint-backend
+
+  backend-test:
+    name: Backend tests (pytest, Postgres 16)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # Not a secret: ephemeral service container, no real data (same as compose db-test).
+          POSTGRES_DB: postgres
+          POSTGRES_USER: fitwise_test
+          POSTGRES_PASSWORD: fitwise_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -q -U fitwise_test -d postgres"
+          --health-interval 2s --health-timeout 3s --health-retries 15
+    env:
+      # Set -> `make test-backend` uses this database instead of starting the compose db-test.
+      TEST_DATABASE_URL: postgresql+psycopg://fitwise_test:fitwise_test@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: make test-backend
+
+  frontend:
+    name: Frontend (eslint, tsc, client drift, vitest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # lint-frontend = eslint + tsc --noEmit + `npm run check:api` (generated client up to date).
+      - run: make lint-frontend
+      - run: make test-frontend
+
+  openapi-lint:
+    name: OpenAPI lint (Redocly)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+      - run: make lint-openapi
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history: a secret removed in a later commit is still leaked
+          persist-credentials: false
+      - run: make scan-secrets
+
+  dependency-scan:
+    name: Dependency scan (pip-audit, npm audit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: make scan-deps
+
+  images:
+    name: Images (build, Trivy scan, contract smoke)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # Images are tagged with the commit SHA, as in CD (#13). Built and loaded locally, never pushed.
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false # only uvx schemathesis runs here
+      - name: Create .env from .env.example (local placeholders only)
+        run: cp .env.example .env
+      - name: Build both images from compose.yaml (no push)
+        run: |
+          docker buildx bake -f compose.yaml --pull --load \
+            --set backend.cache-from=type=gha,scope=backend \
+            --set backend.cache-to=type=gha,scope=backend,mode=max \
+            --set frontend.cache-from=type=gha,scope=frontend \
+            --set frontend.cache-to=type=gha,scope=frontend,mode=max \
+            backend frontend
+      - name: Image vulnerability scan (Trivy, HIGH/CRITICAL with a fix)
+        run: make scan-images
+      - name: Start the stack
+        run: docker compose up --no-build --wait --wait-timeout 180
+      - name: Contract smoke (schemathesis vs openapi.yaml)
+        run: make contract-smoke
+      - name: Log privacy smoke
+        run: make check-log-privacy
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+      - name: Stop the stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  hook-tests:
+    name: Agent hook tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Scope-guard hook tests (ADR 0008, #60). Skipped until scripts/test-hooks.sh lands on main.
+      - run: |
+          if [ -f scripts/test-hooks.sh ]; then
+            bash scripts/test-hooks.sh
+          else
+            echo "scripts/test-hooks.sh not present yet (#60); nothing to run."
+          fi
+
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs:
+      - backend-lint
+      - backend-test
+      - frontend
+      - openapi-lint
+      - secret-scan
+      - dependency-scan
+      - images
+      - hook-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All required jobs succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          for r in $RESULTS; do
+            if [ "$r" != "success" ]; then echo "::error::a required CI job did not succeed ($r)"; exit 1; fi
+          done

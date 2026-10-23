@@ -28,7 +28,7 @@ FORBIDDEN_FIELDS: dict[str, Any] = {
     "display_name": "Ann Athlete",
     "name": "Annabel Secretname",
     "password": "hunter2-correct-horse",
-    "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl",
+    "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl",  # gitleaks:allow (fake)
     "cookie": "fitwise_session=s3cr3t-cookie-value",
     "weight_kg": 84.2371,
     "height_cm": 181.4372,
