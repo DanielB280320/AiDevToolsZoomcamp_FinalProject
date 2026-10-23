@@ -22,6 +22,9 @@ FROM nginxinc/nginx-unprivileged:${NGINX_VERSION}-alpine AS runtime
 ENV NGINX_ENVSUBST_FILTER="^(BACKEND_|NGINX_)" \
     BACKEND_UPSTREAM=backend:8000 \
     NGINX_RESOLVER=127.0.0.11
+# Pull in the brotli-libs security fix (CVE-2026-111497, fixed in 1.2.1-r0) until the base image ships it.
+USER root
+RUN apk add --no-cache --upgrade 'brotli-libs>=1.2.1-r0'
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 USER 101
