@@ -55,7 +55,7 @@ CASES = [
     ("double_best_capped", dbl(sets([12, 12, 11])), "increase_reps", 40.0, 12, 0),
     ("double_fewer_sets", dbl(sets([12, 12])), "increase_reps", 40.0, 12, 1),
     ("double_extra_sets_ok", dbl(sets([12, 12, 12, 12])), "increase_weight", 42.5, 8, 0),
-    ("double_extra_set_short", dbl(sets([12, 12, 12, 10])), "increase_reps", 40.0, 12, 0),
+    ("double_extra_set_ignored", dbl(sets([12, 12, 12, 10])), "increase_weight", 42.5, 8, 0),
     (
         "double_mixed_weights_use_target",
         dbl(sets([12, 12], 40.0) + sets([12], 30.0)),
@@ -350,10 +350,24 @@ def test_deload_on_plate_grid_and_below_target(inp: ProgressionInput) -> None:
         assert s.weight_kg is not None
         assert s.weight_kg >= min_weight_kg(inp.equipment)
         assert s.weight_kg <= max(inp.target_weight_kg or 0, min_weight_kg(inp.equipment))
-        assert abs(
-            s.weight_kg / step - round(s.weight_kg / step)
-        ) < 1e-6 or s.weight_kg == min_weight_kg(inp.equipment)
+        k = (s.weight_kg - min_weight_kg(inp.equipment)) / step
+        assert abs(k - round(k)) < 1e-6
         assert s.consecutive_failures == 0
+
+
+@given(inputs())
+def test_increase_on_plate_grid_from_minimum(inp: ProgressionInput) -> None:
+    s = suggest(inp)
+    if s.action == "increase_weight":
+        step = inp.plate_step_kg or 2.5
+        assert s.weight_kg is not None
+        k = (s.weight_kg - min_weight_kg(inp.equipment)) / step
+        assert abs(k - round(k)) < 1e-6
+
+
+def test_cardio_region_rounds_to_minute() -> None:
+    s = suggest(timed([1200], 1200, region="cardio", sets_planned=1))
+    assert s.seconds == 1320
 
 
 @given(inputs())

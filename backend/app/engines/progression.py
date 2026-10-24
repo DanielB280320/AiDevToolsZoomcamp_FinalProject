@@ -8,9 +8,9 @@ and the feature flag live outside the engine (#85).
 Definitions used by the rules (spec F11, D56):
 - Working sets are the logged sets performed at the planned target weight (mixed weights within a
   session use the planned target weight; sets at other weights are ignored).
-- A session is a *success* when at least the planned number of working sets reached the goal reps
-  (linear: target reps; double / bodyweight: max reps; timed: target seconds). Extra sets that
-  fall short also count against success.
+- A session is a *success* when the planned number of working sets reached the goal reps (linear:
+  target reps; double / bodyweight: max reps; timed: target seconds). Sets beyond the plan are
+  ignored.
 - A session is a *failure* (for deload) when it was not skipped and the working sets did not reach
   the minimum goal (linear: target reps; double / bodyweight: min reps) on every planned set.
 - A skipped exercise (no sets logged) yields no suggestion and leaves the failure counter alone.
@@ -80,6 +80,7 @@ class ProgressionInput:
     is_first_session: bool = False
     allows_added_weight: bool = False
     imperial: bool = False
+    region: str | None = None  # "cardio" selects the 1-minute duration rounding
     plate_step_kg: float | None = None  # overrides the equipment default
 
 
@@ -105,10 +106,13 @@ def min_weight_kg(equipment: str) -> float:
     return MIN_WEIGHT_KG_BY_EQUIPMENT.get(equipment, 0.0)
 
 
-def _round_step(value: float, step: float, mode: Literal["nearest", "down"]) -> float:
-    n = value / step
+def _round_step(
+    value: float, step: float, mode: Literal["nearest", "down"], base: float = 0.0
+) -> float:
+    """Round onto the grid base + k * step (the plate grid starts at the minimum weight)."""
+    n = (value - base) / step
     k = math.floor(n + _EPS) if mode == "down" else math.floor(n + 0.5 + _EPS)
-    return k * step
+    return base + k * step
 
 
 def _fmt_w(kg: float, imperial: bool) -> str:
@@ -147,9 +151,9 @@ def _inputs(p: ProgressionInput) -> dict[str, Any]:
 
 def _increase(target_w: float, increment: float, step: float, floor_kg: float) -> float:
     """target + one increment on the plate grid, never more than one increment above target."""
-    w = _round_step(target_w + increment, step, "nearest")
+    w = _round_step(target_w + increment, step, "nearest", floor_kg)
     if w > target_w + increment + _EPS:
-        w = _round_step(target_w + increment, step, "down")
+        w = _round_step(target_w + increment, step, "down", floor_kg)
     return max(floor_kg, w)
 
 
@@ -185,7 +189,7 @@ def suggest(p: ProgressionInput) -> Suggestion:
         weights = Counter(s.weight_kg for s in done if s.weight_kg is not None)
         if weights:
             used = max(weights, key=lambda w: (weights[w], w))
-            w = max(floor_kg, _round_step(used, step, "nearest"))
+            w = max(floor_kg, _round_step(used, step, "nearest", floor_kg))
             return out(
                 "calibrate",
                 f"First session: {weights[used]} of {len(done)} sets at "
@@ -196,7 +200,8 @@ def suggest(p: ProgressionInput) -> Suggestion:
             )
 
     target_w = p.target_weight_kg or 0.0
-    work = [s for s in done if abs((s.weight_kg or 0.0) - target_w) < 1e-6]
+    at_target = [s for s in done if abs((s.weight_kg or 0.0) - target_w) < 1e-6]
+    work = at_target[: p.sets_planned]  # sets beyond the plan are ignored
     reps_done = [s.reps or 0 for s in work]
     is_bw = p.exercise_type == "bodyweight"
     linear = p.rule == "linear" and not is_bw
@@ -247,7 +252,7 @@ def suggest(p: ProgressionInput) -> Suggestion:
     failed = len(work) < p.sets_planned or any(r < low for r in reps_done)
     count = p.consecutive_failures + 1 if failed else 0
     if failed and p.deload_enabled and not is_bw and count >= DELOAD_FAILING_SESSIONS:
-        w = max(floor_kg, _round_step(target_w * DELOAD_FACTOR, step, "down"))
+        w = max(floor_kg, _round_step(target_w * DELOAD_FACTOR, step, "down", floor_kg))
         return out(
             "deload",
             f"{count} consecutive sessions below {low} reps at {wtxt} → deload to "
@@ -288,7 +293,8 @@ def _timed(
     target = p.target_seconds
     if target is None:
         return out("none", "Missing duration target: no suggestion.")
-    step = CARDIO_ROUNDING_SECONDS if p.equipment == "cardio_machine" else TIMED_ROUNDING_SECONDS
+    cardio = p.equipment == "cardio_machine" or p.region == "cardio"
+    step = CARDIO_ROUNDING_SECONDS if cardio else TIMED_ROUNDING_SECONDS
     if len(done) < p.sets_planned or any((s.seconds or 0) < target for s in done):
         return out(
             "hold", f"Not all sets completed at {target} s → keep {target} s.", seconds=target
