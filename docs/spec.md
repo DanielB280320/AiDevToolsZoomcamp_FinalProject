@@ -117,6 +117,7 @@ A step-by-step wizard after first sign-in. All values editable later in Profile.
 - [ ] F2.3 Values outside plausible ranges are rejected (height 120–230 cm, weight 35–300 kg, body fat 3–60 %, measurements 20–200 cm).
 - [ ] F2.4 Number of preferred training days must equal training days per week.
 - [ ] F2.5 Units shown follow the user's setting; values are stored in metric.
+- [ ] F2.6 If the Navy method (F3.3) yields a body fat outside 3–60 %, the result is ignored (not stored as the body fat), the targets fall back to Mifflin-St Jeor (F3.1) and the explanation says so (D55).
 
 ### F3. Calculation engine (targets) — *Must*
 
@@ -124,7 +125,7 @@ Pure functions with no I/O; every output includes a human-readable explanation. 
 
 **F3.1 BMR**
 - Body fat known (entered or Navy): **Katch-McArdle** — `BMR = 370 + 21.6 × LBM_kg`, `LBM = weight × (1 − bf%)`.
-- Otherwise **Mifflin-St Jeor** — `BMR = 10·kg + 6.25·cm − 5·age + s`, where `s = +5` (male), `−161` (female), `−78` (prefer not to say).
+- Otherwise (including when the Navy estimate is outside 3–60 %, which is ignored, D55) **Mifflin-St Jeor** — `BMR = 10·kg + 6.25·cm − 5·age + s`, where `s = +5` (male), `−161` (female), `−78` (prefer not to say).
 
 **F3.2 Baseline (non-exercise) expenditure** — `baseline = BMR × lifestyle_factor`
 
@@ -166,6 +167,7 @@ Training calories are **not** included in the lifestyle factor; they are added f
 - [ ] F3.3 Floor is applied and explained when the computed target falls below it.
 - [ ] F3.4 Macro kcal sum equals target kcal ± 1 % (except when carbs are clamped at 0, which is explained).
 - [ ] F3.5 Every result exposes `explanation` text listing the formula and inputs used.
+- [ ] F3.6 A Navy body-fat result outside 3–60 % is ignored: BMR uses Mifflin-St Jeor and the explanation states that the Navy estimate was out of range and ignored (D55).
 
 ### F4. Exercise catalog — *Must*
 
@@ -201,9 +203,10 @@ Rep ranges and cardio by goal:
 | Overall wellness | 8–12 | 12–15 | 20 min |
 
 - Working sets per exercise: beginner 2–3, intermediate 3–4, advanced 3–5. Exercises per session scale with session length.
-- Default progression rule: **linear** for beginners' main lifts, **double progression** otherwise; **deload** enabled for both.
+- **Estimated session duration** (D54): `Σ over exercises (sets × (rest_seconds + 45 s)) + cardio minutes + 5 min warm-up`. The 45 s is the assumed working time per set; the default `rest_seconds` is 90.
+- Default progression rule: **linear** for beginners' main lifts, **double progression** otherwise; **deload** enabled for both. Under linear progression the fixed target reps are the **middle of the rep range**, rounded down if not an integer (e.g. 8 for 6–10, 9 for 6–12; D54).
 - **Calibration (starting weights):** generated targets have no weight in week 1 ("choose a weight you can do for the target reps with 2 reps left"). The first logged weight becomes the baseline.
-- Exercises on the user's "avoid" list are replaced by the nearest alternative (same muscle group and equipment).
+- Exercises on the user's "avoid" list are replaced by the nearest alternative (same muscle group and equipment). If there is none, fall back to a **bodyweight** exercise of the same muscle group; if there is none either, the exercise is dropped and the plan carries a warning naming the dropped exercise (D54).
 
 **AC**
 - [ ] F5.1 For every (days, equipment) combination the generator returns a valid plan whose sessions fit the session length (estimated duration ≤ chosen length).
@@ -211,6 +214,7 @@ Rep ranges and cardio by goal:
 - [ ] F5.3 Sessions are placed exactly on the user's preferred weekdays.
 - [ ] F5.4 Week-1 strength targets have empty weight and show the calibration hint.
 - [ ] F5.5 The generator is deterministic for the same inputs (snapshot tests).
+- [ ] F5.6 An avoided exercise with no same-muscle/same-equipment alternative is replaced by a bodyweight exercise of the same muscle group; if none exists it is dropped and the plan returns a warning (D54).
 
 ### F6. Foods and meals — *Must*
 
@@ -314,7 +318,10 @@ Runs per exercise when a session is finished. Pure functions; each output has a 
 | **Timed / cardio** | All sets completed → duration + 10 % (rounded to 5 s for holds, 1 min for cardio). |
 | **Calibration** | After the first logged session of an exercise, the suggestion sets the target weight to the weight used. |
 
-- **Rounding**: to the exercise's plate step (default 2.5 kg barbell/machine, 2 kg dumbbell; imperial users 5 lb / 5 lb), never below the empty-bar/zero weight.
+- **Rounding**: to the exercise's plate step (default 2.5 kg barbell/machine, 2 kg dumbbell; imperial users 5 lb / 5 lb), never below the minimum weight.
+- **Minimum weight** (D56): barbell exercises 20 kg (the empty bar; displayed as 45 lb for imperial users), all other equipment 0.
+- **Bodyweight "added weight"** (D56): at the top of the rep range the engine suggests "+ added weight" only when the exercise has `allows_added_weight = true`; otherwise "ready for a harder variation".
+- **Calibration with mixed weights** (D56): if the first session used several weights, the target weight is the weight used on the most sets; ties are broken by the heaviest weight.
 - **Suggestions must be accepted**: suggestions are created with status `pending`. The athlete or the linked coach can accept, reject or edit-then-accept. Accepted values become the targets for the next sessions of that exercise. If a session starts while a suggestion is pending, it uses the current targets and shows a banner.
 
 **AC**
@@ -322,6 +329,7 @@ Runs per exercise when a session is finished. Pure functions; each output has a 
 - [ ] F11.2 Property tests: a suggestion never increases weight by more than one increment; a deload never goes below the minimum weight.
 - [ ] F11.3 Rejected suggestions change nothing; the next finished session generates a fresh suggestion.
 - [ ] F11.4 Every suggestion stores rule, inputs and reason (e.g. "All 3 sets reached 12 reps at 40 kg → 42.5 kg × 8").
+- [ ] F11.6 Calibration with mixed weights uses the weight on the most sets (tie: heaviest); no suggested weight is ever below the minimum weight; bodyweight top-of-range suggestions follow `allows_added_weight` (D56).
 - [ ] F11.5 Engine version is selected by the feature flag `progression_engine` (`v1` default). Unknown versions fall back to `v1`.
 
 ### F12. Meal logging — *Must*
@@ -530,7 +538,7 @@ Events: pending progression suggestion, pending calorie adjustment, target-recal
 | `Entitlement` (stub) | user_id, key (`can_have_coach`), value — always true in MVP; future paid tier hook |
 | `BodyMetric` | user_id, date, weight_kg, body_fat_pct, neck/waist/hip_cm, bf_method |
 | `Targets` | user_id, valid_from, bmr, baseline, kcal, protein_g, carbs_g, fat_g, explanation, inputs (json) |
-| `Exercise` | id, owner_id (null = seed), name, muscle_group, equipment, type, met, increment_kg, region |
+| `Exercise` | id, owner_id (null = seed), name, muscle_group, equipment, type, met, increment_kg, region, allows_added_weight (bool; D56) |
 | `Food` | id, owner_id, source, external_code, name, kcal/protein/carbs/fat per 100 g, diet_tags, allergen_tags |
 | `Meal` / `MealItem` | meal: id, owner_id, name, slots · item: meal_id, food_id, grams |
 | `Plan` | id, athlete_id, version, source (`generated`/`custom`), active, created_by, created_at |
@@ -602,7 +610,7 @@ Coverage target: ≥ 90 % lines for `backend/app/engines/`, ≥ 75 % backend ove
 
 ## 12. Deployment (AWS)
 
-- **Two EC2 instances**: `fitwise-dev` and `fitwise-prod` (Amazon Linux 2023 or Ubuntu LTS, Docker + Compose). Prod also runs the observability stack and the on-call responder.
+- **Two EC2 instances**: `fitwise-dev` and `fitwise-prod` (Amazon Linux 2023 or Ubuntu LTS, Docker + Compose). Prod also runs the observability stack and the on-call responder. Region **us-east-2**; `fitwise-dev` is a **t3.small** and `fitwise-prod` a **t3.medium** (about USD 45 per month in total; D52).
 - Reached via each instance's **public DNS name over HTTP** (see §6.4 limitation). Elastic IPs keep addresses stable.
 - Security groups: 80 open; 22 restricted to the owner's IP and GitHub Actions deploy (or use SSM); Grafana port restricted to the owner's IP; prod OTLP port open only to the dev instance.
 - Images are built once per commit and pushed to GHCR tagged with the git SHA. Each server keeps `CURRENT_TAG` and `PREVIOUS_TAG` for rollback.
@@ -657,6 +665,8 @@ Where migrations run ([D50](#19-decisions-log), [ADR 0009](adr/0009-separate-mig
 
 Both include the affected route, time window, dashboard link and runbook link, handle "no data" as OK, and notify the on-call responder via webhook.
 
+**Sequencing (D53):** the rules, contact point and notification policy are provisioned as code in M1, but the logging endpoints they watch only exist from M2 (#29) and M3 (#37). The "fires and resolves" test and demo scenario S1 therefore run after #29, not in M1.
+
 ### 15.2 On-call responder
 - A small Python service on the prod host (systemd) receives Grafana webhooks at `/alerts`, deduplicates per alert fingerprint, and saves context (Prometheus series, Loki error logs, Tempo failing traces) to `incidents/<id>/`.
 - It launches **headless Claude Code** with a runbook prompt and a strict tool allow-list:
@@ -689,8 +699,8 @@ Fault-injection flags exist only for demonstrations, are off by default and are 
 Infrastructure criteria are secured before features grow:
 
 1. **M0 — Foundations:** repo, CLAUDE.md + docs, agent team definitions, backlog with acceptance criteria, `openapi.yaml` skeleton.
-2. **M1 — Walking skeleton:** sign-up/login + a minimal Today page + Postgres; `make up`, `make test`; Docker Compose; CI on PRs; deploy to dev on merge; manual prod promotion with rollback; OTel + Grafana stack; both alerts; on-call responder with scenario S1.
-3. **M2 — Athlete core:** onboarding, targets engine, catalog, training generator, calendar, training logging, progression engine (+ S2 scenario).
+2. **M1 — Walking skeleton:** sign-up/login + a minimal Today page + Postgres; `make up`, `make test`; Docker Compose; CI on PRs; deploy to dev on merge; manual prod promotion with rollback; OTel + Grafana stack; both alert rules provisioned as code; on-call responder.
+3. **M2 — Athlete core:** onboarding, targets engine, catalog, training generator, calendar, training logging, progression engine (+ S2 scenario); once the training logging API (#29) exists, the alerts' "fires and resolves" test and demo scenario S1 (D53).
 4. **M3 — Nutrition:** foods/meals, Open Food Facts, meal plan generator, meal logging, energy balance.
 5. **M4 — Custom mode & insights:** plan editor, charts, body tracking + adaptive calories, notifications.
 6. **M5 — Coach mode:** linking, coach dashboard, plan editing, notes.
@@ -782,6 +792,11 @@ Decisions with architectural trade-offs have an ADR in [`docs/adr/`](adr/README.
 | D49 | *Proposed (PM, implemented in #8; awaiting owner confirmation).* F1.6 sign-in lockout: failures are counted per email, case-insensitively, whether or not an account exists, in a sliding 15-minute window. Once 5 failures are in the window, **every** sign-in for that email returns `429 rate_limited` with `Retry-After` (seconds until the oldest of them leaves the window), **even with the correct password**, and is not evaluated or counted. Answering 200 to a correct password during the lockout would turn the 429 into a password oracle. A successful sign-in clears the count. Failures are stored as a SHA-256 of the lower-cased email, never the email itself, and only for the window |
 | D50 | Migrations and the F4.1 seed run as a **separate one-shot step** from the image being deployed, before the backend starts: on `make up` and on forward deploys. A rollback to `PREVIOUS_TAG` **skips** the step. The backend container only starts the app and never migrates or seeds on start (§11, §13; [ADR 0009](adr/0009-separate-migration-step.md); #82) |
 | D51 | Every subagent (PM, Engineer, QA, DevOps) runs on **Sonnet with medium effort**, pinned in its frontmatter; the orchestrator may run QA on Opus for a security-, hook-, auth- or migration-heavy PR. To cut repeated QA work without weakening verification, QA cites CI for the exact head SHA rather than re-running lint and tests, re-verifies only the failing and touched AC after a FAIL, judges AC as written (CLAUDE.md rules always block), reads only the referenced spec sections, and escalates to the owner after 3 FAILs ([process.md §6](process.md#6-qa-verification), [team.md](team.md#models-and-effort)) |
+| D52 | AWS region **us-east-2**; `fitwise-dev` = t3.small, `fitwise-prod` = t3.medium, about USD 45 per month in total (owner, 2026-10-24; #12) |
+| D53 | Alert rules KeyJourneyErrors/KeyJourneyLatency are provisioned as code in M1 (#18). The "fires and resolves" test and demo scenario S1 (#20) move to after the logging API (#29), because the watched endpoints do not exist in M1 (owner chose option b, 2026-10-24) |
+| D54 | F5 generator: (1) estimated session duration = Σ sets × (rest_seconds + 45 s) + cardio minutes + 5 min warm-up, default rest 90 s; (2) beginners' main lifts under linear progression use the middle of the rep range, rounded down; (3) an avoided exercise with no same-muscle/same-equipment alternative falls back to a bodyweight exercise of the same muscle group, else is dropped with a plan warning (owner, 2026-10-24; #23) |
+| D55 | A Navy body-fat result outside 3–60 % is ignored; BMR falls back to Mifflin-St Jeor and the explanation says so (owner, 2026-10-24; #25) |
+| D56 | F11 progression: (1) `Exercise.allows_added_weight` (bool) decides between "+ added weight" and "ready for a harder variation" for bodyweight exercises; (2) calibration with mixed weights uses the weight on the most sets, ties broken by the heaviest; (3) minimum weight is the empty bar, 20 kg (45 lb displayed for imperial users), for barbell exercises and 0 for all other equipment (owner, 2026-10-24; #31) |
 
 ## 20. Assumptions and open questions
 
