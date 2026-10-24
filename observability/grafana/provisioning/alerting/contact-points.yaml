@@ -1,0 +1,15 @@
+# Contact point: webhook to the on-call responder (spec §15.2). The URL comes from the environment
+# (ONCALL_WEBHOOK_URL, see .env.example), never from git. The payload carries labels and
+# annotations only (route, window, severity, env, links): no user data.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: oncall-responder
+    receivers:
+      - uid: fitwise-oncall-webhook
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: $ONCALL_WEBHOOK_URL
+          httpMethod: POST

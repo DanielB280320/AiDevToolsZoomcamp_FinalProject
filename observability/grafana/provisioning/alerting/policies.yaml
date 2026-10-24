@@ -1,0 +1,19 @@
+# Notification policy: severity=page goes to the on-call responder; so does everything else (it is
+# the only receiver). Grouped per alert and route so each failing route is its own incident.
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: oncall-responder
+    group_by: [alertname, route]
+    group_wait: 10s
+    group_interval: 1m
+    repeat_interval: 4h
+    routes:
+      - receiver: oncall-responder
+        object_matchers:
+          - [severity, "=", page]
+        group_by: [alertname, route]
+        group_wait: 10s
+        group_interval: 1m
+        repeat_interval: 4h

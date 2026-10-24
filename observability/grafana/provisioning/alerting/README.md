@@ -1,14 +1,21 @@
 # Grafana-managed alerting, provisioned as code
 
 Grafana loads every `*.yaml` file in this directory at start-up
-(`/etc/grafana/provisioning/alerting`). The directory is empty on purpose until the alerts land:
+(`/etc/grafana/provisioning/alerting`). Nothing is configured by hand (#18, spec §15.1).
 
-| File (planned) | Holds | Issue |
-|---|---|---|
-| `rules.yaml` | KeyJourneyErrors, KeyJourneyLatency (`env=prod`, spec §15.1) | #18 |
-| `contact-points.yaml` | Webhook to the on-call responder (`/alerts`) | #18 / on-call |
-| `policies.yaml` | Notification policy routing `severity=page` to the responder | #18 |
+| File | Holds |
+|---|---|
+| `rules.yaml` | KeyJourneyErrors (5xx > 5 % over 5 min, >= 20 requests) and KeyJourneyLatency (p95 > 1 s over 10 min) on the three logging endpoints, `env="prod"`, severity `page`, no data = OK |
+| `contact-points.yaml` | Webhook `oncall-responder` to `$ONCALL_WEBHOOK_URL` (the responder's `/alerts`; from the environment, never from git) |
+| `policies.yaml` | Routes `severity=page` to `oncall-responder`, grouped by alert and route |
 
-Rules query the datasource UIDs `prometheus`, `loki` and `tempo` (see
-`../datasources/datasources.yaml`); annotations link the dashboard UIDs `fitwise-key-journey`,
-`fitwise-engines`, `fitwise-service-health` and a runbook in `docs/runbooks/`.
+Each alert carries the annotations `route`, `window`, `dashboard_url` (Key journey, `env=prod`) and
+`runbook_url` (`docs/runbooks/key-journey-errors.md` / `key-journey-latency.md`, written in #68).
+Labels are only `severity`, `env`, `service` plus the query's `route`: never user data.
+
+The logging endpoints arrive in M2/M3 (#29, #37), so until then the rules see no series and stay OK
+(D53). The fires-and-resolves test with a stub receiver is #97.
+
+Checks: `backend/tests/unit/test_alert_rules.py` (static, runs in `make test`) and `make check-obs`
+(Grafana loaded the rules, contact point and policy). The datasource UIDs are in
+`../datasources/datasources.yaml`.

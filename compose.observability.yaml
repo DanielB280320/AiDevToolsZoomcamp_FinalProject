@@ -141,6 +141,8 @@ services:
       GF_NEWS_NEWS_FEED_ENABLED: "false"
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
       GF_SERVER_ROOT_URL: http://localhost:${GRAFANA_PORT:-3030}
+      # Webhook to the on-call responder (#18); the real URL is set on prod (#67).
+      ONCALL_WEBHOOK_URL: ${ONCALL_WEBHOOK_URL:-http://host.docker.internal:8099/alerts}
       GF_LOG_LEVEL: warn
       GF_LOG_MODE: console
     volumes:
