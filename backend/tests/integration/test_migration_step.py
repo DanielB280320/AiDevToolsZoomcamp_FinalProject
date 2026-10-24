@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.config import ProcessSettings
 from app.migrate import run_migration_step
 from app.migrations import ALEMBIC_DIR, BACKEND_DIR, load_migration_scripts
+from app.seed_exercises import SEED_EXERCISES
 from tests.conftest import JsonLogs, unreachable_database_url
 
 # A value that would be health data if it were a real row; it must never reach the logs.
@@ -100,12 +101,14 @@ def test_step_is_idempotent_and_the_seed_inserts_nothing_twice(
     assert [line["count"] for line in started] == [len(_ordered_revisions()), 0]
 
 
-def test_default_seed_hook_runs_and_loads_nothing_yet(
+def test_default_seed_hook_loads_the_exercise_catalog_once(
     fresh_database_url: str, json_logs: JsonLogs
 ) -> None:
-    """Until #22 adds the exercise catalog, the F4.1 hook exists, runs and inserts 0 rows."""
+    """The F4.1 hook runs after the migrations and inserts the seed exercises."""
     assert run_migration_step(_settings(fresh_database_url)) == 0
-    assert [line["count"] for line in json_logs.with_message("seed completed")] == [0]
+    assert [line["count"] for line in json_logs.with_message("seed completed")] == [
+        len(SEED_EXERCISES)
+    ]
 
 
 def test_a_failing_revision_fails_the_step_names_it_and_leaks_nothing(

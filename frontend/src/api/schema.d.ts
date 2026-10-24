@@ -278,6 +278,8 @@ export interface paths {
         /**
          * Create a custom exercise
          * @description Private to the creator; for coaches also usable in their linked athletes' plans.
+         *     `409` (`exercise_name_taken`) when the name, compared case-insensitively, is already a seed
+         *     exercise or one of the caller's own exercises.
          */
         post: operations["createExercise"];
         delete?: never;
@@ -1601,7 +1603,10 @@ export interface components {
             equipment: components["schemas"]["ExerciseEquipment"];
             muscle_group: components["schemas"]["MuscleGroup"];
         };
-        ExerciseInput: {
+        /** @description Request body of `createExercise`; unknown properties are rejected. */
+        ExerciseInput: components["schemas"]["ExerciseFields"];
+        /** @description Properties shared by `ExerciseInput` and `Exercise`. */
+        ExerciseFields: {
             name: string;
             muscle_group: components["schemas"]["MuscleGroup"];
             equipment: components["schemas"]["ExerciseEquipment"];
@@ -1610,8 +1615,13 @@ export interface components {
             /** @default 2.5 */
             increment_kg: number;
             region: components["schemas"]["BodyRegion"];
+            /**
+             * @description True for bodyweight exercises that can take extra load (belt, vest, dumbbell), so the progression engine may add weight once the rep target is reached.
+             * @default false
+             */
+            allows_added_weight: boolean;
         };
-        Exercise: components["schemas"]["ExerciseInput"] & {
+        Exercise: components["schemas"]["ExerciseFields"] & {
             id: components["schemas"]["Id"];
             is_custom: boolean;
             /** @description Creator of a custom exercise; `null` for seed exercises. */

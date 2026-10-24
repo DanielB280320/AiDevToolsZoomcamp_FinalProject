@@ -580,7 +580,10 @@ paths:
       tags: [Catalog]
       operationId: createExercise
       summary: Create a custom exercise
-      description: Private to the creator; for coaches also usable in their linked athletes' plans.
+      description: |
+        Private to the creator; for coaches also usable in their linked athletes' plans.
+        `409` (`exercise_name_taken`) when the name, compared case-insensitively, is already a seed
+        exercise or one of the caller's own exercises.
       x-fitwise-access: authenticated
       requestBody:
         required: true
@@ -3174,8 +3177,13 @@ components:
         muscle_group:
           $ref: '#/components/schemas/MuscleGroup'
     ExerciseInput:
+      description: Request body of `createExercise`; unknown properties are rejected.
+      allOf:
+        - $ref: '#/components/schemas/ExerciseFields'
+      unevaluatedProperties: false
+    ExerciseFields:
       type: object
-      additionalProperties: false
+      description: Properties shared by `ExerciseInput` and `Exercise`.
       required: [name, muscle_group, equipment, type, met, region]
       properties:
         name:
@@ -3199,11 +3207,17 @@ components:
           default: 2.5
         region:
           $ref: '#/components/schemas/BodyRegion'
+        allows_added_weight:
+          type: boolean
+          default: false
+          description: >-
+            True for bodyweight exercises that can take extra load (belt, vest, dumbbell), so the
+            progression engine may add weight once the rep target is reached.
     Exercise:
       allOf:
-        - $ref: '#/components/schemas/ExerciseInput'
+        - $ref: '#/components/schemas/ExerciseFields'
         - type: object
-          required: [id, increment_kg, is_custom, owner]
+          required: [id, increment_kg, allows_added_weight, is_custom, owner]
           properties:
             id:
               $ref: '#/components/schemas/Id'
