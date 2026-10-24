@@ -106,4 +106,9 @@ Implementation runs on a cheaper model: the issues are already groomed with acce
 | pm | Sonnet | medium | `model:` / `effort:` in [`pm.md`](../.claude/agents/pm.md) frontmatter |
 | qa | Sonnet | medium | `model:` / `effort:` in [`qa.md`](../.claude/agents/qa.md) frontmatter |
 
-PM and QA moved to Sonnet as well (owner decision, 2026-10-24, D51): their work is checklist-driven, and QA rounds were the main cost (issue #60 took five FAILs). The orchestrator does **not** pass a `model` or `effort` override when starting engineer, DevOps or PM agents, so the frontmatter is what applies. The one exception: for QA on a security-, hook-, auth- or migration-heavy PR, the orchestrator may pass `model: opus` for that run. Change the model only by editing the frontmatter in a PR and updating this table.
+PM and QA moved to Sonnet as well (owner decision, 2026-10-24, D51): their work is checklist-driven, and QA rounds were the main cost (issue #60 took five FAILs). The orchestrator does **not** pass a `model` or `effort` override when starting engineer, DevOps or PM agents, so the frontmatter is what applies. There are two exceptions, both for QA only, each passed as a `model` override for that one run (D59):
+
+- **Opus** for a security-, hook-, auth- or migration-heavy PR.
+- **Haiku** for a re-verification round after a FAIL (only the failed AC and the code the fix touched are re-checked) and for a PR that changes only docs or config, with no code, tests, migrations or `openapi.yaml`. A first verification of a code PR always runs on the frontmatter model.
+
+To keep QA runs short, the orchestrator starts QA with the PR number, the head SHA, the latest CI run URL and the issue's AC list, so QA doesn't spend calls finding them. QA still confirms the SHA and CI status itself. Change the model only by editing the frontmatter in a PR and updating this table.
