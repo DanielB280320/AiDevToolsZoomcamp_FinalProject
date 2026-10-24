@@ -121,3 +121,32 @@ def test_nul_values_never_reach_responses_logs_or_spans(
         assert marker.lower() not in blob.lower()
         assert NUL not in blob and "\\u0000" not in blob
     assert "DataError" not in json_logs.text
+
+
+def test_valid_unicode_is_still_accepted(api: Api) -> None:
+    """QA #108: accents and emoji are not NUL and must keep working."""
+    assert api.signup(display_name="Zoë Ñandú 🏋️").status_code == 201
+    assert api.client.patch(ME, json={"display_name": "Ana 💪 Béla"}).status_code == 200
+    created = api.client.post(URL, json=_exercise(name="Sentadilla búlgara 🦵"))
+    assert created.status_code == 201
+    assert api.client.get(URL, params={"q": "búlgara 🦵"}).status_code == 200
+
+
+def test_all_request_models_inherit_the_nul_check() -> None:
+    """QA #108: a request schema that bypasses RequestModel would skip the check."""
+    import pydantic
+
+    import app.schemas.exercises  # noqa: F401
+    import app.schemas.users  # noqa: F401
+    from app.schemas.base import RequestModel, ResponseModel
+
+    def all_subclasses(cls: type) -> set[type]:
+        return {s for c in cls.__subclasses__() for s in {c} | all_subclasses(c)}
+
+    bypass = [
+        c.__name__
+        for c in all_subclasses(pydantic.BaseModel)
+        if c.__module__.startswith("app.schemas")
+        and not issubclass(c, (RequestModel, ResponseModel))
+    ]
+    assert bypass == []
