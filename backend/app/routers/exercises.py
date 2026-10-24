@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from app.dependencies import CurrentUser, SessionDep
+from app.schemas.base import NoNul
 from app.schemas.exercises import (
     BodyRegion,
     Exercise,
@@ -31,13 +32,13 @@ _PROBLEM = {"model": Problem}
 def list_exercises(
     user: CurrentUser,
     session: SessionDep,
-    q: Annotated[str | None, Query(max_length=100)] = None,
+    q: Annotated[str | None, Query(max_length=100), NoNul] = None,
     muscle_group: MuscleGroup | None = None,
     equipment: ExerciseEquipment | None = None,
     type: ExerciseType | None = None,
     region: BodyRegion | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    cursor: str | None = None,
+    cursor: Annotated[str | None, NoNul] = None,
 ) -> ExercisePage:
     """Seed and visible custom exercises, ordered by name; filters combine with AND."""
     return exercises.list_exercises(

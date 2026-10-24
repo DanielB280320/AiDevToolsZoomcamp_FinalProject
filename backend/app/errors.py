@@ -138,7 +138,7 @@ def _field_code(error_type: str) -> str:
 
 
 def _field_path(loc: Sequence[Any]) -> str:
-    parts = [str(part) for part in loc[1:]]
+    parts = [str(part).replace("\x00", "") for part in loc[1:]]
     return ".".join(parts) if parts else str(loc[0]) if loc else ""
 
 

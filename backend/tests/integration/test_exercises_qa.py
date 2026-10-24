@@ -119,26 +119,22 @@ def test_forged_or_garbled_cursors_are_400(seeded: Api, cursor: str) -> None:
     problem(seeded.client.get(URL, params={"cursor": cursor}), 400, "bad_request")
 
 
-# Known defect #102: a NUL reaches Postgres and becomes a 500. Remove the marks when fixed.
-NUL_DEFECT = pytest.mark.xfail(strict=True, reason="#102: NUL byte gives 500 (DataError)")
-
-
-@NUL_DEFECT
 def test_a_nul_byte_in_the_search_term_is_not_a_server_error(seeded: Api) -> None:
-    response = seeded.client.get(URL, params={"q": "push\x00"})
-    assert response.status_code in (200, 400), response.text
+    body = problem(seeded.client.get(URL, params={"q": "push\x00"}), 400, "bad_request")
+    assert "q" in {e["field"] for e in body["errors"]}
 
 
-@NUL_DEFECT
 def test_a_nul_byte_in_a_cursor_is_400_not_a_server_error(seeded: Api) -> None:
     cursor = _cursor("push\x00", str(uuid.uuid4()))
-    problem(seeded.client.get(URL, params={"cursor": cursor}), 400, "bad_request")
+    body = problem(seeded.client.get(URL, params={"cursor": cursor}), 400, "bad_request")
+    assert "cursor" in {e["field"] for e in body["errors"]}
 
 
-@NUL_DEFECT
 def test_a_nul_byte_in_a_custom_name_is_not_a_server_error(seeded: Api) -> None:
-    response = seeded.client.post(URL, json=_body(name="Sled\x00push"))
-    assert response.status_code in (201, 422), response.text
+    body = problem(
+        seeded.client.post(URL, json=_body(name="Sled\x00push")), 422, "validation_error"
+    )
+    assert "name" in {e["field"] for e in body["errors"]}
 
 
 # ───────────── F4.3: a forged cursor never reveals another user's exercise ─────────────

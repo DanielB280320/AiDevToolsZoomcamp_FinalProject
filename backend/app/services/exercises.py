@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.errors import ProblemError
 from app.models import Exercise, User
+from app.schemas.base import contains_nul
 from app.schemas.exercises import Exercise as ExerciseOut
 from app.schemas.exercises import ExerciseInput, ExercisePage
 from app.schemas.problem import FieldError
@@ -68,6 +69,8 @@ def _decode_cursor(cursor: str) -> tuple[str, uuid.UUID]:
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
         name, exercise_id = json.loads(base64.urlsafe_b64decode(padded))
+        if isinstance(name, str) and contains_nul(name):
+            raise _bad_cursor()
         return str(name) if isinstance(name, str) else _no_name(), uuid.UUID(str(exercise_id))
     except (binascii.Error, ValueError, TypeError):
         raise _bad_cursor() from None
