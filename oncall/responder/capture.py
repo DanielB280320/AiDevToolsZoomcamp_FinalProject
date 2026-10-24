@@ -60,7 +60,9 @@ def prometheus_queries(labels: dict[str, str]) -> dict[str, str]:
 def loki_query(labels: dict[str, str]) -> str:
     env = _selector_value(labels.get("env", "prod"))
     # The collector turns the JSON line into a message-only body and moves the level to the
-    # severity, which Loki exposes as detected_level (same filter as the service-health dashboard).
+    # severity, which Loki exposes as detected_level (the service-health dashboard uses the same
+    # label). Only error and above: warn is left out because it is not an incident signal and
+    # would bury the errors in the 200-line limit.
     service = _selector_value(labels.get("service", "fitwise-backend"))
     return f'{{service_name="{service}", env="{env}"}} | detected_level=~"error|critical|fatal"'
 

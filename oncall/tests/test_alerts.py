@@ -269,13 +269,29 @@ def test_loki_query_uses_level_label_not_line_text(
 
 
 @pytest.mark.parametrize("key", ["labels", "annotations"])
+@pytest.mark.parametrize("value", [["x"], [], "", 0, False, "text", 5])
 def test_labels_or_annotations_not_object_is_400(
-    key: str, client: TestClient, settings: Settings
+    key: str, value: object, client: TestClient, settings: Settings
 ) -> None:
     body = fixture("firing")
-    body["alerts"][0][key] = ["x"]
+    body["alerts"][0][key] = value
     assert client.post("/alerts", json=body).status_code == 400
     assert incident_dirs(settings) == []
+
+
+@pytest.mark.parametrize("key", ["labels", "annotations"])
+@pytest.mark.parametrize("missing", [True, False], ids=["missing", "null"])
+def test_missing_or_null_labels_or_annotations_are_accepted(
+    key: str, missing: bool, client: TestClient, settings: Settings
+) -> None:
+    body = fixture("firing")
+    if missing:
+        del body["alerts"][0][key]
+    else:
+        body["alerts"][0][key] = None
+    assert client.post("/alerts", json=body).status_code == 202
+    responder_of(client).wait()
+    assert len(incident_dirs(settings)) == 1
 
 
 def test_finished_tasks_are_dropped(client: TestClient) -> None:
@@ -309,3 +325,20 @@ def test_restart_relaunches_incident_whose_launcher_never_ran(
     with TestClient(create_app(settings), headers=AUTH) as again:  # already launched: left alone
         responder_of(again).wait()
     assert launched(launcher_log) == [incident.id]
+
+
+@pytest.mark.parametrize("content", ["{not json", "[1, 2]", ""])
+def test_resume_skips_corrupt_alert_json(
+    content: str, settings: Settings, launcher_log: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = IncidentStore(settings.incidents_dir)
+    broken = store.open_incident("badbadbad")
+    good = store.open_incident("9d1f0c2a7b3e4a55")
+    assert broken is not None and good is not None
+    (broken.path / "alert.json").write_text(content)
+    (good.path / "alert.json").write_text(json.dumps(fixture("firing")["alerts"][0]))
+
+    with TestClient(create_app(settings), headers=AUTH) as restarted:  # must not crash startup
+        responder_of(restarted).wait()
+    assert launched(launcher_log) == [good.id]
+    assert "incident_resume_skipped" in capsys.readouterr().out

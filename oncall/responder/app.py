@@ -91,8 +91,15 @@ class Responder:
             alert_file = incident.path / "alert.json"
             if (incident.path / LAUNCHED_MARKER).exists() or not alert_file.exists():
                 continue
+            try:
+                alert = json.loads(alert_file.read_text())
+                if not isinstance(alert, dict):
+                    raise ValueError("alert.json is not an object")
+            except ValueError:  # includes JSONDecodeError
+                log("incident_resume_skipped", incident_id=incident.id, reason="corrupt alert.json")
+                continue
             log("incident_resumed", incident_id=incident.id)
-            self._submit(incident, json.loads(alert_file.read_text()))
+            self._submit(incident, alert)
 
     def _run(self, incident: Incident, alert: dict[str, Any]) -> None:
         try:
@@ -149,7 +156,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ):
                 raise TypeError("alerts must be a list of objects")
             for a in alerts_list:
-                if any(not isinstance(a.get(k) or {}, dict) for k in ("labels", "annotations")):
+                # Missing or null counts as {}; anything else must be an object.
+                if any(
+                    a.get(k) is not None and not isinstance(a[k], dict)
+                    for k in ("labels", "annotations")
+                ):
                     raise TypeError("labels and annotations must be objects")
         except (ValueError, KeyError, TypeError):
             log("alert_rejected", reason="malformed payload", status_code=400)
