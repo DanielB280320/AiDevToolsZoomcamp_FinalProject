@@ -20,7 +20,7 @@ from app.models import User
 from app.schemas.users import Role
 from app.services.clock import ClockDep
 from app.services.sessions import SESSION_COOKIE, read_token
-from app.telemetry import bind_user
+from app.telemetry import Telemetry, bind_user
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
@@ -34,6 +34,14 @@ def get_settings_from_app(request: Request) -> Settings:
 
 
 SettingsDep = Annotated[Settings, Depends(get_settings_from_app)]
+
+
+def get_telemetry(request: Request) -> Telemetry:
+    telemetry: Telemetry = request.app.state.telemetry
+    return telemetry
+
+
+TelemetryDep = Annotated[Telemetry, Depends(get_telemetry)]
 
 
 def _not_authenticated() -> ProblemError:

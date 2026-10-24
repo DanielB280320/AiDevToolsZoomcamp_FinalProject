@@ -80,6 +80,8 @@ class TrainingDay(Base):
     position: Mapped[int] = mapped_column("order", Integer)
     # Last hand editor (F8); null for generated days.
     edited_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    # F13.2 estimate with the athlete's weight at creation or last edit (0 = not computed).
+    planned_kcal: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
 
     plan: Mapped[Plan] = relationship(back_populates="training_days")
     exercises: Mapped[list["PlannedExercise"]] = relationship(
@@ -118,6 +120,7 @@ class PlannedExercise(Base):
     rule: Mapped[str] = mapped_column(String(16))
     increment_kg: Mapped[float] = mapped_column(Numeric(4, 2, asdecimal=False))
     deload_enabled: Mapped[bool] = mapped_column(Boolean, server_default=true())
+    planned_kcal: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
 
     training_day: Mapped[TrainingDay] = relationship(back_populates="exercises")
 
