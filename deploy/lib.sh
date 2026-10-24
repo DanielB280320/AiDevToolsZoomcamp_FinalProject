@@ -54,7 +54,7 @@ wait_healthy() {
 }
 
 # demo_health_fail: true only while /opt/fitwise/.env contains the line FITWISE_DEMO_FAIL_HEALTH=1.
-# Temporary switch for the prod auto-rollback demo (#14, D60): deploy.sh then treats the post-deploy
+# Temporary switch for the prod auto-rollback demo (#14, D61): deploy.sh then treats the post-deploy
 # health check as failed, so the normal rollback path runs. Off unless that exact line exists
 # (default absent, on every host). rollback.sh never consults it. Only the match result is used:
 # the file is never printed.

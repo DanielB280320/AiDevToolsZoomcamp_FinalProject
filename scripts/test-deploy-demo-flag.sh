@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests the FITWISE_DEMO_FAIL_HEALTH switch in deploy/lib.sh (#14, D60). No docker, no network.
+# Tests the FITWISE_DEMO_FAIL_HEALTH switch in deploy/lib.sh (#14, D61). No docker, no network.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
