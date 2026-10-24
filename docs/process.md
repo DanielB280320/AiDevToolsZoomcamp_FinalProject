@@ -93,9 +93,9 @@ QA is independent of the implementer: it starts from the issue and the spec, not
 
 For each PR, QA:
 
-1. Checks out the branch in its own worktree and runs `make lint` and `make test` (and `make e2e` when the issue touches a user journey).
-2. Verifies **every acceptance criterion** one by one: reproduces it (test, API call or UI step) and records the evidence.
-3. Checks the rules in [CLAUDE.md](../CLAUDE.md#rules-for-every-agent): spec updated, tests added, no sensitive data in telemetry, migrations backward compatible, no secrets.
+1. Checks out the branch in its own worktree. For lint and tests it cites CI when CI is green **for the exact head SHA** and the required jobs ran; otherwise it runs `make lint` and `make test` itself. It runs `make e2e` when the issue touches a user journey and CI does not, and locally runs the tests that exercise the AC.
+2. Verifies **every acceptance criterion** one by one: reproduces it (test, API call or UI step) and records the evidence. Each AC is judged as written; problems outside the AC are reported (new issue or `Notes:`) without failing the PR.
+3. Checks the rules in [CLAUDE.md](../CLAUDE.md#rules-for-every-agent): spec updated, tests added, no sensitive data in telemetry, migrations backward compatible, no secrets. These always block, whether or not an AC mentions them.
 4. May add or strengthen **tests** in the PR branch (commit prefix `test:`). QA never changes production code; it reports defects instead.
 5. Comments on the issue:
 
@@ -107,6 +107,10 @@ PR: #<pr>   Commit: <sha>
 | F1.1 … | ✅ / ❌ | test name, command output or screenshot |
 Notes: …
 ```
+
+**Re-verification after a FAIL** covers the failing AC, every AC whose code the fix touched (diff since the last verified SHA) and the CLAUDE.md rules on that diff, with CI cited for the new SHA; unchanged passing AC keep their earlier evidence. **After 3 FAILs** on the same issue, QA moves it to `blocked` and escalates to the owner instead of starting another round.
+
+QA reads only the spec sections the issue references, the sections they link to, and the decisions log (§19).
 
 ## 7. Definition of Done
 

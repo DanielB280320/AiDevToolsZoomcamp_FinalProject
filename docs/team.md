@@ -103,6 +103,7 @@ Implementation runs on a cheaper model: the issues are already groomed with acce
 |---|---|---|---|
 | engineer | Sonnet | medium | `model:` / `effort:` in [`engineer.md`](../.claude/agents/engineer.md) frontmatter |
 | devops | Sonnet | medium | `model:` / `effort:` in [`devops.md`](../.claude/agents/devops.md) frontmatter |
-| pm, qa | inherit the main session's model | default | not pinned |
+| pm | Sonnet | medium | `model:` / `effort:` in [`pm.md`](../.claude/agents/pm.md) frontmatter |
+| qa | Sonnet | medium | `model:` / `effort:` in [`qa.md`](../.claude/agents/qa.md) frontmatter |
 
-The orchestrator does **not** pass a `model` or `effort` override when starting engineer or DevOps agents, so the frontmatter is what applies. Change the model only by editing the frontmatter in a PR and updating this table.
+PM and QA moved to Sonnet as well (owner decision, 2026-10-24, D51): their work is checklist-driven, and QA rounds were the main cost (issue #60 took five FAILs). The orchestrator does **not** pass a `model` or `effort` override when starting engineer, DevOps or PM agents, so the frontmatter is what applies. The one exception: for QA on a security-, hook-, auth- or migration-heavy PR, the orchestrator may pass `model: opus` for that run. Change the model only by editing the frontmatter in a PR and updating this table.
