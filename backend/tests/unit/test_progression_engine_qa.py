@@ -203,3 +203,33 @@ def test_property_strategy_is_not_vacuous() -> None:
     run()
     assert seen["increase_weight"] >= 5
     assert seen["deload"] >= 5
+
+
+def test_property_strategy_share_of_weight_increases() -> None:
+    """Round 2: successes must be common (>= 10 % reach increase_weight)."""
+    from collections import Counter
+
+    from hypothesis import given, settings
+
+    from tests.unit.test_progression_engine import inputs
+
+    seen: Counter[str] = Counter()
+
+    @settings(max_examples=1000, database=None, deadline=None)
+    @given(inputs())
+    def run(inp: ProgressionInput) -> None:
+        seen[suggest(inp).action] += 1
+
+    run()
+    assert seen["increase_weight"] / sum(seen.values()) >= 0.1
+
+
+def test_off_grid_custom_100lb_displays_as_100lb() -> None:
+    """Custom target 100 lb stored as 45.36 kg reads 100 lb (store metric, show user units)."""
+    inp = _lin([5, 5, 5], imperial=True, increment_kg=5 * KG_PER_LB, target_weight_kg=45.36)
+    inp = ProgressionInput(**{**inp.__dict__, "logged_sets": _sets([5, 5, 5], 45.36)})
+    s = suggest(inp)
+    assert s.action == "increase_weight"
+    assert s.reason.startswith("All 3 sets reached 5 reps at 100 lb"), s.reason
+    # the result snaps to the barbell grid (20 kg + k x 5 lb) and reads as 105 lb
+    assert s.reason.endswith("→ 105 lb × 5."), s.reason
