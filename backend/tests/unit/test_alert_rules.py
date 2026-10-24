@@ -53,7 +53,7 @@ def test_common_contract(title: str) -> None:
     for route in ROUTES:
         assert route in expr
     ann = rule["annotations"]
-    assert ann["route"] == "{{ $labels.route }}"
+    assert ann["route"] == "{{ $$labels.route }}"  # $$ escapes Grafana env expansion
     assert ann["window"]
     assert "/d/fitwise-key-journey" in ann["dashboard_url"]
     slug = "key-journey-errors" if title == "KeyJourneyErrors" else "key-journey-latency"
@@ -92,7 +92,7 @@ def test_alert_text_carries_no_user_data() -> None:
             [*map(str, rule["labels"].values()), *map(str, rule["annotations"].values())]
         )
         for template in re.findall(r"\{\{(.*?)\}\}", text):
-            assert re.fullmatch(r"\s*(\$labels\.route|externalURL)\s*", template), template
+            assert re.fullmatch(r"\s*(\$\$labels\.route|externalURL)\s*", template), template
         assert set(rule["labels"]) == {"severity", "env", "service"}
 
 
@@ -103,5 +103,15 @@ def test_contact_point_and_policy() -> None:
     assert receiver["settings"]["url"] == "$ONCALL_WEBHOOK_URL"  # from env, never from git
     policy = _load("policies.yaml")["policies"][0]
     assert policy["receiver"] == contact["name"]
-    assert policy["routes"][0]["receiver"] == contact["name"]
-    assert ["severity", "=", "page"] in policy["routes"][0]["object_matchers"]
+    assert all(r["receiver"] == contact["name"] for r in policy.get("routes", []))
+
+
+def test_no_unescaped_template_variables_in_provisioning_yaml() -> None:
+    """Grafana expands $VAR in provisioning files, so `$labels`/`$values` must be written `$$`."""
+    for path in (OBS / "grafana" / "provisioning").rglob("*.yaml"):
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue
+            bad = re.findall(r"(?<!\$)\$(?:labels|values)\b", line)
+            assert not bad, f"{path.name}:{number} unescaped template variable: {line.strip()}"

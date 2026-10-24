@@ -149,6 +149,9 @@ services:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
+    # host.docker.internal resolves on Linux too (default webhook target on the Docker host).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${GRAFANA_BIND:-127.0.0.1}:${GRAFANA_PORT:-3030}:3000"
     read_only: true

@@ -57,8 +57,8 @@ groups:
         execErrState: Error
         for: 0s
         annotations:
-          summary: "More than 5 % of {{ $labels.route }} requests fail with 5xx"
-          route: "{{ $labels.route }}"
+          summary: "More than 5 % of {{ $$labels.route }} requests fail with 5xx"
+          route: "{{ $$labels.route }}"
           window: "5 minutes (at least 20 requests)"
           dashboard_url: "{{ externalURL }}/d/fitwise-key-journey/key-journey?var-env=prod"
           runbook_url: "https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/blob/main/docs/runbooks/key-journey-errors.md"
@@ -105,8 +105,8 @@ groups:
         execErrState: Error
         for: 0s
         annotations:
-          summary: "p95 latency of {{ $labels.route }} is above 1 s"
-          route: "{{ $labels.route }}"
+          summary: "p95 latency of {{ $$labels.route }} is above 1 s"
+          route: "{{ $$labels.route }}"
           window: "10 minutes"
           dashboard_url: "{{ externalURL }}/d/fitwise-key-journey/key-journey?var-env=prod"
           runbook_url: "https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/blob/main/docs/runbooks/key-journey-latency.md"

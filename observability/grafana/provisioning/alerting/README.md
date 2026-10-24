@@ -7,7 +7,7 @@ Grafana loads every `*.yaml` file in this directory at start-up
 |---|---|
 | `rules.yaml` | KeyJourneyErrors (5xx > 5 % over 5 min, >= 20 requests) and KeyJourneyLatency (p95 > 1 s over 10 min) on the three logging endpoints, `env="prod"`, severity `page`, no data = OK |
 | `contact-points.yaml` | Webhook `oncall-responder` to `$ONCALL_WEBHOOK_URL` (the responder's `/alerts`; from the environment, never from git) |
-| `policies.yaml` | Routes `severity=page` to `oncall-responder`, grouped by alert and route |
+| `policies.yaml` | Default route to `oncall-responder` (the only receiver; all alerts are `page`), grouped by alert and route |
 
 Each alert carries the annotations `route`, `window`, `dashboard_url` (Key journey, `env=prod`) and
 `runbook_url` (`docs/runbooks/key-journey-errors.md` / `key-journey-latency.md`, written in #68).
