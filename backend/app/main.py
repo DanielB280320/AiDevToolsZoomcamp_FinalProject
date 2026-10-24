@@ -11,7 +11,6 @@ from app.errors import install_error_handlers
 from app.fault_injection import FaultInjectionMiddleware
 from app.migrations import load_migration_scripts
 from app.routers import athletes, auth, calendar, exercises, health, me, plans
-from app.routers import athletes, auth, exercises, health, me, plans
 from app.services.clock import SystemClock
 from app.services.flags import FlagReader
 from app.telemetry import (
