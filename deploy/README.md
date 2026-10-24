@@ -28,10 +28,10 @@ About **$89/month** for both hosts (owner approved "$57 or more" on 2026-10-24; 
 
 ## Access method: SSM, not SSH
 
-Port 22 is closed on both hosts and there is no key pair. Reasons: no long-lived SSH keys to store in GitHub or lose, no need to open 22 to GitHub's very large and changing IP ranges, and SSM gives audited sessions. Instances carry the `fitwise-ec2-ssm` instance profile (managed policy `AmazonSSMManagedInstanceCore`, nothing else).
+Port 22 is closed on both hosts and there is no key pair. Reasons: no long-lived SSH keys to store or lose, no need to open 22 to GitHub's very large and changing IP ranges, and SSM gives audited sessions. Instances carry the `fitwise-ec2-ssm` instance profile (managed policy `AmazonSSMManagedInstanceCore`, nothing else).
 
 - Owner shell: `aws ssm start-session --target <instance-id> --region us-east-2` (needs the Session Manager plugin), or run commands with `aws ssm send-command`.
-- GitHub Actions deploys: the workflow authenticates with the environment's deploy key and calls `ssm send-command` (AWS-RunShellScript) on its own instance. See "GitHub Environments" below.
+- Deploys do not use SSM or any AWS credential: see "Deploys are pull-based" below.
 
 ## Security groups (`fitwise-dev`, `fitwise-prod`)
 
@@ -47,29 +47,18 @@ Rules are added only when missing; if the owner IP changes, update the rule by h
 ## Steps
 
 1. Credentials for the AWS CLI with permission to manage EC2/IAM/SSM (the owner or an approved agent).
-2. `deploy/provision.sh` creates (or finds) the IAM instance profile, security groups, instances, Elastic IPs, deploy IAM users and GitHub environment secrets, and prints IDs and addresses. Overrides: `AWS_REGION`, `OWNER_CIDR`, `DEV_TYPE`, `PROD_TYPE`, `GH_REPO`, `GITHUB_AUTH=none` to skip the deploy users.
+2. `deploy/provision.sh` creates (or finds) the IAM instance profile, security groups, instances, Elastic IPs, and prints IDs and addresses. Overrides: `AWS_REGION`, `OWNER_CIDR`, `DEV_TYPE`, `PROD_TYPE`.
 3. `deploy/bootstrap-remote.sh dev|prod` ships `deploy/bootstrap.sh` to the host over SSM and runs it. It installs Docker and the Compose plugin, creates the `deploy` user (in the `docker` group), creates `/opt/fitwise` with empty `CURRENT_TAG` and `PREVIOUS_TAG`, a root-only (`0600`) `.env`, and runs an `nginx:alpine` placeholder named `fitwise-placeholder` on port 80 until the first real deploy (#13) replaces it. Running it again changes nothing.
 4. Check: `curl -i http://<elastic-ip>/` returns 200.
 
-### GitHub Environments and deploy credentials
+## Deploys are pull-based (no deploy credentials)
 
-`provision.sh` creates the GitHub environments `dev` and `production` and one IAM user per environment (`fitwise-deploy-dev`, `fitwise-deploy-prod`). The org service control policy denies GitHub OIDC (`iam:CreateOpenIDConnectProvider`), so a long-lived access key is used instead, kept as narrowly scoped as possible:
+GitHub holds no AWS keys and the hosts open no inbound ports for deployment ([ADR 0010](../docs/adr/0010-pull-based-deploy.md), spec D57). The AWS Organization policy denies GitHub OIDC and every action for IAM users, so a first attempt with per-environment IAM users was removed (issue #12).
 
-- Each user may only call `ssm:SendCommand` on the document `AWS-RunShellScript` and on its own environment's instance (condition `Project=fitwise`, `Env=<env>`), and `ssm:GetCommandInvocation`. Nothing else; add actions only if a deploy step strictly needs them.
-- The key is piped directly into the environment secrets `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`; it is never printed or written to disk. `AWS_REGION` and `DEPLOY_INSTANCE_ID` are stored next to it.
-- Manual step for the owner: in GitHub, set required reviewers on the `production` environment (Settings, Environments).
+Design, built in #13 and #14: CI pushes images to GHCR and records the approved tag by moving the git ref `deploy/dev` (after merge) or `deploy/prod` (only from the job in the `production` GitHub environment, which requires approval). A systemd timer on each host polls that ref through the public GitHub API, pulls, deploys, health-checks and rolls back to `PREVIOUS_TAG` by itself. This requires the repository and GHCR packages to be public.
 
-Re-running `provision.sh` never creates a second key for a user that already has one.
-
-#### Rotate the deploy key
-
-For `<env>` in `dev|prod` (GitHub environment `dev` or `production`), with owner confirmation:
-
-1. `aws iam list-access-keys --user-name fitwise-deploy-<env>` and note the old key id.
-2. Create the new key and store it without printing it: source the `create_and_store_key` function from `provision.sh` or run its two `gh secret set --env` pipes (the key is piped straight from `aws iam create-access-key --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text`). A user can hold two keys at once, so this does not break deploys.
-3. Run a deploy (or the smoke workflow) to confirm the new key works.
-4. `aws iam delete-access-key --user-name fitwise-deploy-<env> --access-key-id <old key id>` (destructive, owner confirms).
+Manual step for the owner: set required reviewers on the `production` GitHub environment (Settings, Environments), and restrict who can create or move `deploy/*` refs.
 
 ## Teardown (destructive, owner only)
 
-Terminate instances, release Elastic IPs, delete security groups, the IAM users and the role/profile by the `Project=fitwise` tag. Never done by agents without explicit owner confirmation.
+Terminate instances, release Elastic IPs, delete security groups and the role/profile by the `Project=fitwise` tag. Never done by agents without explicit owner confirmation.

@@ -14,6 +14,7 @@ Each ADR records one design decision with trade-offs: its context, the decision,
 | [0007](0007-on-call-agent-with-allow-listed-mitigations.md) | Limit the on-call agent to allow-listed runtime mitigations | Accepted |
 | [0008](0008-enforce-agent-write-scopes-with-a-hook.md) | Guard the QA and PM write scopes with a project PreToolUse hook | Accepted |
 | [0009](0009-separate-migration-step.md) | Run migrations and seed as a separate one-shot step, never on backend start | Accepted |
+| [0010](0010-pull-based-deploy.md) | Deploy by pull: hosts poll the approved tag, CI holds no AWS credentials | Accepted |
 
 ## Adding an ADR
 

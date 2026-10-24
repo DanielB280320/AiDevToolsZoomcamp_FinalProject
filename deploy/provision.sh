@@ -6,36 +6,25 @@
 #   OWNER_CIDR=1.2.3.4/32 deploy/provision.sh    # override auto-detected owner IP
 #
 # Creates: 2 security groups, 1 IAM role + instance profile (SSM only),
-# 2 EC2 instances (+ encrypted gp3 root volumes), 2 Elastic IPs, and one
-# least-privilege IAM deploy user per GitHub environment.
-# No key pair, port 22 stays closed: access is via SSM Session/Run Command.
+# 2 EC2 instances (+ encrypted gp3 root volumes) and 2 Elastic IPs.
+# No key pair, port 22 stays closed: access is via SSM. Deploys are pull-based
+# (ADR 0010), so no deploy credentials are created here.
 set -euo pipefail
 
 REGION="${AWS_REGION:-us-east-2}"
 export AWS_DEFAULT_REGION="$REGION" AWS_PAGER=""
-GH_REPO="${GH_REPO:-DanielB280320/AiDevToolsZoomcamp_FinalProject}"
 OWNER_CIDR="${OWNER_CIDR:-$(curl -fsS https://checkip.amazonaws.com | tr -d '\n')/32}"
 OTLP_PORT=4317
 GRAFANA_PORT=3000
 declare -A TYPE=([dev]="${DEV_TYPE:-t3.small}" [prod]="${PROD_TYPE:-c7i-flex.large}")
-declare -A GH_ENV=([dev]=dev [prod]=production)
 VOLUME_GB=30
 AMI_PARAM=/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
-ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 VPC="$(aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text)"
 
 tags() { # <env> <resource-type> <name>
   echo "ResourceType=$2,Tags=[{Key=Project,Value=fitwise},{Key=Env,Value=$1},{Key=Name,Value=$3}]"
 }
 log() { echo "[provision] $*" >&2; }
-# Create an access key and pipe both halves into GitHub environment secrets.
-# Nothing is echoed or written to disk; use also for rotation (README).
-create_and_store_key() { # <iam-user> <github-env>
-  local key
-  key="$(aws iam create-access-key --user-name "$1" --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text)"
-  printf '%s' "$key" | awk '{printf "%s", $1}' | gh secret set AWS_ACCESS_KEY_ID --env "$2" --repo "$GH_REPO"
-  printf '%s' "$key" | awk '{printf "%s", $2}' | gh secret set AWS_SECRET_ACCESS_KEY --env "$2" --repo "$GH_REPO"
-}
 
 # --- IAM: instance profile (SSM agent only) ---------------------------------
 ROLE=fitwise-ec2-ssm
@@ -63,9 +52,15 @@ ensure_sg() { # <env>
   fi
   echo "$id"
 }
-allow() { # <sg> <port> <cidr> <desc>  (duplicate rule errors are ignored)
-  aws ec2 authorize-security-group-ingress --group-id "$1" --ip-permissions \
-    "IpProtocol=tcp,FromPort=$2,ToPort=$2,IpRanges=[{CidrIp=$3,Description=$4}]" >/dev/null 2>&1 || true
+allow() { # <sg> <port> <cidr> <desc>  (only a duplicate-rule error is ignored)
+  local out
+  if ! out="$(aws ec2 authorize-security-group-ingress --group-id "$1" --ip-permissions \
+      "IpProtocol=tcp,FromPort=$2,ToPort=$2,IpRanges=[{CidrIp=$3,Description=$4}]" 2>&1)"; then
+    case "$out" in
+      *InvalidPermission.Duplicate*) ;;
+      *) echo "$out" >&2; return 1 ;;
+    esac
+  fi
 }
 declare -A SG
 for env in dev prod; do SG[$env]="$(ensure_sg "$env")"; allow "${SG[$env]}" 80 0.0.0.0/0 "HTTP public"; done
@@ -100,33 +95,6 @@ done
 allow "${SG[prod]}" "$GRAFANA_PORT" "$OWNER_CIDR" "Grafana owner IP"
 allow "${SG[prod]}" "$OTLP_PORT" "${EIP[dev]}/32" "OTLP from dev instance"
 # Port 22 is intentionally never opened: access is via SSM (see README).
-
-# --- GitHub Actions deploy credentials (least-privilege IAM user per env) ---
-# The org SCP denies GitHub OIDC, so each GitHub Environment gets its own IAM
-# user that may only run AWS-RunShellScript on that environment's instance and
-# read command results. The access key is created once (only if the user has
-# none) and piped straight into GitHub environment secrets: never printed and
-# never written to disk. Rotation: see deploy/README.md. GITHUB_AUTH=none skips.
-if [ "${GITHUB_AUTH:-iam-user}" = iam-user ]; then
-  for env in dev prod; do
-    user=fitwise-deploy-$env
-    ghenv=${GH_ENV[$env]}
-    aws iam get-user --user-name "$user" >/dev/null 2>&1 ||
-      { log "creating IAM user $user"; aws iam create-user --user-name "$user" --tags Key=Project,Value=fitwise Key=Env,Value="$env" >/dev/null; }
-    policy="{\"Version\":\"2012-10-17\",\"Statement\":[
-     {\"Effect\":\"Allow\",\"Action\":\"ssm:SendCommand\",\"Resource\":\"arn:aws:ssm:$REGION::document/AWS-RunShellScript\"},
-     {\"Effect\":\"Allow\",\"Action\":\"ssm:SendCommand\",\"Resource\":\"arn:aws:ec2:$REGION:$ACCOUNT:instance/${IID[$env]}\",\"Condition\":{\"StringEquals\":{\"ssm:resourceTag/Project\":\"fitwise\",\"ssm:resourceTag/Env\":\"$env\"}}},
-     {\"Effect\":\"Allow\",\"Action\":\"ssm:GetCommandInvocation\",\"Resource\":\"*\"}]}"
-    aws iam put-user-policy --user-name "$user" --policy-name ssm-run-command --policy-document "$policy"
-    gh api -X PUT "repos/$GH_REPO/environments/$ghenv" >/dev/null
-    if [ "$(aws iam list-access-keys --user-name "$user" --query 'length(AccessKeyMetadata)' --output text)" = 0 ]; then
-      log "creating access key for $user and storing it in GitHub environment $ghenv"
-      create_and_store_key "$user" "$ghenv"
-    fi
-    printf '%s' "$REGION" | gh secret set AWS_REGION --env "$ghenv" --repo "$GH_REPO"
-    printf '%s' "${IID[$env]}" | gh secret set DEPLOY_INSTANCE_ID --env "$ghenv" --repo "$GH_REPO"
-  done
-fi
 
 cat <<OUT
 dev_instance_id=${IID[dev]}

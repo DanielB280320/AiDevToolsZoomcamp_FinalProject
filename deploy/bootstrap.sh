@@ -12,15 +12,19 @@ set -euo pipefail
 ENV_NAME="${ENV_NAME:?set ENV_NAME=dev|prod}"
 APP_DIR=/opt/fitwise
 COMPOSE_VERSION=v2.29.7
+# sha256 of docker-compose-linux-x86_64 for that version (from the release's .sha256 asset)
+COMPOSE_SHA256=383ce6698cd5d5bbf958d2c8489ed75094e34a77d340404d9f32c4ae9e12baf0
 
 command -v docker >/dev/null || dnf install -y docker
 systemctl enable --now docker
 
 if [ ! -x /usr/local/lib/docker/cli-plugins/docker-compose ]; then
   mkdir -p /usr/local/lib/docker/cli-plugins
-  curl -fsSL "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64" \
-    -o /usr/local/lib/docker/cli-plugins/docker-compose
-  chmod 755 /usr/local/lib/docker/cli-plugins/docker-compose
+  tmp="$(mktemp)"
+  curl -fsSL "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64" -o "$tmp"
+  echo "$COMPOSE_SHA256  $tmp" | sha256sum -c - || { rm -f "$tmp"; echo "compose checksum mismatch" >&2; exit 1; }
+  install -m 755 "$tmp" /usr/local/lib/docker/cli-plugins/docker-compose
+  rm -f "$tmp"
 fi
 
 id deploy >/dev/null 2>&1 || useradd --create-home --shell /bin/bash deploy
