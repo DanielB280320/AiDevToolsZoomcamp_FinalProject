@@ -232,7 +232,7 @@ flowchart LR
 | **CI** | GitHub Actions runners | Every PR and every merge to `main` | Lint, type-check, unit + integration tests against a Postgres service, frontend tests, OpenAPI validation, dependency scan, secret scan, image build. Integration tests use the Open Food Facts fake. | n/a |
 | **Image registry** | GHCR | Built once per commit on merge to `main` | Images tagged with the git SHA; the same image is promoted from dev to prod. | Pulled by the EC2 hosts |
 | **dev** | `fitwise-dev` EC2, Docker Compose | Auto-deploy on every merge to `main`, then smoke test (`/readyz` + e2e smoke) | App stack + OTel Collector, forwarding to prod | Public DNS over HTTP, port 80 |
-| **prod** | `fitwise-prod` EC2, Docker Compose | Manual "Promote to production" of a SHA already on dev; `production` environment needs approval. Failed smoke test rolls back to `PREVIOUS_TAG` automatically. | App stack, observability stack, on-call responder (systemd), nightly `pg_dump` to S3 | Public DNS over HTTP, port 80; Grafana restricted to the owner's IP |
+| **prod** | `fitwise-prod` EC2, Docker Compose | Manual "Promote to production" of a SHA already on dev; `production` environment needs approval. The host rolls back to `PREVIOUS_TAG` by itself when its post-deploy health check fails (pull-based, ADR 0010); the workflow's smoke test then fails and reports it. | App stack, observability stack, on-call responder (systemd), nightly `pg_dump` to S3 | Public DNS over HTTP, port 80; Grafana restricted to the owner's IP |
 
 Release mechanics ([spec §12](spec.md#12-deployment-aws), [§13](spec.md#13-cicd-github-actions), [process.md §9](process.md#9-releases)):
 
