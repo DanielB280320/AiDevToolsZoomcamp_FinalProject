@@ -53,9 +53,9 @@ def test_common_contract(title: str) -> None:
     for route in ROUTES:
         assert route in expr
     ann = rule["annotations"]
-    assert ann["route"] == "{{ $$labels.route }}"  # $$ escapes Grafana env expansion
+    assert ann["route"] == "{{ .Labels.route }}"  # no `$`: Grafana expands $VAR in provisioning
     assert ann["window"]
-    assert "/d/fitwise-key-journey" in ann["dashboard_url"]
+    assert "externalURL }}d/fitwise-key-journey" in ann["dashboard_url"]
     slug = "key-journey-errors" if title == "KeyJourneyErrors" else "key-journey-latency"
     assert ann["runbook_url"].endswith(f"docs/runbooks/{slug}.md")
 
@@ -92,7 +92,7 @@ def test_alert_text_carries_no_user_data() -> None:
             [*map(str, rule["labels"].values()), *map(str, rule["annotations"].values())]
         )
         for template in re.findall(r"\{\{(.*?)\}\}", text):
-            assert re.fullmatch(r"\s*(\$\$labels\.route|externalURL)\s*", template), template
+            assert re.fullmatch(r"\s*(\.Labels\.route|externalURL)\s*", template), template
         assert set(rule["labels"]) == {"severity", "env", "service"}
 
 
@@ -106,12 +106,13 @@ def test_contact_point_and_policy() -> None:
     assert all(r["receiver"] == contact["name"] for r in policy.get("routes", []))
 
 
-def test_no_unescaped_template_variables_in_provisioning_yaml() -> None:
-    """Grafana expands $VAR in provisioning files, so `$labels`/`$values` must be written `$$`."""
+def test_no_dollar_template_variables_in_provisioning_yaml() -> None:
+    """Grafana expands `$VAR` in provisioning files and does not collapse `$$` in alert rules
+    (verified live: `{{ $.Labels.route }}` is stored verbatim and does not render), so templates
+    use the dot form (`.Labels.route`) and never `$labels` / `$values`."""
     for path in (OBS / "grafana" / "provisioning").rglob("*.yaml"):
         for number, line in enumerate(path.read_text().splitlines(), 1):
-            stripped = line.lstrip()
-            if stripped.startswith("#"):
+            if line.lstrip().startswith("#"):
                 continue
-            bad = re.findall(r"(?<!\$)\$(?:labels|values)\b", line)
-            assert not bad, f"{path.name}:{number} unescaped template variable: {line.strip()}"
+            bad = re.findall(r"\$+(?:labels|values|value)\b", line)
+            assert not bad, f"{path.name}:{number} `$` template variable: {line.strip()}"
