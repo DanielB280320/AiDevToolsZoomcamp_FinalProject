@@ -136,7 +136,7 @@ def test_all_request_models_inherit_the_nul_check() -> None:
     """QA #108: a request schema that bypasses RequestModel would skip the check."""
     import pydantic
 
-    import app.schemas.exercises  # noqa: F401
+    import app.schemas.exercises
     import app.schemas.users  # noqa: F401
     from app.schemas.base import RequestModel, ResponseModel
 
