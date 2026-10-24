@@ -57,6 +57,28 @@ GitHub holds no AWS keys and the hosts open no inbound ports for deployment ([AD
 
 Design, built in #13 and #14: CI pushes images to GHCR and records the approved tag by moving the git ref `deploy/dev` (after merge) or `deploy/prod` (only from the job in the `production` GitHub environment, which requires approval). A systemd timer on each host polls that ref through the public GitHub API, pulls, deploys, health-checks and rolls back to `PREVIOUS_TAG` by itself. This requires the repository and GHCR packages to be public.
 
+### How dev is deployed (issue #13)
+
+```
+merge to main -> CI (all gates) -> publish: images ghcr.io/<owner>/fitwise-{backend,frontend}:<sha>, digests recorded
+              -> deploy-dev (environment `dev`, GITHUB_TOKEN, contents: write): moves branch ref deploy/dev
+              -> dev host: fitwise-deploy.timer (every 150 s) -> poll.sh -> deploy.sh
+              -> smoke-dev: waits for GET /api/v1/healthz `version` == <sha>, then the e2e smoke test
+```
+
+- **The ref.** `deploy/dev` is a branch moved only by the `deploy-dev` job. It points at a *deploy commit*: same tree as the release, parent = the release commit on `main`, message = the release record (`source:` SHA, `backend:` and `frontend:` image references with their `@sha256:` digests). One `GET /repos/<repo>/branches/deploy/dev` returns it, so a poll needs one API request and no credentials.
+- **Rate limit.** One conditional request (`If-None-Match`) per 150 s = 24 per hour; the limit is 60 per IP. Compose files come from `raw.githubusercontent.com` and images from GHCR, neither counts against the API limit. A 403/429 is logged and skipped.
+- **Deploy (`deploy.sh`).** Fetch that commit's `compose.yaml` and `deploy/compose.deploy.yaml` into `/opt/fitwise/releases/<sha>/`, pull both images by digest, start the database, run the `migrate` one-shot on its own (a failure stops here and the old release keeps serving), `compose up -d --no-deps --wait backend frontend`, then wait up to 120 s for `/readyz` = 200 and `/healthz` `version` = the SHA. On success `PREVIOUS_TAG` = old `CURRENT_TAG` and `CURRENT_TAG` = the new SHA.
+- **Automatic rollback.** Unhealthy release: `rollback.sh <old CURRENT_TAG>` starts the old release from its stored digests with **no migration step** (D50). `CURRENT_TAG` never moves to the failed SHA. First deploy with nothing to roll back to: the new containers are stopped and the nginx placeholder is restored.
+- **Never retried.** `LAST_REF` holds the ref value last acted on and is written *before* deploying. A failed release stays failed until the ref moves again (a new merge, or re-running the `deploy-dev` job, which creates a new deploy commit). A manual `rollback.sh` is not undone by the poller.
+- **Manual rollback** (owner, CI, on-call): `sudo /opt/fitwise/bin/rollback.sh` (target `PREVIOUS_TAG`) or `rollback.sh <sha>` for any stored release. Exit 0 = healthy, 3 = no previous release.
+- **State on the host** (`/opt/fitwise`): `CURRENT_TAG`, `PREVIOUS_TAG`, `LAST_REF`, `POLL_ETAG`, `releases/<sha>/{compose.yaml,compose.deploy.yaml,release.env}` (five newest kept), `bin/` (scripts), `.env` (root-only; `bootstrap.sh` generates the database password, JWT secret and user-hash salt on the host; never printed). `/etc/fitwise-deploy.env` holds the non-secret poller settings.
+- **Logs.** `journalctl -u fitwise-deploy -o cat` (UTC timestamps; only tags, digests and statuses). `systemctl list-timers fitwise-deploy.timer` shows the next poll.
+- **Updating the scripts.** The poller scripts are installed by `bootstrap.sh`, not by a deploy. After changing anything under `deploy/` other than `compose.deploy.yaml` (which travels with each release), re-run `deploy/bootstrap-remote.sh dev` (idempotent; `DEPLOY_REF=<branch|sha>` installs from a branch).
+- **Merge to deployed on dev** targets 10 minutes (owner, 2026-10-24): CI, then at most 150 s until the next poll, then about 40 s to deploy.
+
+GitHub settings behind it: environment `dev` (deploys from `main` only) with variable `DEV_BASE_URL` (the dev address, used by the smoke test). The GHCR packages `fitwise-backend` and `fitwise-frontend` are public: they inherit the public repository because the images carry the `org.opencontainers.image.source` label. A ruleset limiting `deploy/*` to GitHub Actions is **not possible on a personal repository**: the API rejects the GitHub Actions app as a bypass actor ("must be part of the ruleset source or owner organization"). Until the repository moves to an organization, protection rests on the owner being the only writer (D58).
+
 Manual step for the owner: set required reviewers on the `production` GitHub environment (Settings, Environments), and restrict who can create or move `deploy/*` refs.
 
 ## Teardown (destructive, owner only)

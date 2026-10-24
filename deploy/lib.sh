@@ -35,7 +35,7 @@ compose_release() {
     set +a
     export TAG="$sha" HTTP_BIND=0.0.0.0 HTTP_PORT=80 COMPOSE_PROJECT_NAME=fitwise
     cd "$dir"
-    docker compose --env-file "$ENV_FILE" -f compose.yaml -f compose.deploy.yaml "$@"
+    docker compose --progress quiet --env-file "$ENV_FILE" -f compose.yaml -f compose.deploy.yaml "$@"
   )
 }
 
