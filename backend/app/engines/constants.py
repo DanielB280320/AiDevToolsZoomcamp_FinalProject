@@ -88,3 +88,24 @@ CALORIE_FLOOR_KCAL: dict[str, int] = {
     "female": 1200,
     "unspecified": 1350,
 }
+
+# ============================================================================================
+# F11 Progression engine v1 (#31) - used by app/engines/progression.py.
+# ============================================================================================
+
+# F11 plate step by equipment (kg); dumbbells 2 kg, everything else 2.5 kg. Imperial users 5 lb.
+PLATE_STEP_KG_DEFAULT = 2.5
+PLATE_STEP_KG_BY_EQUIPMENT: dict[str, float] = {"dumbbell": 2.0}
+KG_PER_LB = 0.45359237
+PLATE_STEP_LB = 5.0
+# F11 minimum weight (D56): the empty bar for barbell exercises (45 lb shown to imperial users).
+MIN_WEIGHT_KG_BY_EQUIPMENT: dict[str, float] = {"barbell": 20.0}
+# F11 deload: this many consecutive failing sessions at the same weight trigger a deload.
+DELOAD_FAILING_SESSIONS = 3
+# F11 deload weight = this share of the current weight, rounded down to the plate step.
+DELOAD_FACTOR = 0.9
+# F11 timed / cardio: duration grows by this share when every set was completed.
+TIMED_PROGRESSION_FACTOR = 0.10
+# F11 duration rounding (seconds): 5 s for holds, 1 min for cardio (equipment cardio_machine).
+TIMED_ROUNDING_SECONDS = 5
+CARDIO_ROUNDING_SECONDS = 60
