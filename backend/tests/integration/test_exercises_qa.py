@@ -364,3 +364,15 @@ def test_the_exercise_migration_downgrades_and_upgrades_without_touching_users(
     engine.dispose()
     again = _alembic(fresh_database_url, "upgrade", "head")
     assert again.returncode == 0, again.stderr
+
+
+def test_swapped_seed_row_names_cause_no_unique_or_pk_violation(api: Api) -> None:
+    """QA #103: Push-up renamed to Pull-up's old name, Pull-up renamed away: 0 inserts."""
+    with Session(api.app.state.engine) as session:
+        load_exercises(session)
+        session.execute(text("UPDATE exercise SET name = 'Pull-up (old)' WHERE name = 'Pull-up'"))
+        session.execute(text("UPDATE exercise SET name = 'Pull-up' WHERE name = 'Push-up'"))
+        session.commit()
+        assert load_exercises(session) == 0
+        session.commit()
+        assert session.scalar(text("SELECT count(*) FROM exercise")) == len(SEED_EXERCISES)
