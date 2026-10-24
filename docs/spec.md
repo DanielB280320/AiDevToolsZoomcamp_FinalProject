@@ -119,6 +119,8 @@ A step-by-step wizard after first sign-in. All values editable later in Profile.
 - [ ] F2.5 Units shown follow the user's setting; values are stored in metric.
 - [ ] F2.6 If the Navy method (F3.3) yields a body fat outside 3–60 %, the result is ignored (not stored as the body fat), the targets fall back to Mifflin-St Jeor (F3.1) and the explanation says so (D55).
 
+Implementation notes (#25): onboarding is one transaction (profile, first `BodyMetric`, `Targets`, plan v1); a second call is `409 already_onboarded`, and reads before it are `404 not_onboarded`. A Navy result the formula cannot compute (waist not larger than neck) is treated like an out-of-range one (F2.6). `body_fat_pct` is accepted only with method `entered`; `navy` needs neck and waist (plus hip for female / unspecified). Plans created by onboarding store F13.2 planned kcal per exercise and per day at the weight entered. `PUT /profile` recomputes targets (from the latest weight and body fat on or before today and the active plan's planned kcal) when sex, height, lifestyle, goal, days per week or session length changed; a second recompute on the same local day replaces that day's `Targets` row, earlier days keep theirs. `GET /targets?date=` returns the latest row with `valid_from <= date`, and the first row for earlier dates.
+
 ### F3. Calculation engine (targets) — *Must*
 
 Pure functions with no I/O; every output includes a human-readable explanation. Constants live in one configuration module.

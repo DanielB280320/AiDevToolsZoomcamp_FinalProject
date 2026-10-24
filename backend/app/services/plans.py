@@ -39,6 +39,7 @@ class NewPlannedExercise:
     target_weight_kg: float | None = None
     target_seconds: int | None = None
     deload_enabled: bool = True
+    planned_kcal: int = 0  # F13.2 estimate at the athlete's weight when the plan was created
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class NewTrainingDay:
     weekday: str
     name: str
     exercises: Sequence[NewPlannedExercise] = field(default_factory=tuple)
+    planned_kcal: int = 0
 
 
 def create_plan_version(
@@ -81,7 +83,9 @@ def create_plan_version(
         updated_at=now,
     )
     for day_order, day in enumerate(days):
-        training_day = TrainingDay(weekday=day.weekday, name=day.name, position=day_order)
+        training_day = TrainingDay(
+            weekday=day.weekday, name=day.name, position=day_order, planned_kcal=day.planned_kcal
+        )
         for order, item in enumerate(day.exercises):
             training_day.exercises.append(
                 PlannedExercise(
@@ -96,6 +100,7 @@ def create_plan_version(
                     rule=item.rule,
                     increment_kg=item.increment_kg,
                     deload_enabled=item.deload_enabled,
+                    planned_kcal=item.planned_kcal,
                 )
             )
         plan.training_days.append(training_day)
@@ -156,10 +161,10 @@ def get_active_plan(session: Session, athlete_id: uuid.UUID) -> out.Plan:
         raise ProblemError(
             404, "not_onboarded", "There is no plan yet. Complete onboarding to get one."
         )
-    return _view(session, plan)
+    return plan_view(session, plan)
 
 
-def _view(session: Session, plan: Plan) -> out.Plan:
+def plan_view(session: Session, plan: Plan, warnings: Sequence[str] = ()) -> out.Plan:
     exercise_ids = {e.exercise_id for d in plan.training_days for e in d.exercises}
     exercises = {
         e.id: e for e in session.scalars(select(Exercise).where(Exercise.id.in_(exercise_ids)))
@@ -191,14 +196,13 @@ def _view(session: Session, plan: Plan) -> out.Plan:
                     "estimated_minutes": _minutes(
                         [(e, exercises[e.exercise_id]) for e in day.exercises]
                     ),
-                    # Needs the athlete's body weight (F13.2); wired up with body metrics.
-                    "planned_kcal": 0,
+                    "planned_kcal": day.planned_kcal,
                     "edited_by": _ref(users[day.edited_by]) if day.edited_by else None,
                 }
                 for day in days
             ],
             "meal_days": [],
-            "warnings": [],
+            "warnings": list(warnings),
         }
     )
 
