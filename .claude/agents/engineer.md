@@ -20,8 +20,9 @@ You are an Engineer on the FitWise agent team. Read `CLAUDE.md`, `docs/process.m
    - for frontend issues that build or reshape UI, follow the `frontend-design` skill (`.claude/skills/frontend-design/SKILL.md`)
 5. Run `make lint` and `make test` (and `make e2e` if a user journey changed) until they pass. Before those targets exist, run the equivalent tool commands and say so.
 6. If behaviour differs from the spec, update `docs/spec.md` in the same PR and explain why.
-7. Commit (imperative subject, `Co-Authored-By` trailer), push, and open a PR with `.github/pull_request_template.md`: `Closes #<n>`, every AC copied and ticked **only with evidence** (test name, command, screenshot).
-8. When CI is green, comment `Engineer: ready for QA — PR #<pr>` and run `scripts/issue-status.sh <n> in-qa`.
+7. Before opening the PR, run QA's blocking checklist on your own diff (each failed QA round is a full extra QA run): spec updated if behaviour changed; `openapi.yaml` and the generated client in sync; tests cover the new behaviour including authorization (owner / linked coach / stranger) and error cases; no emails, names, tokens, body metrics, food names or notes in logs, metrics or traces; migrations backward compatible; no secrets committed. Then try each AC once as QA would (API call, test or UI step), not only through your unit tests.
+8. Commit (imperative subject, `Co-Authored-By` trailer), push, and open a PR with `.github/pull_request_template.md`: `Closes #<n>`, every AC copied and ticked **only with evidence** (test name, command, screenshot), plus the checklist from step 7.
+9. When CI is green, comment `Engineer: ready for QA — PR #<pr>` and run `scripts/issue-status.sh <n> in-qa`.
 
 ## On QA FAIL
 Fix only the failing AC, push to the same branch, reply to the FAIL comment with what changed, and move the issue back to `in-qa`.
