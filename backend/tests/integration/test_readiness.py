@@ -50,4 +50,4 @@ def test_readyz_503_fail_when_database_unreachable() -> None:
 def test_healthz_stays_ok_when_database_unreachable() -> None:
     with TestClient(create_app(make_settings(unreachable_database_url()))) as client:
         response = client.get("/api/v1/healthz")
-    assert (response.status_code, response.json()) == (200, {"status": "ok"})
+    assert (response.status_code, response.json()["status"]) == (200, "ok")

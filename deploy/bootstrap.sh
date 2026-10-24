@@ -4,18 +4,26 @@
 #
 #   ENV_NAME=dev|prod deploy/bootstrap.sh
 #
-# Installs Docker + Compose plugin, creates the `deploy` user, /opt/fitwise
-# with CURRENT_TAG / PREVIOUS_TAG and a root-only env file, and runs a
-# placeholder container on port 80 until the app is deployed (#13).
+# Installs Docker + Compose plugin + jq, creates the `deploy` user, /opt/fitwise with CURRENT_TAG /
+# PREVIOUS_TAG and a root-only env file (secrets generated on the host), runs a placeholder
+# container on port 80 until the first real deploy, and installs the pull-based deploy poller
+# (systemd timer + scripts, #13, ADR 0010).
+#
+#   DEPLOY_REF=<branch|sha>   where to fetch the deploy scripts from (default main; public repo).
+#                             Scripts next to this file are used instead when present.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
 ENV_NAME="${ENV_NAME:?set ENV_NAME=dev|prod}"
 APP_DIR=/opt/fitwise
+REPO="${GITHUB_REPOSITORY:-DanielB280320/AiDevToolsZoomcamp_FinalProject}"
+DEPLOY_REF="${DEPLOY_REF:-main}"
+IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-ghcr.io/$(printf '%s' "${REPO%%/*}" | tr '[:upper:]' '[:lower:]')/}"
 COMPOSE_VERSION=v2.29.7
 # sha256 of docker-compose-linux-x86_64 for that version (from the release's .sha256 asset)
 COMPOSE_SHA256=383ce6698cd5d5bbf958d2c8489ed75094e34a77d340404d9f32c4ae9e12baf0
 
 command -v docker >/dev/null || dnf install -y docker
+command -v jq >/dev/null || dnf install -y jq
 systemctl enable --now docker
 
 if [ ! -x /usr/local/lib/docker/cli-plugins/docker-compose ]; then
@@ -36,11 +44,45 @@ for f in CURRENT_TAG PREVIOUS_TAG; do
   [ -e "$APP_DIR/$f" ] || { : > "$APP_DIR/$f"; chown deploy:deploy "$APP_DIR/$f"; }
 done
 if [ ! -e "$APP_DIR/.env" ]; then
-  printf '# FitWise %s runtime configuration (root-only). Fill in per .env.example.\nFITWISE_ENV=%s\n' "$ENV_NAME" "$ENV_NAME" > "$APP_DIR/.env"
+  printf '# FitWise %s runtime configuration (root-only, generated on this host). See .env.example.\nFITWISE_ENV=%s\n' "$ENV_NAME" "$ENV_NAME" > "$APP_DIR/.env"
 fi
+# Runtime secrets are generated here once and never leave the host (root-only file, not in the repo).
+ensure_env() { grep -q "^$1=" "$APP_DIR/.env" || printf '%s=%s\n' "$1" "$2" >> "$APP_DIR/.env"; }
+ensure_env APP_ENV "$ENV_NAME"
+ensure_env SESSION_COOKIE_SECURE false
+ensure_env POSTGRES_PASSWORD "$(openssl rand -hex 24)"
+ensure_env JWT_SECRET "$(openssl rand -hex 32)"
+ensure_env USER_HASH_SALT "$(openssl rand -hex 24)"
 chown root:root "$APP_DIR/.env"; chmod 600 "$APP_DIR/.env"
 
-# Placeholder on port 80 (removed by the first real deploy, #13).
+# --- Pull-based deploy poller (#13, ADR 0010) -------------------------------------------------
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+mkdir -p "$APP_DIR/bin" "$APP_DIR/releases"
+changed=0
+install_file() {  # install_file <name> <destination> <mode>: copies only when the content differs
+  local src="$here/$1" tmp
+  tmp="$(mktemp)"
+  if [ ! -f "$src" ]; then
+    curl -fsSL --retry 3 "https://raw.githubusercontent.com/$REPO/$DEPLOY_REF/deploy/$1" -o "$tmp" ||
+      { rm -f "$tmp"; echo "cannot fetch deploy/$1 at $DEPLOY_REF" >&2; exit 1; }
+    src="$tmp"
+  fi
+  if ! cmp -s "$src" "$2"; then install -m "$3" -o root -g root "$src" "$2"; changed=1; fi
+  rm -f "$tmp"
+}
+for f in lib.sh poll.sh deploy.sh rollback.sh; do install_file "$f" "$APP_DIR/bin/$f" 755; done
+install_file fitwise-deploy.service /etc/systemd/system/fitwise-deploy.service 644
+install_file fitwise-deploy.timer /etc/systemd/system/fitwise-deploy.timer 644
+conf="$(printf 'GITHUB_REPOSITORY=%s\nDEPLOY_ENV=%s\nIMAGE_NAMESPACE=%s' "$REPO" "$ENV_NAME" "$IMAGE_NAMESPACE")"
+if [ "$(cat /etc/fitwise-deploy.env 2>/dev/null)" != "$conf" ]; then
+  printf '%s\n' "$conf" > /etc/fitwise-deploy.env
+  chmod 644 /etc/fitwise-deploy.env   # no secrets in this file
+  changed=1
+fi
+[ "$changed" = 0 ] || systemctl daemon-reload
+systemctl enable --now fitwise-deploy.timer >/dev/null
+
+# Placeholder on port 80 (removed by the first real deploy).
 if [ ! -s "$APP_DIR/CURRENT_TAG" ]; then
   docker ps -a --format '{{.Names}}' | grep -qx fitwise-placeholder ||
     docker run -d --name fitwise-placeholder --restart unless-stopped -p 80:80 nginx:alpine >/dev/null

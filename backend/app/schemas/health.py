@@ -7,6 +7,7 @@ class Health(ResponseModel):
     """`Health` in openapi.yaml."""
 
     status: Literal["ok"] = "ok"
+    version: str
 
 
 class ReadinessChecks(ResponseModel):

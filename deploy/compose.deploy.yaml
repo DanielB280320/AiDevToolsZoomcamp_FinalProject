@@ -1,0 +1,14 @@
+# Deploy overlay (issue #13, ADR 0010): layered on compose.yaml by deploy/deploy.sh and rollback.sh.
+# Runs the release's images BY DIGEST (BACKEND_IMAGE / FRONTEND_IMAGE come from the release's
+# release.env, recorded by CI), and never builds on the host. The app is published on port 80 via
+# HTTP_BIND=0.0.0.0 / HTTP_PORT=80, which deploy/lib.sh exports.
+services:
+  migrate:
+    image: ${BACKEND_IMAGE:?set by deploy.sh from release.env}
+    build: !reset null
+  backend:
+    image: ${BACKEND_IMAGE:?set by deploy.sh from release.env}
+    build: !reset null
+  frontend:
+    image: ${FRONTEND_IMAGE:?set by deploy.sh from release.env}
+    build: !reset null

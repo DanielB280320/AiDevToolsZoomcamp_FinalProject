@@ -49,5 +49,5 @@ def test_healthz_does_not_wait_for_a_hung_database(silent_server_port: int) -> N
     with TestClient(create_app(make_settings(url))) as client:
         response = client.get("/api/v1/healthz")
 
-    assert (response.status_code, response.json()) == (200, {"status": "ok"})
+    assert (response.status_code, response.json()["status"]) == (200, "ok")
     assert time.monotonic() - started < 1

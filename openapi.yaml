@@ -5027,11 +5027,20 @@ components:
     # ───────── Ops ─────────
     Health:
       type: object
-      required: [status]
+      required: [status, version]
       properties:
         status:
           type: string
           const: ok
+        version:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >-
+            Release the running backend belongs to: the commit SHA of its image (`APP_VERSION`,
+            default the image tag), or `dev`/`local` outside a deploy. Deploys and the post-deploy
+            smoke test wait until dev serves the expected SHA. Not sensitive.
+          example: 1f22fc4a9b3c5d7e8f001122334455667788aabb
     Readiness:
       type: object
       required: [status, checks]
