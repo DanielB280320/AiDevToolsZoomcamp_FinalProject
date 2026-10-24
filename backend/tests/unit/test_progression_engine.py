@@ -311,15 +311,24 @@ def inputs(draw: st.DrawFn) -> ProgressionInput:
     rule = draw(st.sampled_from(["linear", "double"]))
     reps_min = draw(st.integers(1, 10))
     reps_max = draw(st.integers(reps_min, 20))
-    reps = draw(rep_lists)
-    wts = draw(
-        st.lists(st.sampled_from([target, target + step]), min_size=len(reps), max_size=len(reps))
-    )
+    sets_planned = draw(st.integers(1, 5))
+    if draw(st.booleans()):  # a success half of the time, so increases are well covered
+        reps = [reps_max + draw(st.integers(0, 2)) for _ in range(sets_planned)]
+        wts = [target] * len(reps)
+    else:
+        reps = draw(rep_lists)
+        wts = draw(
+            st.lists(
+                st.sampled_from([target, target, target + step]),
+                min_size=len(reps),
+                max_size=len(reps),
+            )
+        )
     return ProgressionInput(
         exercise_type="strength",
         rule=rule,  # type: ignore[arg-type]
         equipment=equipment,
-        sets_planned=draw(st.integers(1, 5)),
+        sets_planned=sets_planned,
         logged_sets=[LoggedSet(reps=r, weight_kg=w) for r, w in zip(reps, wts, strict=True)],
         target_weight_kg=target,
         target_reps=reps_max,
@@ -363,6 +372,51 @@ def test_increase_on_plate_grid_from_minimum(inp: ProgressionInput) -> None:
         assert s.weight_kg is not None
         k = (s.weight_kg - min_weight_kg(inp.equipment)) / step
         assert abs(k - round(k)) < 1e-6
+
+
+def test_timed_rounding_to_same_value_holds() -> None:
+    s = suggest(timed([5, 5, 5], 5))
+    assert (s.action, s.seconds) == ("hold", 5)
+    c = suggest(timed([60], 60, region="cardio", sets_planned=1))
+    assert (c.action, c.seconds) == ("hold", 60)
+    assert "keep" in c.reason
+
+
+def test_deload_never_increases_weight_below_minimum() -> None:
+    s = suggest(
+        lin(
+            sets([1, 1, 1], 10.0),
+            target_weight_kg=10.0,
+            deload_enabled=True,
+            consecutive_failures=2,
+        )
+    )
+    assert s.action == "hold"
+    assert s.weight_kg == 20.0
+    assert "minimum" in s.reason
+
+
+@given(inputs())
+def test_deload_never_increases(inp: ProgressionInput) -> None:
+    s = suggest(inp)
+    if s.action == "deload":
+        assert s.weight_kg is not None
+        assert s.weight_kg <= (inp.target_weight_kg or 0) + 1e-9
+
+
+def test_imperial_barbell_reads_45_50_55_lb() -> None:
+    step = 5 * 0.45359237
+    for k, text in enumerate(["45 lb", "50 lb", "55 lb"]):
+        s = suggest(
+            lin(
+                sets([5, 5, 5], 20.0 + k * step),
+                target_weight_kg=20.0 + k * step,
+                imperial=True,
+                increment_kg=step,
+            )
+        )
+        assert s.reason.startswith(f"All 3 sets reached 5 reps at {text}"), s.reason
+        assert s.reason.endswith(f"→ {[50, 55, 60][k]} lb × 5.")
 
 
 def test_cardio_region_rounds_to_minute() -> None:

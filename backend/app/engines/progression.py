@@ -30,6 +30,7 @@ from app.engines.constants import (
     DELOAD_FAILING_SESSIONS,
     KG_PER_LB,
     MIN_WEIGHT_KG_BY_EQUIPMENT,
+    MIN_WEIGHT_LB_DISPLAY_BY_EQUIPMENT,
     PLATE_STEP_KG_BY_EQUIPMENT,
     PLATE_STEP_KG_DEFAULT,
     PLATE_STEP_LB,
@@ -115,8 +116,16 @@ def _round_step(
     return base + k * step
 
 
-def _fmt_w(kg: float, imperial: bool) -> str:
+def _fmt_w(kg: float, imperial: bool, equipment: str) -> str:
     if imperial:
+        floor_kg = min_weight_kg(equipment)
+        floor_lb = MIN_WEIGHT_LB_DISPLAY_BY_EQUIPMENT.get(equipment)
+        if floor_lb is not None:
+            # Weights on the imperial plate grid (minimum + k x 5 lb) display as floor_lb + 5k lb,
+            # so the 20 kg bar reads 45 lb (D56). Storage stays metric; off-grid values convert.
+            k = (kg - floor_kg) / (PLATE_STEP_LB * KG_PER_LB)
+            if kg >= floor_kg - _EPS and abs(k - round(k)) < 1e-6:
+                return f"{floor_lb + PLATE_STEP_LB * round(k):g} lb"
         return f"{round(kg / KG_PER_LB, 1):g} lb"
     return f"{round(kg, 2):g} kg"
 
@@ -193,7 +202,8 @@ def suggest(p: ProgressionInput) -> Suggestion:
             return out(
                 "calibrate",
                 f"First session: {weights[used]} of {len(done)} sets at "
-                f"{_fmt_w(used, p.imperial)} → target weight {_fmt_w(w, p.imperial)}.",
+                f"{_fmt_w(used, p.imperial, p.equipment)} → target weight "
+                f"{_fmt_w(w, p.imperial, p.equipment)}.",
                 weight=w,
                 reps=p.target_reps or p.reps_min,
                 failures=0,
@@ -209,7 +219,7 @@ def suggest(p: ProgressionInput) -> Suggestion:
     low = p.target_reps if linear else p.reps_min
     if top is None or low is None:
         return out("none", "Missing rep targets: no suggestion.")
-    wtxt = _fmt_w(target_w, p.imperial)
+    wtxt = _fmt_w(target_w, p.imperial, p.equipment)
 
     if len(work) >= p.sets_planned and all(r >= top for r in reps_done):
         n = len(work)
@@ -219,7 +229,7 @@ def suggest(p: ProgressionInput) -> Suggestion:
                 return out(
                     "add_weight",
                     f"All {n} sets reached {top} reps → add weight: "
-                    f"+{_fmt_w(w, p.imperial)} × {low}.",
+                    f"+{_fmt_w(w, p.imperial, p.equipment)} × {low}.",
                     weight=w,
                     reps=low,
                     failures=0,
@@ -243,7 +253,8 @@ def suggest(p: ProgressionInput) -> Suggestion:
         nreps = top if linear else low
         return out(
             "increase_weight",
-            f"All {n} sets reached {top} reps at {wtxt} → {_fmt_w(w, p.imperial)} × {nreps}.",
+            f"All {n} sets reached {top} reps at {wtxt} → "
+            f"{_fmt_w(w, p.imperial, p.equipment)} × {nreps}.",
             weight=w,
             reps=nreps,
             failures=0,
@@ -253,10 +264,19 @@ def suggest(p: ProgressionInput) -> Suggestion:
     count = p.consecutive_failures + 1 if failed else 0
     if failed and p.deload_enabled and not is_bw and count >= DELOAD_FAILING_SESSIONS:
         w = max(floor_kg, _round_step(target_w * DELOAD_FACTOR, step, "down", floor_kg))
+        if w > target_w + _EPS:  # target below the minimum: a deload must never add weight
+            return out(
+                "hold",
+                f"{count} consecutive sessions below {low} reps, but {wtxt} is already below the "
+                f"minimum weight → hold at the minimum {_fmt_w(w, p.imperial, p.equipment)}.",
+                weight=w,
+                reps=top if linear else low,
+                failures=count,
+            )
         return out(
             "deload",
             f"{count} consecutive sessions below {low} reps at {wtxt} → deload to "
-            f"{_fmt_w(w, p.imperial)} (90 % rounded down to the plate step).",
+            f"{_fmt_w(w, p.imperial, p.equipment)} (90 % rounded down to the plate step).",
             weight=w,
             reps=top if linear else low,
             failures=0,
@@ -300,6 +320,13 @@ def _timed(
             "hold", f"Not all sets completed at {target} s → keep {target} s.", seconds=target
         )
     new = int(_round_step(target * (1 + TIMED_PROGRESSION_FACTOR), step, "nearest"))
+    if new <= target:
+        return out(
+            "hold",
+            f"All {len(done)} sets completed at {target} s; +10 % rounds to the same {step} s "
+            "step → keep.",
+            seconds=target,
+        )
     return out(
         "increase_duration",
         f"All {len(done)} sets completed at {target} s → {new} s (+10 %).",

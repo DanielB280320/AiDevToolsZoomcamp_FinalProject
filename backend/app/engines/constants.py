@@ -100,6 +100,8 @@ KG_PER_LB = 0.45359237
 PLATE_STEP_LB = 5.0
 # F11 minimum weight (D56): the empty bar for barbell exercises (45 lb shown to imperial users).
 MIN_WEIGHT_KG_BY_EQUIPMENT: dict[str, float] = {"barbell": 20.0}
+# F11 how imperial users see that minimum (D56): the imperial grid reads 45, 50, 55 ... lb.
+MIN_WEIGHT_LB_DISPLAY_BY_EQUIPMENT: dict[str, float] = {"barbell": 45.0}
 # F11 deload: this many consecutive failing sessions at the same weight trigger a deload.
 DELOAD_FAILING_SESSIONS = 3
 # F11 deload weight = this share of the current weight, rounded down to the plate step.

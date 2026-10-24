@@ -84,9 +84,6 @@ def test_imperial_barbell_grid_is_min_plus_5lb_multiples() -> None:
     assert "lb" in s.reason and "kg" not in s.reason
 
 
-@pytest.mark.xfail(
-    strict=True, reason="QA #31: reason shows the 20 kg floor as 44.1 lb, D56 says 45 lb"
-)
 def test_imperial_calibration_floor_is_45lb() -> None:
     s = suggest(
         ProgressionInput(
