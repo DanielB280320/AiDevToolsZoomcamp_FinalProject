@@ -62,21 +62,16 @@ jobs:
       BACKEND_IMAGE: ${{ needs.verify.outputs.backend_image }}
       FRONTEND_IMAGE: ${{ needs.verify.outputs.frontend_image }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Move deploy/prod to this release
         run: |
           : "${BACKEND_IMAGE:?missing}" "${FRONTEND_IMAGE:?missing}"
-          # Same shape as the dev deploy commit (ci.yml deploy-dev): same tree as the release,
-          # parent = the release commit, message = the release record the host reads.
-          tree="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${SHA}" --jq .tree.sha)"
-          msg="$(printf 'deploy prod %s\n\nsource: %s\nbackend: %s\nfrontend: %s\n' \
-            "$SHA" "$SHA" "$BACKEND_IMAGE" "$FRONTEND_IMAGE")"
-          new="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits" -f message="$msg" -f tree="$tree" \
-            -f "parents[]=${SHA}" --jq .sha)"
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/deploy/prod" >/dev/null 2>&1; then
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/deploy/prod" -f sha="$new" -F force=true >/dev/null
-          else
-            gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref=refs/heads/deploy/prod -f sha="$new" >/dev/null
-          fi
+          # Deploy commit = release record (message) on the tree of the current deploy/prod commit,
+          # so it never changes .github/workflows (GITHUB_TOKEN would get a 403). The host reads only
+          # the message. Same script as dev; see scripts/move-deploy-ref.sh.
+          new="$(scripts/move-deploy-ref.sh prod "$SHA" "$BACKEND_IMAGE" "$FRONTEND_IMAGE")"
           now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo "deploy/prod -> ${new} (release ${SHA}) at ${now}"
           {
