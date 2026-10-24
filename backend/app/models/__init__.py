@@ -4,6 +4,7 @@ from app.models.base import Base
 from app.models.exercise import Exercise
 from app.models.feature_flag import FeatureFlag
 from app.models.plan import Plan, PlanChange, PlannedExercise, TrainingDay
+from app.models.session import TrainingSession
 from app.models.user import SignInFailure, User
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "PlannedExercise",
     "SignInFailure",
     "TrainingDay",
+    "TrainingSession",
     "User",
 ]

@@ -292,6 +292,7 @@ The generated plan is a starting point. Athletes (and their linked coach) can ed
 - The weekly plan repeats indefinitely; sessions are materialised for a date when first viewed or logged.
 - **Missed sessions**: a planned session with no logs whose date has passed (in the user's time zone) is shown as *missed* and counts against adherence.
 - **Moving a session**: the athlete can move a session to another day **within the same ISO week** (one session per day max). Moving does not change the template.
+- **Implementation notes (#27)**: a `session` row is created on first view of a planned day (`GET /athletes/{id}/days/{date}`), idempotently (unique athlete + date); `GET .../calendar` never writes, it derives not-yet-materialised days from the active plan's template, only for days on or after the plan's creation date (local). `missed` is derived on read, not stored. A rejected move returns 409 with `day_occupied` (the target already has a session, materialised or still only on the template; also moving onto the same day), `session_finished`, `outside_week` (target not in the session's ISO week) or `date_in_past`.
 
 **AC**
 - [ ] F9.1 "Today" is calculated in the user's time zone.

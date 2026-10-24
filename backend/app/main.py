@@ -10,7 +10,7 @@ from app.db import make_engine, make_session_factory
 from app.errors import install_error_handlers
 from app.fault_injection import FaultInjectionMiddleware
 from app.migrations import load_migration_scripts
-from app.routers import auth, exercises, health, me, plans
+from app.routers import auth, calendar, exercises, health, me, plans
 from app.services.clock import SystemClock
 from app.services.flags import FlagReader
 from app.telemetry import (
@@ -73,5 +73,6 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     api.include_router(me.router)
     api.include_router(exercises.router)
     api.include_router(plans.router)
+    api.include_router(calendar.router)
     app.include_router(api)
     return app
