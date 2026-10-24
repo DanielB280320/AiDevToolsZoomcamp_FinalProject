@@ -207,6 +207,12 @@ Rep ranges and cardio by goal:
 - Default progression rule: **linear** for beginners' main lifts, **double progression** otherwise; **deload** enabled for both. Under linear progression the fixed target reps are the **middle of the rep range**, rounded down if not an integer (e.g. 8 for 6–10, 9 for 6–12; D54).
 - **Equipment per variant** (engine constant `EQUIPMENT_BY_VARIANT`, same mapping as the F4.1 seed-coverage test): Full gym = every equipment; Home dumbbells = `dumbbell`, `bodyweight`, `band`, `none`; Bodyweight only = `bodyweight`, `none`.
 - **Engine choices inside the ranges** (constants in `app/engines/constants.py`): sets (main/accessory) beginner 3/2, intermediate 4/3, advanced 5/3, retried at 2/3/3 when an exercise does not fit the remaining time; rest 90 s; cardio per session 5 min (muscle gain), 10 (recomposition, maintenance), 15 (cutting), 20 (wellness). Exercises are added in priority order until the session length is used, so longer sessions hold more. Only when a 30-minute session could not hold even one exercise (wellness, intermediate/advanced) is cardio shortened in 5-minute steps (20 to 15).
+- **Engine selection rules** (generator choices the ranges leave open):
+  - *Exercise ranking:* main lifts take the highest MET first, accessories the lowest MET first; ties break by name, then id; exercises not yet used in the plan are preferred, so repeated days vary.
+  - *Linear progression* applies only to strength-type main lifts of beginners; bodyweight main lifts use double progression with the rep range.
+  - *Cardio entries* are one set with `target_seconds` (cardio minutes x 60) and no rest.
+  - *Bodyweight fallback* (F5.6) considers equipment `bodyweight` only, not `none`.
+  - *Empty slots:* a slot with no usable exercise (none left in the variant, or all already used that day) is skipped, so some sessions are shorter than the length allows.
 - **Calibration (starting weights):** generated targets have no weight in week 1 ("choose a weight you can do for the target reps with 2 reps left"). The first logged weight becomes the baseline.
 - Exercises on the user's "avoid" list are replaced by the nearest alternative (same muscle group and equipment). If there is none, fall back to a **bodyweight** exercise of the same muscle group; if there is none either, the exercise is dropped and the plan carries a warning naming the dropped exercise (D54).
 
