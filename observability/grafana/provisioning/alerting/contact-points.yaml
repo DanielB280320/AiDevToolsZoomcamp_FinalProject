@@ -13,3 +13,6 @@ contactPoints:
         settings:
           url: $ONCALL_WEBHOOK_URL
           httpMethod: POST
+          # Basic auth the responder requires (#19); same variables it reads. Never from git.
+          username: $ONCALL_WEBHOOK_USER
+          password: $ONCALL_WEBHOOK_PASSWORD

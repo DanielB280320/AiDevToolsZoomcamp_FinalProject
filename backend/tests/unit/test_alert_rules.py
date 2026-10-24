@@ -101,6 +101,9 @@ def test_contact_point_and_policy() -> None:
     receiver = contact["receivers"][0]
     assert receiver["type"] == "webhook"
     assert receiver["settings"]["url"] == "$ONCALL_WEBHOOK_URL"  # from env, never from git
+    # Basic-auth credentials the responder requires (#19): env placeholders, never literals.
+    assert receiver["settings"]["username"] == "$ONCALL_WEBHOOK_USER"
+    assert receiver["settings"]["password"] == "$ONCALL_WEBHOOK_PASSWORD"
     policy = _load("policies.yaml")["policies"][0]
     assert policy["receiver"] == contact["name"]
     assert all(r["receiver"] == contact["name"] for r in policy.get("routes", []))

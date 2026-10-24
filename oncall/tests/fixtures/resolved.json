@@ -1,0 +1,43 @@
+{
+  "receiver": "oncall-responder",
+  "status": "resolved",
+  "orgId": 1,
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "KeyJourneyErrors",
+        "env": "prod",
+        "grafana_folder": "FitWise",
+        "route": "/api/v1/sessions/{session_id}/finish",
+        "service": "fitwise-backend",
+        "severity": "page"
+      },
+      "annotations": {
+        "dashboard_url": "http://grafana.example/d/key-journey?var-env=prod",
+        "route": "/api/v1/sessions/{session_id}/finish",
+        "runbook_url": "https://github.com/example/repo/blob/main/docs/runbooks/key-journey-errors.md",
+        "summary": "More than 5 % of /api/v1/sessions/{session_id}/finish requests fail with 5xx",
+        "window": "5m"
+      },
+      "startsAt": "2026-10-24T10:00:00Z",
+      "endsAt": "2026-10-24T10:12:00Z",
+      "generatorURL": "http://grafana.example/alerting/grafana/fitwise-key-journey-errors/view",
+      "fingerprint": "9d1f0c2a7b3e4a55",
+      "silenceURL": "http://grafana.example/alerting/silence/new",
+      "dashboardURL": "",
+      "panelURL": "",
+      "values": {"B": 0.0, "C": 0}
+    }
+  ],
+  "groupLabels": {"alertname": "KeyJourneyErrors", "route": "/api/v1/sessions/{session_id}/finish"},
+  "commonLabels": {"alertname": "KeyJourneyErrors", "env": "prod", "severity": "page"},
+  "commonAnnotations": {"window": "5m"},
+  "externalURL": "http://grafana.example/",
+  "version": "1",
+  "groupKey": "{}:{alertname=\"KeyJourneyErrors\"}",
+  "truncatedAlerts": 0,
+  "title": "[RESOLVED] KeyJourneyErrors",
+  "state": "ok",
+  "message": "**Resolved**"
+}
