@@ -111,3 +111,59 @@ TIMED_PROGRESSION_FACTOR = 0.10
 # F11 duration rounding (seconds): 5 s for holds, 1 min for cardio (equipment cardio_machine).
 TIMED_ROUNDING_SECONDS = 5
 CARDIO_ROUNDING_SECONDS = 60
+
+# ============================================================================================
+# F5 Training plan generator (#23) - used by app/engines/training_plan.py.
+# ============================================================================================
+
+# F5 which exercise equipment each plan variant may use. Same mapping as the F4.1 seed-coverage
+# test (tests/integration/test_exercises.py); `none` = no equipment needed.
+EQUIPMENT_BY_VARIANT: dict[str, frozenset[str]] = {
+    "full_gym": frozenset(
+        {"barbell", "dumbbell", "machine", "cable", "bodyweight", "band", "cardio_machine", "none"}
+    ),
+    "home_dumbbells": frozenset({"dumbbell", "bodyweight", "band", "none"}),
+    "bodyweight_only": frozenset({"bodyweight", "none"}),
+}
+# F5 supported training days per week.
+PLAN_MIN_DAYS = 2
+PLAN_MAX_DAYS = 6
+
+# F5 reps per goal: ((main_min, main_max), (accessory_min, accessory_max)).
+GOAL_REP_RANGES: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {
+    "muscle_gain": ((6, 10), (8, 12)),
+    "recomposition": ((6, 10), (10, 15)),
+    "cutting": ((6, 10), (10, 15)),
+    "maintenance": ((6, 12), (10, 15)),
+    "wellness": ((8, 12), (12, 15)),
+}
+# F5 cardio minutes added per session, picked inside the spec range (muscle gain 0-10,
+# cutting 15-20). Shortened in CARDIO_STEP_MINUTES steps only when a short session could not
+# otherwise hold PLAN_MIN_EXERCISES_PER_SESSION exercises.
+GOAL_CARDIO_MINUTES: dict[str, int] = {
+    "muscle_gain": 5,
+    "recomposition": 10,
+    "cutting": 15,
+    "maintenance": 10,
+    "wellness": 20,
+}
+CARDIO_STEP_MINUTES = 5
+# F5 working sets: (main, accessory) per experience, inside the spec range
+# (beginner 2-3, intermediate 3-4, advanced 3-5).
+SETS_BY_EXPERIENCE: dict[str, tuple[int, int]] = {
+    "beginner": (3, 2),
+    "intermediate": (4, 3),
+    "advanced": (5, 3),
+}
+# F5 when an exercise does not fit the remaining time it is retried with this many sets.
+MIN_SETS_BY_EXPERIENCE: dict[str, int] = {"beginner": 2, "intermediate": 3, "advanced": 3}
+# F5 / D54 duration estimate: sets x (rest + WORKING_SECONDS_PER_SET) + cardio + warm-up.
+WARMUP_MINUTES = 5
+# F5 rest between sets for every generated exercise (D54: default rest 90 s).
+PLAN_REST_SECONDS = DEFAULT_REST_SECONDS
+# F5 timed strength exercises (planks, wall sit): target seconds per set.
+PLAN_TIMED_TARGET_SECONDS = 30
+# F5 a session keeps at least this many exercises (minimum sets); cardio is cut to make room.
+PLAN_MIN_EXERCISES_PER_SESSION = 1
+# F5.4 hint shown while a strength target has no weight.
+CALIBRATION_HINT = "Choose a weight you can do for the target reps with 2 reps left."
