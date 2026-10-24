@@ -308,7 +308,8 @@ jobs:
   # ------------------------------------------------------------------------------------------
   publish:
     name: Publish images (GHCR, by SHA)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [ci-passed] # untested images never reach GHCR or dev
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci-passed.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -358,8 +359,8 @@ jobs:
 
   deploy-dev:
     name: Approve release for dev (move deploy/dev)
-    needs: [ci-passed, publish]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci-passed.result == 'success' && needs.publish.result == 'success'
+    needs: [publish]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.publish.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: dev

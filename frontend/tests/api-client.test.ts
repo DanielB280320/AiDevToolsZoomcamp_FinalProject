@@ -15,7 +15,7 @@ describe("generated API client", () => {
 
     const { data } = await api.GET("/healthz");
 
-    expect(data).toEqual({ status: "ok" }); // answered by the mock server, not the network
+    expect(data).toEqual({ status: "ok", version: "test" }); // answered by the mock server, not the network
     const sent = fetchSpy.mock.calls[0]![0] as Request;
     expect(new URL(sent.url).pathname).toBe("/api/v1/healthz");
     expect(new URL(sent.url).origin).toBe(window.location.origin);
@@ -27,7 +27,7 @@ describe("generated API client", () => {
     const client = createApiClient({
       fetch: async (request: Request) => {
         requests.push(request);
-        return Response.json({ status: "ok" });
+        return Response.json({ status: "ok", version: "test" });
       },
     });
 

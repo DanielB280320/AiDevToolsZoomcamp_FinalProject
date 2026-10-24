@@ -46,8 +46,9 @@ case "$code" in
 esac
 
 etag="$(grep -i '^etag:' "$work/headers" | tr -d '\r' | sed 's/^[^:]*: *//' || true)"
-ref_sha="$(jq -r '.commit.sha // empty' "$work/body")"
-message="$(jq -r '.commit.commit.message // empty' "$work/body")"
+if ! jq -e . "$work/body" >/dev/null 2>&1; then log "poll: unexpected payload (not JSON)"; exit 0; fi
+ref_sha="$(jq -r '.commit.sha // empty' "$work/body" 2>/dev/null || true)"
+message="$(jq -r '.commit.commit.message // empty' "$work/body" 2>/dev/null || true)"
 is_sha "$ref_sha" || { log "poll: unexpected ref payload"; exit 0; }
 
 if [ -n "$etag" ]; then printf '%s\n' "$etag" > "$etag_file"; fi
