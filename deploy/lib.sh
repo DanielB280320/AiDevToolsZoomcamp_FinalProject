@@ -53,6 +53,13 @@ wait_healthy() {
   return 1
 }
 
+# demo_health_fail: true only while /opt/fitwise/.env contains the line FITWISE_DEMO_FAIL_HEALTH=1.
+# Temporary switch for the prod auto-rollback demo (#14, D61): deploy.sh then treats the post-deploy
+# health check as failed, so the normal rollback path runs. Off unless that exact line exists
+# (default absent, on every host). rollback.sh never consults it. Only the match result is used:
+# the file is never printed.
+demo_health_fail() { [ -r "$ENV_FILE" ] && grep -qx 'FITWISE_DEMO_FAIL_HEALTH=1' "$ENV_FILE"; }
+
 # Port 80 is held by the bootstrap placeholder until the first real deploy.
 stop_placeholder() { docker rm -f fitwise-placeholder >/dev/null 2>&1 || true; }
 start_placeholder() { docker start fitwise-placeholder >/dev/null 2>&1 || true; }

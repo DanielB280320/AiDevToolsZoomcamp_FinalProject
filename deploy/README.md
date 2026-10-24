@@ -77,10 +77,54 @@ merge to main -> CI (all gates) -> publish: images ghcr.io/<owner>/fitwise-{back
 - **Updating the scripts.** The poller scripts are installed by `bootstrap.sh`, not by a deploy. After changing anything under `deploy/` other than `compose.deploy.yaml` (which travels with each release), re-run `deploy/bootstrap-remote.sh dev` (idempotent; `DEPLOY_REF=<branch|sha>` installs from a branch).
 - **Merge to deployed on dev** targets 10 minutes (owner, 2026-10-24): CI, then at most 150 s until the next poll, then about 40 s to deploy.
 
-GitHub settings behind it: environment `dev` (deploys from `main` only) with variable `DEV_BASE_URL` (the dev address, used by the smoke test). The GHCR packages `fitwise-backend` and `fitwise-frontend` are public: they inherit the public repository because the images carry the `org.opencontainers.image.source` label. A ruleset limiting `deploy/*` to GitHub Actions is **not possible on a personal repository**: the API rejects the GitHub Actions app as a bypass actor ("must be part of the ruleset source or owner organization"). Until the repository moves to an organization, protection rests on the owner being the only writer (D58).
+### How prod is deployed (issue #14)
 
-Manual step for the owner: set required reviewers on the `production` GitHub environment (Settings, Environments), and restrict who can create or move `deploy/*` refs.
+```
+Actions > "Promote to production" (workflow_dispatch, input: full SHA of a release proven on dev)
+  verify      scripts/promote-verify.sh: ci.yml run on main for that SHA has deploy-dev AND smoke-dev = success
+              (unknown SHA, failed or skipped smoke: the run fails here, before any approval is requested)
+  promote     job in environment `production` (required reviewer, `contents: write`, GITHUB_TOKEN): after approval
+              moves deploy/prod to a deploy commit with the SAME release record as dev (source SHA, backend and
+              frontend @sha256 digests, taken from the `release-record` artifact of the dev run)
+  prod host   same fitwise-deploy.timer / poll.sh / deploy.sh / rollback.sh as dev (DEPLOY_ENV=prod)
+  smoke-prod  waits (12 min max) until GET /api/v1/healthz `version` == SHA, then readyz 200 and the e2e smoke
+              against the `PROD_BASE_URL` variable of the `production` environment
+```
+
+- **Why the SHA check.** Prod only ever runs images that passed CI, were deployed to dev and smoke-tested there. The check reads the Actions API with the run's own `GITHUB_TOKEN` (`actions: read`); tests with a fake `gh`: `bash scripts/test-promote-verify.sh` (CI job `deploy-script-tests`).
+- **Digests.** The `publish` job uploads the `release-record` artifact (90 days). A release that predates it is accepted only while `deploy/dev` still carries it.
+- **Poller on prod.** Identical to dev: one conditional (`ETag`) request to `deploy/prod` every 150 s = 24 requests per hour counting 304s (limit 60), no token on the host, images pulled by digest. Install or refresh with `deploy/bootstrap-remote.sh prod` (idempotent; the timer and `/etc/fitwise-deploy.env` are only rewritten when they differ). No inbound deploy port, no credential.
+- **Automatic rollback on prod.** Same as dev: if `/readyz` or the `version` check fails within 120 s, `rollback.sh <old CURRENT_TAG>` starts the previous release **without the migration step** and without any down-migration (D50), so `alembic_version` is unchanged. The failed ref is recorded in `LAST_REF` and not retried; the poller acts again only when `deploy/prod` moves. The smoke job then fails with a message saying the host may have rolled back. Inspect: `journalctl -u fitwise-deploy -o cat` on `fitwise-prod`.
+- **Rollback demo (temporary host switch, D61).** While the line `FITWISE_DEMO_FAIL_HEALTH=1` exists in `/opt/fitwise/.env`, `deploy.sh` starts the new release and then treats the health check as failed, so the normal path runs: `rollback.sh <CURRENT_TAG>` without migration. Off by default on every host, ignored by `rollback.sh`, not read by the application, never printed. It exists only for the demo; remove it afterwards. Procedure in the PR for #14 (also below).
+- **Manual rollback workflow** is a separate issue (#113); until then use `sudo /opt/fitwise/bin/rollback.sh` on the host.
+- **Only `main`.** The workflow's first job runs only when dispatched from `main`.
+
+GitHub settings for prod (owner): environment `production` with required reviewers and deployment branches limited to `main`, and variable `PROD_BASE_URL` (e.g. `http://<prod elastic ip>`).
+
+GitHub settings behind dev: environment `dev` (deploys from `main` only) with variable `DEV_BASE_URL` (the dev address, used by the smoke test). The GHCR packages `fitwise-backend` and `fitwise-frontend` are public: they inherit the public repository because the images carry the `org.opencontainers.image.source` label. A ruleset limiting `deploy/*` to GitHub Actions is **not possible on a personal repository**: the API rejects the GitHub Actions app as a bypass actor ("must be part of the ruleset source or owner organization"). Until the repository moves to an organization, protection rests on the owner being the only writer (D58).
+
+Manual step for the owner: set required reviewers on the `production` GitHub environment (Settings, Environments) and the `PROD_BASE_URL` variable; there is no ruleset for `deploy/*` (see above).
 
 ## Teardown (destructive, owner only)
 
 Terminate instances, release Elastic IPs, delete security groups and the role/profile by the `Project=fitwise` tag. Never done by agents without explicit owner confirmation.
+
+## Rollback demo on prod (owner commands, issue #14)
+
+Prerequisite: the scripts on `fitwise-prod` include the switch (re-run `deploy/bootstrap-remote.sh prod` after the PR is merged), and prod already serves one release A (promote any dev-proven SHA first, so there is a `CURRENT_TAG` to roll back to). Pick a second dev-proven SHA B.
+
+```bash
+IID=$(aws ec2 describe-instances --region us-east-2 --filters Name=tag:Name,Values=fitwise-prod Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)
+run() { aws ssm start-session --region us-east-2 --target "$IID" --document-name AWS-StartInteractiveCommand --parameters command="$1"; }   # or open a shell: aws ssm start-session --target "$IID"
+```
+
+On the host (as root, `sudo -i`):
+
+1. Record the starting state: `cat /opt/fitwise/CURRENT_TAG /opt/fitwise/PREVIOUS_TAG; docker exec $(docker ps -qf name=backend) alembic current` and `curl -s localhost/api/v1/healthz` (version = A).
+2. Switch on: `echo 'FITWISE_DEMO_FAIL_HEALTH=1' >> /opt/fitwise/.env`
+3. In GitHub, run "Promote to production" with sha = B and approve it. Link the run in the issue.
+4. Watch: `journalctl -u fitwise-deploy -f -o cat`. Expect `deploy/prod moved ... release B`, `FITWISE_DEMO_FAIL_HEALTH is set ... forced to fail`, `rolling back`, `rollback: ... A`, `FAILED B, rolled back to A`. The `smoke-prod` job fails (expected) with the "host may have rolled back" message.
+5. Verify: `cat /opt/fitwise/CURRENT_TAG` is A; `curl -s localhost/api/v1/healthz` version = A; `curl -s -o /dev/null -w '%{http_code}' localhost/api/v1/readyz` is 200; `alembic current` is the same revision as in step 1; `cat /opt/fitwise/LAST_REF` is the deploy/prod commit of B.
+6. No retry: wait for two more polls (about 5 minutes) and check `journalctl -u fitwise-deploy --since '-6min' -o cat`: no further deploy of B.
+7. **Switch off (required):** `sed -i '/^FITWISE_DEMO_FAIL_HEALTH=1$/d' /opt/fitwise/.env; grep -c FITWISE_DEMO_FAIL_HEALTH /opt/fitwise/.env` must print 0.
+8. Evidence for the issue: the journal excerpt (no `.env` contents appear in it), the run link, and `journalctl -u fitwise-deploy | grep -Ei 'ghp_|github_pat_|bearer'` printing nothing. Re-promote B afterwards (switch off) to show it deploys normally.
