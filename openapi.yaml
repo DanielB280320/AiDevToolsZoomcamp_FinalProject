@@ -2909,15 +2909,44 @@ components:
           type: integer
           enum: [3, 4, 5]
     AthleteProfile:
-      allOf:
-        - $ref: '#/components/schemas/AthleteProfileInput'
-        - type: object
-          required: [athlete_id, avoided_exercise_ids, allergies, updated_at]
-          properties:
-            athlete_id:
-              $ref: '#/components/schemas/Id'
-            updated_at:
-              $ref: '#/components/schemas/Timestamp'
+      type: object
+      additionalProperties: false
+      description: |
+        `AthleteProfileInput` plus `athlete_id` and `updated_at`. The properties are referenced, not
+        composed with `allOf`: `AthleteProfileInput` forbids additional properties, so an `allOf`
+        of it would reject `athlete_id` and `updated_at` under strict validation.
+      required: [athlete_id, sex, height_cm, lifestyle, goal, experience, days_per_week, preferred_days, session_minutes, equipment, avoided_exercise_ids, diet, allergies, meals_per_day, updated_at]
+      properties:
+        athlete_id:
+          $ref: '#/components/schemas/Id'
+        sex:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/sex'
+        height_cm:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/height_cm'
+        lifestyle:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/lifestyle'
+        goal:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/goal'
+        experience:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/experience'
+        days_per_week:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/days_per_week'
+        preferred_days:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/preferred_days'
+        session_minutes:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/session_minutes'
+        equipment:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/equipment'
+        avoided_exercise_ids:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/avoided_exercise_ids'
+        diet:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/diet'
+        allergies:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/allergies'
+        meals_per_day:
+          $ref: '#/components/schemas/AthleteProfileInput/properties/meals_per_day'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
     BodyFatMethod:
       type: string
       enum: [entered, navy]

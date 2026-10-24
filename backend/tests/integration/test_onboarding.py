@@ -81,19 +81,11 @@ def athlete(seeded: Api) -> Api:
 
 
 def assert_profile_schema(profile: dict[str, Any]) -> None:
-    """`AthleteProfile` is `allOf [AthleteProfileInput (additionalProperties: false), +2 fields]`,
-    which no payload can satisfy as written (reported on #25), so check the two halves."""
-    extra = {"athlete_id", "updated_at"}
-    assert extra <= profile.keys()
-    assert_matches_schema(
-        {k: v for k, v in profile.items() if k not in extra}, "AthleteProfileInput"
-    )
+    assert_matches_schema(profile, "AthleteProfile")
 
 
 def assert_onboarding_schema(result: dict[str, Any]) -> None:
-    assert_profile_schema(result["profile"])
-    for key, name in (("body_metric", "BodyMetric"), ("targets", "Targets"), ("plan", "Plan")):
-        assert_matches_schema(result[key], name)
+    assert_matches_schema(result, "OnboardingResult")
 
 
 def _counts(api: Api) -> dict[str, int]:

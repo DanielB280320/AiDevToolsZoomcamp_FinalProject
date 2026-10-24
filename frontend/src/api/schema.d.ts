@@ -1470,8 +1470,26 @@ export interface components {
             /** @enum {integer} */
             meals_per_day: 3 | 4 | 5;
         };
-        AthleteProfile: components["schemas"]["AthleteProfileInput"] & {
+        /**
+         * @description `AthleteProfileInput` plus `athlete_id` and `updated_at`. The properties are referenced, not
+         *     composed with `allOf`: `AthleteProfileInput` forbids additional properties, so an `allOf`
+         *     of it would reject `athlete_id` and `updated_at` under strict validation.
+         */
+        AthleteProfile: {
             athlete_id: components["schemas"]["Id"];
+            sex: components["schemas"]["AthleteProfileInput"]["sex"];
+            height_cm: components["schemas"]["AthleteProfileInput"]["height_cm"];
+            lifestyle: components["schemas"]["AthleteProfileInput"]["lifestyle"];
+            goal: components["schemas"]["AthleteProfileInput"]["goal"];
+            experience: components["schemas"]["AthleteProfileInput"]["experience"];
+            days_per_week: components["schemas"]["AthleteProfileInput"]["days_per_week"];
+            preferred_days: components["schemas"]["AthleteProfileInput"]["preferred_days"];
+            session_minutes: components["schemas"]["AthleteProfileInput"]["session_minutes"];
+            equipment: components["schemas"]["AthleteProfileInput"]["equipment"];
+            avoided_exercise_ids: components["schemas"]["AthleteProfileInput"]["avoided_exercise_ids"];
+            diet: components["schemas"]["AthleteProfileInput"]["diet"];
+            allergies: components["schemas"]["AthleteProfileInput"]["allergies"];
+            meals_per_day: components["schemas"]["AthleteProfileInput"]["meals_per_day"];
             updated_at: components["schemas"]["Timestamp"];
         };
         /**
