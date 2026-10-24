@@ -152,7 +152,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    mem_limit: 384m
+    mem_limit: 512m
     depends_on:
       prometheus:
         condition: service_healthy
