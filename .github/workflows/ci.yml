@@ -293,3 +293,164 @@ jobs:
           for r in $RESULTS; do
             if [ "$r" != "success" ]; then echo "::error::a required CI job did not succeed ($r)"; exit 1; fi
           done
+
+  # ------------------------------------------------------------------------------------------
+  # CD to dev (#13; spec §12, §13; ADR 0010, D57). Only on a push to main (= a merged PR).
+  #   publish    builds both images ONCE for this commit and pushes them to GHCR as :<sha>,
+  #              recording the digests (these are what hosts deploy, by digest).
+  #   deploy-dev after CI passed, records the approved release by moving the ref `deploy/dev`
+  #              (job in the `dev` environment; the built-in GITHUB_TOKEN, `contents: write` on
+  #              this job only). The dev host polls that ref (deploy/poll.sh) and deploys.
+  #   smoke-dev  waits until dev serves this SHA (GET /api/v1/healthz `version`), then runs the
+  #              e2e smoke test against it. No AWS credentials anywhere.
+  # Target: merged -> deployed on dev within 10 minutes.
+  # These jobs are not part of `ci-passed`: they only exist on main, after the PR gate.
+  # ------------------------------------------------------------------------------------------
+  publish:
+    name: Publish images (GHCR, by SHA)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend_image: ${{ steps.digests.outputs.backend_image }}
+      frontend_image: ${{ steps.digests.outputs.frontend_image }}
+    env:
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Create .env from .env.example (compose interpolation only; nothing is baked into images)
+        run: cp .env.example .env
+      - name: Build and push both images tagged with the commit SHA
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          export IMAGE_PREFIX="ghcr.io/${owner}/fitwise"
+          docker buildx bake -f compose.yaml --push --provenance=false --sbom=false \
+            --metadata-file "$RUNNER_TEMP/bake-meta.json" \
+            --set "*.labels.org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --set "*.labels.org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --set backend.cache-from=type=gha,scope=backend \
+            --set frontend.cache-from=type=gha,scope=frontend \
+            backend frontend
+      - name: Record the image digests
+        id: digests
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          be="$(jq -er '.backend["containerimage.digest"]' "$RUNNER_TEMP/bake-meta.json")"
+          fe="$(jq -er '.frontend["containerimage.digest"]' "$RUNNER_TEMP/bake-meta.json")"
+          echo "backend_image=ghcr.io/${owner}/fitwise-backend@${be}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=ghcr.io/${owner}/fitwise-frontend@${fe}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Images for ${GITHUB_SHA}"
+            echo "- backend: \`ghcr.io/${owner}/fitwise-backend@${be}\`"
+            echo "- frontend: \`ghcr.io/${owner}/fitwise-frontend@${fe}\`"
+            echo "- pushed at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-dev:
+    name: Approve release for dev (move deploy/dev)
+    needs: [ci-passed, publish]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci-passed.result == 'success' && needs.publish.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: dev
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    permissions:
+      contents: write # moves the deploy/dev ref; this job only. A ruleset on deploy/* lets only GitHub Actions do it.
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BACKEND_IMAGE: ${{ needs.publish.outputs.backend_image }}
+      FRONTEND_IMAGE: ${{ needs.publish.outputs.frontend_image }}
+    steps:
+      - name: Skip when a newer commit is already on main
+        id: fresh
+        run: |
+          head="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "main moved to $head; $GITHUB_SHA is superseded and will not be deployed."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Move deploy/dev to this release
+        if: steps.fresh.outputs.current == 'true'
+        run: |
+          # The ref points at a "deploy commit": same tree as the release, parent = the release
+          # commit, message = the release record the host reads (source SHA + image digests).
+          tree="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${GITHUB_SHA}" --jq .tree.sha)"
+          msg="$(printf 'deploy dev %s\n\nsource: %s\nbackend: %s\nfrontend: %s\n' \
+            "$GITHUB_SHA" "$GITHUB_SHA" "$BACKEND_IMAGE" "$FRONTEND_IMAGE")"
+          new="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits" -f message="$msg" -f tree="$tree" \
+            -f "parents[]=${GITHUB_SHA}" --jq .sha)"
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/deploy/dev" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/deploy/dev" -f sha="$new" -F force=true >/dev/null
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref=refs/heads/deploy/dev -f sha="$new" >/dev/null
+          fi
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "deploy/dev -> ${new} (release ${GITHUB_SHA}) at ${now}"
+          {
+            echo "### Dev release approved"
+            echo "- release: \`${GITHUB_SHA}\`"
+            echo "- ref deploy/dev moved at ${now} (merge commit time: ${{ github.event.head_commit.timestamp }})"
+            echo "- backend: \`${BACKEND_IMAGE}\`"
+            echo "- frontend: \`${FRONTEND_IMAGE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  smoke-dev:
+    name: Dev serves this SHA, then e2e smoke
+    needs: [deploy-dev]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.deploy-dev.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: dev
+    permissions:
+      contents: read
+    env:
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      DEV_BASE_URL: ${{ vars.DEV_BASE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Wait until dev serves this SHA (up to 12 minutes)
+        run: |
+          : "${DEV_BASE_URL:?set the DEV_BASE_URL variable in the dev environment}"
+          deadline=$((SECONDS + 720))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            v="$(curl -fsS --max-time 5 "$DEV_BASE_URL/api/v1/healthz" 2>/dev/null | jq -r '.version // empty' 2>/dev/null || true)"
+            echo "$(date -u +%H:%M:%SZ) dev serves: ${v:-unreachable}"
+            if [ "$v" = "$GITHUB_SHA" ]; then
+              echo "dev serves $GITHUB_SHA at $(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::dev did not serve $GITHUB_SHA within 12 minutes (the host may have rolled back; see deploy/README.md)"
+          exit 1
+      - name: Playwright smoke test against dev
+        run: |
+          docker run --rm --network host --ipc=host -v "$PWD/e2e:/e2e" -w /e2e \
+            -e CI=true -e E2E_BASE_URL="$DEV_BASE_URL" \
+            "$PLAYWRIGHT_IMAGE" sh -c 'npm ci --no-audit --no-fund && npx playwright test'
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report-dev
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

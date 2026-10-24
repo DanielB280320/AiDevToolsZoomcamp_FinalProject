@@ -2448,6 +2448,11 @@ export interface components {
         Health: {
             /** @constant */
             status: "ok";
+            /**
+             * @description Release the running backend belongs to: the commit SHA of its image (`APP_VERSION`, default the image tag), or `dev`/`local` outside a deploy. Deploys and the post-deploy smoke test wait until dev serves the expected SHA. Not sensitive.
+             * @example 1f22fc4a9b3c5d7e8f001122334455667788aabb
+             */
+            version: string;
         };
         Readiness: {
             /** @enum {string} */

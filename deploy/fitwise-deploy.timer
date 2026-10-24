@@ -1,0 +1,10 @@
+[Unit]
+Description=Poll for a new FitWise release every 150 s (24 API requests per hour, limit 60)
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=150s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

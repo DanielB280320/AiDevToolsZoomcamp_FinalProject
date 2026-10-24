@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run deploy/bootstrap.sh on a host over SSM (no SSH).
-#   deploy/bootstrap-remote.sh <dev|prod>
+#   [DEPLOY_REF=<branch|sha>] deploy/bootstrap-remote.sh <dev|prod>
+# DEPLOY_REF: where bootstrap fetches the deploy scripts from (default main).
 set -euo pipefail
 export AWS_DEFAULT_REGION="${AWS_REGION:-us-east-2}" AWS_PAGER=""
 env="${1:?usage: bootstrap-remote.sh dev|prod}"
@@ -13,7 +14,7 @@ for _ in $(seq 40); do
 done
 b64="$(base64 -w0 "$here/bootstrap.sh")"
 cid="$(aws ssm send-command --instance-ids "$iid" --document-name AWS-RunShellScript \
-  --parameters "commands=[\"echo $b64 | base64 -d > /tmp/bootstrap.sh\",\"ENV_NAME=$env bash /tmp/bootstrap.sh\"]" \
+  --parameters "commands=[\"echo $b64 | base64 -d > /tmp/bootstrap.sh\",\"ENV_NAME=$env DEPLOY_REF=${DEPLOY_REF:-main} bash /tmp/bootstrap.sh\"]" \
   --query Command.CommandId --output text)"
 echo "ssm command id: $cid"
 aws ssm wait command-executed --command-id "$cid" --instance-id "$iid" || true

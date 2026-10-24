@@ -10,9 +10,9 @@ router = APIRouter(tags=["Ops"])
 
 
 @router.get("/healthz", operation_id="getHealth", response_model=Health)
-def get_health() -> Health:
-    """Liveness: the process is up. Never touches the database."""
-    return Health()
+def get_health(request: Request) -> Health:
+    """Liveness: the process is up, and which release it is. Never touches the database."""
+    return Health(version=request.app.state.settings.app_version)
 
 
 @router.get(

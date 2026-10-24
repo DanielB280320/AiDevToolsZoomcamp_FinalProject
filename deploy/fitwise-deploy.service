@@ -1,0 +1,14 @@
+[Unit]
+Description=FitWise deploy poller (checks the approved release ref and deploys it)
+Documentation=file:///opt/fitwise/bin/poll.sh
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# GITHUB_REPOSITORY, DEPLOY_ENV, IMAGE_NAMESPACE: written by bootstrap.sh, no secrets.
+EnvironmentFile=/etc/fitwise-deploy.env
+ExecStart=/opt/fitwise/bin/poll.sh
+TimeoutStartSec=15min
+Nice=5
