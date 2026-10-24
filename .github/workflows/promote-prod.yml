@@ -1,0 +1,137 @@
+# Promote to production (issue #14; spec §13, D57, D58, ADR 0010). Manual only.
+# Moves the ref `deploy/prod` to a release already proven on dev. The prod host polls that ref
+# (same poller as dev, deploy/poll.sh with DEPLOY_ENV=prod), deploys, health-checks and rolls
+# back by itself. No AWS credential, PAT or App: the built-in GITHUB_TOKEN, with `contents: write`
+# on the `promote` job only, which runs in the `production` environment (required reviewer).
+#   verify         read-only; fails before any approval is asked if the SHA is not proven on dev
+#   promote        waits for the reviewer, then moves deploy/prod (the only job that can)
+#   smoke-prod     waits until prod serves the SHA, then readyz and the e2e smoke
+name: Promote to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Full commit SHA of a release proven on dev (ci.yml run on main with deploy-dev and smoke-dev green)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-prod
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify the SHA is proven on dev
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      backend_image: ${{ steps.verify.outputs.backend_image }}
+      frontend_image: ${{ steps.verify.outputs.frontend_image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Dev deploy and smoke succeeded for this SHA
+        id: verify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ inputs.sha }}
+        run: scripts/promote-verify.sh "$SHA"
+
+  promote:
+    name: Move deploy/prod (needs approval)
+    needs: [verify]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30 # includes the time the run waits for the reviewer
+    environment: production
+    permissions:
+      contents: write # moves the deploy/prod ref; this job only
+    outputs:
+      base_url: ${{ vars.PROD_BASE_URL }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SHA: ${{ inputs.sha }}
+      BACKEND_IMAGE: ${{ needs.verify.outputs.backend_image }}
+      FRONTEND_IMAGE: ${{ needs.verify.outputs.frontend_image }}
+    steps:
+      - name: Move deploy/prod to this release
+        run: |
+          : "${BACKEND_IMAGE:?missing}" "${FRONTEND_IMAGE:?missing}"
+          # Same shape as the dev deploy commit (ci.yml deploy-dev): same tree as the release,
+          # parent = the release commit, message = the release record the host reads.
+          tree="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${SHA}" --jq .tree.sha)"
+          msg="$(printf 'deploy prod %s\n\nsource: %s\nbackend: %s\nfrontend: %s\n' \
+            "$SHA" "$SHA" "$BACKEND_IMAGE" "$FRONTEND_IMAGE")"
+          new="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits" -f message="$msg" -f tree="$tree" \
+            -f "parents[]=${SHA}" --jq .sha)"
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/deploy/prod" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/deploy/prod" -f sha="$new" -F force=true >/dev/null
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref=refs/heads/deploy/prod -f sha="$new" >/dev/null
+          fi
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "deploy/prod -> ${new} (release ${SHA}) at ${now}"
+          {
+            echo "### Production release approved"
+            echo "- release: \`${SHA}\` (approved by the \`production\` environment reviewer)"
+            echo "- ref deploy/prod moved at ${now}"
+            echo "- backend: \`${BACKEND_IMAGE}\`"
+            echo "- frontend: \`${FRONTEND_IMAGE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  smoke-prod:
+    name: Prod serves this SHA, then smoke
+    needs: [promote]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      SHA: ${{ inputs.sha }}
+      PROD_BASE_URL: ${{ needs.promote.outputs.base_url }}
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Wait until prod serves this SHA (up to 12 minutes)
+        run: |
+          : "${PROD_BASE_URL:?set the PROD_BASE_URL variable in the production environment}"
+          # Poll interval 150 s + deploy ~40 s + health wait 120 s; 12 minutes leaves margin.
+          deadline=$((SECONDS + 720))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            v="$(curl -fsS --max-time 5 "$PROD_BASE_URL/api/v1/healthz" 2>/dev/null | jq -r '.version // empty' 2>/dev/null || true)"
+            echo "$(date -u +%H:%M:%SZ) prod serves: ${v:-unreachable}"
+            if [ "$v" = "$SHA" ]; then
+              echo "prod serves $SHA at $(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::prod did not serve $SHA within 12 minutes. The host may have rolled back to PREVIOUS_TAG by itself (deploy/README.md, 'Automatic rollback'): check 'journalctl -u fitwise-deploy' on fitwise-prod."
+          exit 1
+      - name: readyz returns 200
+        run: curl -fsS --max-time 10 -o /dev/null -w 'readyz HTTP %{http_code}\n' "$PROD_BASE_URL/api/v1/readyz"
+      - name: Playwright smoke test against prod
+        run: |
+          docker run --rm --network host --ipc=host -v "$PWD/e2e:/e2e" -w /e2e \
+            -e CI=true -e E2E_BASE_URL="$PROD_BASE_URL" \
+            "$PLAYWRIGHT_IMAGE" sh -c 'npm ci --no-audit --no-fund && npx playwright test'
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report-prod
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

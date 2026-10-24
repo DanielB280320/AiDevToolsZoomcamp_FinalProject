@@ -268,6 +268,16 @@ jobs:
             echo "scripts/test-hooks.sh not present yet (#60); nothing to run."
           fi
 
+  deploy-script-tests:
+    name: Deploy script tests (promotion check)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash scripts/test-promote-verify.sh
+
   ci-passed:
     name: CI passed
     if: always()
@@ -282,6 +292,7 @@ jobs:
       - e2e
       - rollback-compat
       - hook-tests
+      - deploy-script-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -356,6 +367,15 @@ jobs:
             echo "- frontend: \`ghcr.io/${owner}/fitwise-frontend@${fe}\`"
             echo "- pushed at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } >> "$GITHUB_STEP_SUMMARY"
+          # The promotion workflow (#14) reads these exact digests, so prod runs what dev ran.
+          printf 'backend: ghcr.io/%s/fitwise-backend@%s\nfrontend: ghcr.io/%s/fitwise-frontend@%s\n' \
+            "$owner" "$be" "$owner" "$fe" > "$RUNNER_TEMP/release-record.txt"
+      - name: Keep the release record for the promotion workflow
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-record
+          path: ${{ runner.temp }}/release-record.txt
+          retention-days: 90
 
   deploy-dev:
     name: Approve release for dev (move deploy/dev)
