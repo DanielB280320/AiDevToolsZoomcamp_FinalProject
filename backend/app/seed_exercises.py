@@ -1,8 +1,11 @@
 """F4.1 exercise catalog seed: 60-80 exercises, loaded by the migration step (D50).
 
-Idempotent: a row is inserted only when no seed exercise with that name (case-insensitive)
-exists, so a second run changes nothing and a later edit of a seed row is never overwritten.
-Ids are derived from the name, so every environment gets the same ids.
+Idempotent: the matching key is the deterministic id, uuid5 of the lower-cased name, OR the
+lower-cased name among seed rows (owner_id IS NULL). An entry is inserted only when neither
+exists, so a second run changes nothing, a seed row renamed or edited later is never
+overwritten, and the seed never updates or deletes a row. Renaming an entry in SEED_EXERCISES
+does not rename existing rows (no automatic rename migration): the old row stays and the new
+name is added next to it. Ids are derived from the name, so every environment gets the same ids.
 
 MET values follow the 2011 Compendium of Physical Activities. `increment_kg` is the default
 progression step (F11): 2.5 for barbell and machine/cable work, 2 for dumbbells, 0 for
@@ -132,16 +135,18 @@ SEED_EXERCISES: tuple[SeedExercise, ...] = (
 
 def load_exercises(session: Session) -> int:
     """Insert the seed exercises that are missing. Returns how many rows were inserted."""
-    existing = set(
+    existing_names = set(
         session.scalars(select(func.lower(Exercise.name)).where(Exercise.owner_id.is_(None)))
     )
+    ids = {item.name: uuid.uuid5(_NAMESPACE, item.name.lower()) for item in SEED_EXERCISES}
+    existing_ids = set(session.scalars(select(Exercise.id).where(Exercise.id.in_(ids.values()))))
     inserted = 0
     for item in SEED_EXERCISES:
-        if item.name.lower() in existing:
+        if item.name.lower() in existing_names or ids[item.name] in existing_ids:
             continue
         session.add(
             Exercise(
-                id=uuid.uuid5(_NAMESPACE, item.name.lower()),
+                id=ids[item.name],
                 owner_id=None,
                 name=item.name,
                 muscle_group=item.muscle_group,
