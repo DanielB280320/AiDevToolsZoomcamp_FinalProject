@@ -140,8 +140,11 @@ def test_all_request_models_inherit_the_nul_check() -> None:
     import app.schemas.users  # noqa: F401
     from app.schemas.base import RequestModel, ResponseModel
 
-    def all_subclasses(cls: type) -> set[type]:
-        return {s for c in cls.__subclasses__() for s in {c} | all_subclasses(c)}
+    def all_subclasses(cls: type[pydantic.BaseModel]) -> set[type[pydantic.BaseModel]]:
+        found: set[type[pydantic.BaseModel]] = set()
+        for sub in cls.__subclasses__():
+            found |= {sub} | all_subclasses(sub)
+        return found
 
     bypass = [
         c.__name__
