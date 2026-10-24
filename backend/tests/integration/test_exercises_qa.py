@@ -17,8 +17,9 @@ from sqlalchemy.orm import Session
 
 from app.main import create_app
 from app.migrations import BACKEND_DIR
+from app.models import Exercise
 from app.seed import run_seed
-from app.seed_exercises import SEED_EXERCISES
+from app.seed_exercises import _NAMESPACE, SEED_EXERCISES, load_exercises
 from tests.conftest import Captured, JsonLogs, captured_telemetry, make_settings
 from tests.fakes import FakeClock
 from tests.integration.auth_helpers import NOW, Api, problem, signup_body
@@ -242,7 +243,6 @@ def test_an_edited_seed_row_keeps_every_edited_field(api: Api) -> None:
     assert tuple(row) == (9, 5, False, "band")
 
 
-@pytest.mark.xfail(strict=True, reason="#103: uuid5 id clashes with the renamed row's pk")
 def test_the_seed_step_still_succeeds_after_a_seed_row_is_renamed(api: Api) -> None:
     """A seed row renamed by an operator must not make the next migration step fail."""
     with Session(api.app.state.engine) as session:
@@ -253,8 +253,70 @@ def test_the_seed_step_still_succeeds_after_a_seed_row_is_renamed(api: Api) -> N
         )
         session.commit()
     with Session(api.app.state.engine) as session:
-        run_seed(session)  # must not raise
+        assert load_exercises(session) == 0  # must not raise
         session.commit()
+        rows = session.execute(
+            text("SELECT name FROM exercise WHERE id = :id"), {"id": _push_up_id()}
+        ).all()
+        assert [r[0] for r in rows] == ["Push-up (strict)"]
+        assert (
+            session.execute(text("SELECT 1 FROM exercise WHERE name = 'Push-up'")).first() is None
+        )
+        assert session.scalar(text("SELECT count(*) FROM exercise")) == len(SEED_EXERCISES)
+
+
+def _push_up_id() -> uuid.UUID:
+    return uuid.uuid5(_NAMESPACE, "push-up")
+
+
+def test_a_seed_row_with_the_same_name_but_another_id_is_skipped(api: Api) -> None:
+    with Session(api.app.state.engine) as session:
+        session.add(
+            Exercise(
+                id=uuid.uuid4(),
+                owner_id=None,
+                name="PUSH-UP",
+                muscle_group="chest",
+                equipment="bodyweight",
+                type="bodyweight",
+                met=3.8,
+                increment_kg=0,
+                region="upper",
+            )
+        )
+        session.commit()
+        assert load_exercises(session) == len(SEED_EXERCISES) - 1
+        session.commit()
+        assert (
+            session.scalar(text("SELECT count(*) FROM exercise WHERE lower(name)='push-up'")) == 1
+        )
+
+
+def test_a_second_run_on_a_fresh_database_inserts_nothing(api: Api) -> None:
+    with Session(api.app.state.engine) as session:
+        assert load_exercises(session) == len(SEED_EXERCISES)
+        session.commit()
+        assert load_exercises(session) == 0
+        session.commit()
+        assert session.scalar(text("SELECT count(*) FROM exercise")) == len(SEED_EXERCISES)
+
+
+def test_a_seed_entry_renamed_in_code_leaves_the_old_row_and_does_not_fail(
+    api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Documented behaviour: no automatic rename migration; the old row stays."""
+    with Session(api.app.state.engine) as session:
+        load_exercises(session)
+        session.commit()
+    renamed = tuple(
+        e._replace(name="Press-up") if e.name == "Push-up" else e for e in SEED_EXERCISES
+    )
+    monkeypatch.setattr("app.seed_exercises.SEED_EXERCISES", renamed)
+    with Session(api.app.state.engine) as session:
+        assert load_exercises(session) == 1
+        session.commit()
+        names = set(session.scalars(text("SELECT name FROM exercise")))
+    assert {"Push-up", "Press-up"} <= names
 
 
 # ───────────── migration: expand-only round trip ─────────────
@@ -302,3 +364,15 @@ def test_the_exercise_migration_downgrades_and_upgrades_without_touching_users(
     engine.dispose()
     again = _alembic(fresh_database_url, "upgrade", "head")
     assert again.returncode == 0, again.stderr
+
+
+def test_swapped_seed_row_names_cause_no_unique_or_pk_violation(api: Api) -> None:
+    """QA #103: Push-up renamed to Pull-up's old name, Pull-up renamed away: 0 inserts."""
+    with Session(api.app.state.engine) as session:
+        load_exercises(session)
+        session.execute(text("UPDATE exercise SET name = 'Pull-up (old)' WHERE name = 'Pull-up'"))
+        session.execute(text("UPDATE exercise SET name = 'Pull-up' WHERE name = 'Push-up'"))
+        session.commit()
+        assert load_exercises(session) == 0
+        session.commit()
+        assert session.scalar(text("SELECT count(*) FROM exercise")) == len(SEED_EXERCISES)
