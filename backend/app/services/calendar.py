@@ -306,11 +306,9 @@ def _session_view(db: Session, user: User, row: TrainingSession, today: dt.date)
 
 
 def _owned_session(db: Session, user: User, session_id: uuid.UUID) -> TrainingSession:
-    """404 for an unknown id, 403 for another athlete's session (openapi.yaml, D41)."""
+    """403 for an unknown id and for another athlete's session alike (D41: no id enumeration)."""
     row = db.get(TrainingSession, session_id)
-    if row is None:
-        raise ProblemError(404, "not_found", "The session was not found.")
-    if row.athlete_id != user.id:
+    if row is None or row.athlete_id != user.id:
         raise ProblemError(403, "not_linked", "You do not have access to this athlete.")
     return row
 

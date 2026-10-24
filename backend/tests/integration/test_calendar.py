@@ -2,6 +2,7 @@
 range errors, authorization and the F9.4 performance budget."""
 
 import datetime as dt
+import math
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -339,7 +340,7 @@ def test_authorization(athlete: Api) -> None:
 
     problem(stranger.get(f"{BASE}/sessions/{friday}"), 403, "not_linked")
     problem(_move(athlete, friday, "2026-10-24", stranger), 403, "not_linked")
-    problem(stranger.get(f"{BASE}/sessions/{uuid.uuid4()}"), 404, "not_found")
+    problem(stranger.get(f"{BASE}/sessions/{uuid.uuid4()}"), 403, "not_linked")
     assert stranger.get(f"{BASE}/sessions/not-a-uuid").status_code == 400
     owner = athlete.client.get(f"{BASE}/sessions/{friday}")
     assert owner.status_code == 200 and owner.json()["id"] == friday
@@ -395,7 +396,7 @@ def test_week_and_month_views_p95_under_500ms_with_a_year_of_sessions(athlete: A
             response = _calendar(athlete, start, end)
             times.append((time.perf_counter() - t0) * 1000)
             assert response.status_code == 200
-        return sorted(times)[int(0.95 * len(times)) - 1]
+        return sorted(times)[math.ceil(0.95 * len(times)) - 1]
 
     assert p95("2026-10-19", "2026-10-25") < 500  # week
     assert p95("2026-09-28", "2026-11-08") < 500  # 6-week month grid

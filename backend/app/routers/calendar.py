@@ -60,7 +60,7 @@ def get_calendar(
     "/sessions/{session_id}",
     operation_id="getSession",
     response_model=Session,
-    responses={**_COMMON, 404: _PROBLEM},
+    responses=_COMMON,
 )
 def get_session(
     session_id: uuid.UUID, user: CurrentUser, db: SessionDep, clock: ClockDep
@@ -72,7 +72,7 @@ def get_session(
     "/sessions/{session_id}/move",
     operation_id="moveSession",
     response_model=Session,
-    responses={**_COMMON, 404: _PROBLEM, 409: _PROBLEM, 422: _PROBLEM},
+    responses={**_COMMON, 409: _PROBLEM, 422: _PROBLEM},
 )
 def move_session(
     session_id: uuid.UUID,

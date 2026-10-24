@@ -55,9 +55,10 @@ info:
     not allowed to access — including unknown ids and ids whose coach link has ended — gets `403`
     (never `404`, so ids cannot be enumerated).
 
-    Resources addressed by their own id (`/sessions/{id}`, `/suggestions/{id}`, …) return `404`
-    when the id does not exist and `403` when it exists but belongs to an athlete the caller may
-    not access.
+    `/sessions/{id}` returns `403` both for an unknown id and for one the caller may not access
+    (D41, no existence leak). Other resources addressed by their own id (`/suggestions/{id}`, …)
+    return `404` when the id does not exist and `403` when it exists but belongs to an athlete
+    the caller may not access.
 
     ## Errors
 
@@ -1086,8 +1087,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
   /sessions/{session_id}/move:
     parameters:
@@ -1121,8 +1120,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':

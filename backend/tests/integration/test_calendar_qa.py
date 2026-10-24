@@ -78,4 +78,4 @@ def test_a_coach_is_refused_on_every_calendar_route(athlete: Api) -> None:
     problem(_calendar(athlete, "2026-10-19", "2026-10-25", coach), 403, "not_linked")
     problem(coach.get(f"{BASE}/sessions/{friday}"), 403, "not_linked")
     problem(_move(athlete, friday, "2026-10-24", coach), 403, "not_linked")
-    problem(_move(athlete, str(uuid.uuid4()), "2026-10-24", athlete.client), 404, "not_found")
+    problem(_move(athlete, str(uuid.uuid4()), "2026-10-24", athlete.client), 403, "not_linked")
