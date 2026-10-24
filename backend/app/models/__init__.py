@@ -3,6 +3,17 @@
 from app.models.base import Base
 from app.models.exercise import Exercise
 from app.models.feature_flag import FeatureFlag
+from app.models.plan import Plan, PlanChange, PlannedExercise, TrainingDay
 from app.models.user import SignInFailure, User
 
-__all__ = ["Base", "Exercise", "FeatureFlag", "SignInFailure", "User"]
+__all__ = [
+    "Base",
+    "Exercise",
+    "FeatureFlag",
+    "Plan",
+    "PlanChange",
+    "PlannedExercise",
+    "SignInFailure",
+    "TrainingDay",
+    "User",
+]

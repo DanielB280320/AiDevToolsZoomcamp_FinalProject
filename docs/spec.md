@@ -556,8 +556,8 @@ Events: pending progression suggestion, pending calorie adjustment, target-recal
 | `Exercise` | id, owner_id (null = seed), name, muscle_group, equipment, type, met, increment_kg, region, allows_added_weight (bool; D56) |
 | `Food` | id, owner_id, source, external_code, name, kcal/protein/carbs/fat per 100 g, diet_tags, allergen_tags |
 | `Meal` / `MealItem` | meal: id, owner_id, name, slots · item: meal_id, food_id, grams |
-| `Plan` | id, athlete_id, version, source (`generated`/`custom`), active, created_by, created_at |
-| `TrainingDay` / `PlannedExercise` | weekday, name, order · exercise_id, sets, reps_min, reps_max, target_weight_kg, target_seconds, rest_seconds, rule, increment_kg, deload_enabled |
+| `Plan` | id, athlete_id, version, source (`generated`/`custom`), active (partial unique index: one active per athlete), revision (D42), created_by, created_at, updated_at |
+| `TrainingDay` / `PlannedExercise` | weekday, name, order, edited_by (nullable) · exercise_id, sets, reps_min, reps_max, target_weight_kg, target_seconds, rest_seconds, rule, increment_kg, deload_enabled |
 | `MealDay` / `PlannedMeal` | weekday · slot, meal_id, portion_factor |
 | `Session` | id, athlete_id, plan_id, training_day_id, date, status (`planned`/`in_progress`/`done`/`missed`), started_at, finished_at, completion, kcal |
 | `SetLog` | session_id, planned_exercise_id (nullable for extras), exercise_id, set_no, target_reps/weight/seconds (snapshot), reps, weight_kg, seconds, distance_m |

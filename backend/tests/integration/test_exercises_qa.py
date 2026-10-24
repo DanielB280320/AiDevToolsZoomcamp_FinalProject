@@ -25,6 +25,8 @@ from tests.fakes import FakeClock
 from tests.integration.auth_helpers import NOW, Api, problem, signup_body
 
 URL = "/api/v1/exercises"
+# Pinned: later migrations (e.g. plan tables) depend on `exercise`, so "head" is not this one.
+EXERCISE_REVISION = "a7d3e5f10b64"
 PREVIOUS_REVISION = "9c4f2a7e1b30"  # head before #22
 
 
@@ -345,7 +347,7 @@ def test_the_exercise_migration_downgrades_and_upgrades_without_touching_users(
     }
     engine.dispose()
 
-    up = _alembic(fresh_database_url, "upgrade", "head")
+    up = _alembic(fresh_database_url, "upgrade", EXERCISE_REVISION)
     assert up.returncode == 0, up.stderr
     engine = create_engine(fresh_database_url)
     after = {
@@ -362,7 +364,7 @@ def test_the_exercise_migration_downgrades_and_upgrades_without_touching_users(
     engine = create_engine(fresh_database_url)
     assert "exercise" not in inspect(engine).get_table_names()
     engine.dispose()
-    again = _alembic(fresh_database_url, "upgrade", "head")
+    again = _alembic(fresh_database_url, "upgrade", EXERCISE_REVISION)
     assert again.returncode == 0, again.stderr
 
 
