@@ -1342,6 +1342,7 @@ export interface components {
              *     `range_too_large`, `not_authenticated`, `invalid_credentials`, `forbidden`,
              *     `wrong_role`, `not_linked`, `not_found`, `not_onboarded`, `email_taken`,
              *     `already_onboarded`, `plan_revision_conflict`, `day_occupied`, `session_finished`,
+             *     `outside_week`, `date_in_past`,
              *     `edit_window_closed`, `suggestion_already_decided`, `link_exists`, `link_not_pending`,
              *     `validation_error`, `underage`, `disclaimer_required`, `rate_limited`,
              *     `off_unavailable`, `not_ready`. New codes may be added.
@@ -3558,7 +3559,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     moveSession: {
@@ -3588,7 +3588,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
         };

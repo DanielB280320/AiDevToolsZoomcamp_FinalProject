@@ -19,7 +19,7 @@ LOGGING_POSTS = [
 OTHER_POSTS = [
     "/api/v1/auth/login",
     "/api/v1/sessions/abc/sets/def",  # a set's own URL (PUT/DELETE in the contract)
-    "/api/v1/sessions/abc/move",
+    "/api/v1/sessions/abc/archive",
     "/api/v1/athletes/me/meal-logs/xyz",
     "/api/v1/athletes/me/body-metrics",
     "/api/v1/sessions//sets",  # an empty segment is not a session id
@@ -120,13 +120,13 @@ def test_the_app_wires_the_middleware_and_the_delay_is_measured(
         assert client.post(LOGGING_POSTS[0]).status_code == 200
         delayed = time.perf_counter() - start
         start = time.perf_counter()
-        assert client.post("/api/v1/sessions/abc/move").status_code == 200
+        assert client.post("/api/v1/sessions/abc/archive").status_code == 200
         undelayed = time.perf_counter() - start
 
     assert delayed >= 0.3
     assert undelayed < 0.3
     durations = {line["route"]: line["duration_ms"] for line in json_logs.with_message("request")}
     assert durations[LOGGING_POSTS[0]] >= 300
-    assert durations["/api/v1/sessions/abc/move"] < 300
+    assert durations["/api/v1/sessions/abc/archive"] < 300
     # The middleware itself writes nothing, so it cannot log request data.
     assert not [line for line in json_logs.lines() if line["logger"] == "app.fault_injection"]
