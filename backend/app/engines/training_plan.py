@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.engines.constants import (
+    ACCESSORY_PREFERRED_EQUIPMENT,
     CALIBRATION_HINT,
     CARDIO_STEP_MINUTES,
     EQUIPMENT_BY_VARIANT,
@@ -234,16 +235,22 @@ def _validate(req: PlanRequest) -> None:
 
 
 def _ranked(
-    catalog: Sequence[CatalogExercise], group: str, role: str, allowed: frozenset[str]
+    catalog: Sequence[CatalogExercise],
+    group: str,
+    role: str,
+    allowed: frozenset[str],
+    preferred: frozenset[str] = frozenset(),
 ) -> list[CatalogExercise]:
     """Candidates for a slot, best first. Main lifts: heaviest compound (highest MET) first;
-    accessories: lightest (isolation) first. Ties break on name, then id."""
+    accessories: lightest (isolation) first, after the `preferred` equipment tier (#110).
+    Ties break on name, then id."""
     types = _STRENGTH_TYPES if role == M else _STRENGTH_TYPES | {"timed"}
     pool = [
         e for e in catalog if e.muscle_group == group and e.equipment in allowed and e.type in types
     ]
     sign = -1.0 if role == M else 1.0
-    return sorted(pool, key=lambda e: (sign * e.met, e.name.lower(), e.id))
+    tier = preferred if role != M else frozenset()
+    return sorted(pool, key=lambda e: (e.equipment not in tier, sign * e.met, e.name.lower(), e.id))
 
 
 def _choose(
@@ -253,6 +260,7 @@ def _choose(
     used_plan: set[str],
     avoided: frozenset[str],
     fallback_types: frozenset[str],
+    preferred: frozenset[str] = frozenset(),
 ) -> tuple[CatalogExercise | None, CatalogExercise | None]:
     """Return (exercise, avoided_original). exercise None = nothing to add.
 
@@ -262,6 +270,9 @@ def _choose(
     pool = [e for e in ranked if e.id not in used_day]
     if not pool:
         return None, None
+    if preferred and any(e.equipment in preferred for e in pool):
+        # Equipment tier outranks "not yet used in the plan": stay inside the preferred tier.
+        pool = [e for e in pool if e.equipment in preferred]
     first = next((e for e in pool if e.id not in used_plan), pool[0])
     if first.id not in avoided:
         return first, None
@@ -306,6 +317,7 @@ def _build_day(
     warnings: dict[str, None],
 ) -> GeneratedDay:
     allowed = EQUIPMENT_BY_VARIANT[req.equipment]
+    preferred = ACCESSORY_PREFERRED_EQUIPMENT.get(req.equipment, frozenset())
     allowed_catalog = [e for e in catalog if e.equipment in allowed]
     main_sets, acc_sets = SETS_BY_EXPERIENCE[req.experience]
     min_sets = MIN_SETS_BY_EXPERIENCE[req.experience]
@@ -320,12 +332,13 @@ def _build_day(
         if budget - spent < min_sets * _SET_SECONDS:
             break
         ex, original = _choose(
-            _ranked(catalog, group, role, allowed),
+            _ranked(catalog, group, role, allowed, preferred if role != M else frozenset()),
             allowed_catalog,
             used_day,
             used_plan,
             avoided,
             _STRENGTH_TYPES if role == M else _STRENGTH_TYPES | {"timed"},
+            preferred if role != M else frozenset(),
         )
         if ex is None:
             if original is not None:

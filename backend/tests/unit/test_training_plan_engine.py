@@ -1,6 +1,8 @@
 """F5 training plan generator: table-driven rules plus property tests on the real seed."""
 
+import hashlib
 import itertools
+import json
 from dataclasses import asdict
 
 import pytest
@@ -8,6 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from app.engines.constants import (
+    ACCESSORY_PREFERRED_EQUIPMENT,
     CALIBRATION_HINT,
     EQUIPMENT_BY_VARIANT,
     GOAL_CARDIO_MINUTES,
@@ -327,11 +330,11 @@ SNAPSHOT_DAY_1 = [
     ("Barbell back squat", 3, 8, 8, "linear"),
     ("Barbell bench press", 3, 8, 8, "linear"),
     ("Deadlift", 3, 8, 8, "linear"),
-    ("Dumbbell lateral raise", 2, 8, 12, "double"),
+    ("Face pull", 2, 8, 12, "double"),
     ("Lying leg curl", 2, 8, 12, "double"),
-    ("Dead bug", 2, 8, 12, "double"),
-    ("Barbell curl", 2, 8, 12, "double"),
-    ("Overhead dumbbell extension", 2, 8, 12, "double"),
+    ("Cable crunch", 2, 8, 12, "double"),
+    ("Cable curl", 2, 8, 12, "double"),
+    ("Triceps pushdown", 2, 8, 12, "double"),
     ("Brisk walking", 1, None, None, "double"),
 ]
 
@@ -380,3 +383,110 @@ def test_property_valid_deterministic_and_avoiding(r: PlanRequest) -> None:
     plan = generate_plan(r, CATALOG)
     check_valid(plan, r)
     assert asdict(plan) == asdict(generate_plan(r, CATALOG))
+
+
+# --- #110 full-gym accessories prefer machines and cables --------------------------------------
+
+PREFERRED = ACCESSORY_PREFERRED_EQUIPMENT["full_gym"]
+
+
+def _is_accessory(x: object, r: PlanRequest) -> bool:
+    """Accessory entries carry the goal's accessory rep range (disjoint from the main range)."""
+    _, (alo, ahi) = GOAL_REP_RANGES[r.goal]
+    return (
+        not x.is_cardio  # type: ignore[attr-defined]
+        and x.reps_min is not None  # type: ignore[attr-defined]
+        and (x.reps_min, x.reps_max) == (alo, ahi)  # type: ignore[attr-defined]
+    ) or (
+        not x.is_cardio  # type: ignore[attr-defined]
+        and x.reps_min is None  # type: ignore[attr-defined]
+    )
+
+
+def _assert_tiered(plan: GeneratedPlan, r: PlanRequest) -> None:
+    """Per accessory slot: a non-preferred pick implies no unused-that-day machine/cable of the
+    same muscle group was left; band is never picked while one was left."""
+    for day in plan.days:
+        picked = [BY_ID[x.exercise_id] for x in day.exercises if _is_accessory(x, r)]
+        day_ids = {x.exercise_id for x in day.exercises}
+        for ex in picked:
+            if ex.equipment in PREFERRED or ex.muscle_group == "cardio":
+                continue
+            left = [
+                e
+                for e in CATALOG
+                if e.muscle_group == ex.muscle_group
+                and e.equipment in PREFERRED
+                and e.type in ("strength", "bodyweight", "timed")
+                and e.id not in day_ids
+            ]
+            assert not left, f"{ex.name} chosen while {left[0].name} was available"
+
+
+@pytest.mark.parametrize(
+    ("days", "experience", "goal"), list(itertools.product(DAYS, EXPERIENCES, GOALS))
+)
+def test_full_gym_accessories_prefer_machine_and_cable(
+    days: int, experience: str, goal: str
+) -> None:
+    r = req(days, "full_gym", experience, goal, 90)
+    plan = generate_plan(r, CATALOG)
+    _assert_tiered(plan, r)
+    accessories = [
+        BY_ID[x.exercise_id] for d in plan.days for x in d.exercises if _is_accessory(x, r)
+    ]
+    assert accessories
+    assert any(e.equipment in PREFERRED for e in accessories)
+
+
+@settings(max_examples=150, deadline=None)
+@given(
+    days=st.sampled_from(list(DAYS)),
+    experience=st.sampled_from(EXPERIENCES),
+    goal=st.sampled_from(GOALS),
+    minutes=st.sampled_from(LENGTHS),
+    avoid=st.lists(st.sampled_from(CATALOG), max_size=3, unique=True),
+)
+def test_property_full_gym_never_band_while_machine_or_cable_left(
+    days: int, experience: str, goal: str, minutes: int, avoid: list[CatalogExercise]
+) -> None:
+    ids = tuple(e.id for e in avoid if e.equipment not in PREFERRED)
+    r = req(days, "full_gym", experience, goal, minutes, avoided=ids)
+    plan = generate_plan(r, CATALOG)
+    check_valid(plan, r)
+    _assert_tiered(plan, r)
+
+
+def test_main_lifts_unchanged_by_accessory_preference(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.engines.training_plan as tp
+
+    for days, experience, goal in itertools.product(DAYS, EXPERIENCES, GOALS):
+        r = req(days, "full_gym", experience, goal, 75)
+        new = generate_plan(r, CATALOG)
+        with monkeypatch.context() as m:
+            m.setattr(tp, "ACCESSORY_PREFERRED_EQUIPMENT", {})
+            old = generate_plan(r, CATALOG)
+
+        def mains(plan: GeneratedPlan, r: PlanRequest = r) -> list[list[str]]:
+            return [
+                [x.exercise_id for x in d.exercises if not x.is_cardio and not _is_accessory(x, r)]
+                for d in plan.days
+            ]
+
+        assert mains(new) == mains(old)
+
+
+def test_home_and_bodyweight_plans_unchanged_snapshot() -> None:
+    h = hashlib.sha256()
+    for d, v, e, g, m in itertools.product(
+        DAYS, ["home_dumbbells", "bodyweight_only"], EXPERIENCES, GOALS, LENGTHS
+    ):
+        plan = generate_plan(req(d, v, e, g, m), CATALOG)
+        h.update(json.dumps(asdict(plan), sort_keys=True, default=str).encode())
+    # Digest taken from the engine on main before #110.
+    assert h.hexdigest() == "176803e130a8f972d8bf1d801201fe285c85e445d917e5a34b64f22265e00711"
+
+
+def test_preference_applies_to_full_gym_only() -> None:
+    assert set(ACCESSORY_PREFERRED_EQUIPMENT) == {"full_gym"}
+    assert {"machine", "cable"} == PREFERRED

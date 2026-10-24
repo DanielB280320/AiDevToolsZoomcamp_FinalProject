@@ -125,6 +125,12 @@ EQUIPMENT_BY_VARIANT: dict[str, frozenset[str]] = {
     "home_dumbbells": frozenset({"dumbbell", "bodyweight", "band", "none"}),
     "bodyweight_only": frozenset({"bodyweight", "none"}),
 }
+# F5 (#110) accessory slots rank by equipment tier before MET: exercises whose equipment is in
+# this set come first, every other allowed equipment after them (tier order inside a tier is
+# unchanged: lowest MET, name, id). A variant not listed has no preference. Main lifts ignore it.
+ACCESSORY_PREFERRED_EQUIPMENT: dict[str, frozenset[str]] = {
+    "full_gym": frozenset({"machine", "cable"}),
+}
 # F5 supported training days per week.
 PLAN_MIN_DAYS = 2
 PLAN_MAX_DAYS = 6
