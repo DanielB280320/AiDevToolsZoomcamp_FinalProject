@@ -1,0 +1,179 @@
+# OpenTelemetry Collector (spec §14, ADR 0006). One collector per host; locally via `make up-obs`.
+#
+#   traces : backend OTLP/HTTP  -> allow-list span attributes -> Tempo   (OTLP/gRPC)
+#   metrics: backend OTLP/HTTP  -> allow-list labels          -> Prometheus (OTLP receiver, exemplars)
+#   logs   : backend JSON stdout -> Docker fluentd log driver -> fluent_forward -> parse,
+#            allow-list fields -> Loki (OTLP)
+#
+# Privacy (CLAUDE.md rule 6, spec §6.5). The backend already filters everything it emits; this file
+# is a second, independent gate. Every allow-list below MIRRORS backend/app/telemetry/privacy.py
+# (LOG_BASE_FIELDS + LOG_EVENT_FIELDS, SPAN_ATTRIBUTES, METRIC_ATTRIBUTES, SENSITIVE_FIELD_NAMES).
+# backend/tests/unit/test_collector_allow_lists.py fails when the two drift apart: when you add a
+# name there, add it here too (and the other way round).
+#
+# `env`: kept when the sender sets it (resource attribute `env` from APP_ENV), inserted from
+# FITWISE_ENV when it is missing. Prometheus and Loki index it as a label; Tempo keeps it as a
+# resource attribute.
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+  # Backend stdout/stderr, shipped by Docker's `fluentd` logging driver, which only the backend
+  # uses (compose.observability.yaml). No other container's logs ever reach the collector, and
+  # it needs no host mounts. Each record's body is one line the backend wrote.
+  fluent_forward:
+    endpoint: 0.0.0.0:24224
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+    spike_limit_mib: 50
+
+  # Logs: parse the JSON line and rebuild the record from allow-listed fields only. Base fields
+  # map to the record itself (timestamp, level -> severity, message -> body, trace_id/span_id ->
+  # trace context, env/service/version -> resource); event fields become attributes (Loki
+  # structured metadata). The Docker fields (container_id, container_name, source) are dropped.
+  transform/logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - merge_maps(log.cache, ParseJSON(log.body), "upsert") where IsString(log.body) and IsMatch(log.body, "^\\s*\\{")
+          - set(log.attributes["service.name"], log.cache["service"]) where IsString(log.cache["service"])
+          - set(log.attributes["service.version"], log.cache["version"]) where IsString(log.cache["version"])
+          - set(log.attributes["env"], log.cache["env"]) where IsString(log.cache["env"])
+          - set(log.attributes["logger"], log.cache["logger"]) where IsString(log.cache["logger"])
+          - set(log.time, Time(log.cache["timestamp"], "%Y-%m-%dT%H:%M:%S.%LZ")) where IsString(log.cache["timestamp"])
+          - set(log.severity_text, log.cache["level"]) where IsString(log.cache["level"])
+          - set(log.severity_number, SEVERITY_NUMBER_DEBUG) where log.cache["level"] == "debug"
+          - set(log.severity_number, SEVERITY_NUMBER_INFO) where log.cache["level"] == "info"
+          - set(log.severity_number, SEVERITY_NUMBER_WARN) where log.cache["level"] == "warning"
+          - set(log.severity_number, SEVERITY_NUMBER_ERROR) where log.cache["level"] == "error"
+          - set(log.severity_number, SEVERITY_NUMBER_FATAL) where log.cache["level"] == "critical"
+          - set(log.trace_id.string, log.cache["trace_id"]) where IsString(log.cache["trace_id"])
+          - set(log.span_id.string, log.cache["span_id"]) where IsString(log.cache["span_id"])
+          # --- LOG_EVENT_FIELDS (backend/app/telemetry/privacy.py) ---
+          - set(log.attributes["route"], log.cache["route"]) where log.cache["route"] != nil
+          - set(log.attributes["method"], log.cache["method"]) where log.cache["method"] != nil
+          - set(log.attributes["status"], log.cache["status"]) where log.cache["status"] != nil
+          - set(log.attributes["duration_ms"], log.cache["duration_ms"]) where log.cache["duration_ms"] != nil
+          - set(log.attributes["user_hash"], log.cache["user_hash"]) where log.cache["user_hash"] != nil
+          - set(log.attributes["error_type"], log.cache["error_type"]) where log.cache["error_type"] != nil
+          - set(log.attributes["check"], log.cache["check"]) where log.cache["check"] != nil
+          - set(log.attributes["outcome"], log.cache["outcome"]) where log.cache["outcome"] != nil
+          - set(log.attributes["kind"], log.cache["kind"]) where log.cache["kind"] != nil
+          - set(log.attributes["rule"], log.cache["rule"]) where log.cache["rule"] != nil
+          - set(log.attributes["decision"], log.cache["decision"]) where log.cache["decision"] != nil
+          - set(log.attributes["engine"], log.cache["engine"]) where log.cache["engine"] != nil
+          - set(log.attributes["count"], log.cache["count"]) where log.cache["count"] != nil
+          - set(log.attributes["flag_key"], log.cache["flag_key"]) where log.cache["flag_key"] != nil
+          - set(log.attributes["flag_old_value"], log.cache["flag_old_value"]) where log.cache["flag_old_value"] != nil
+          - set(log.attributes["flag_new_value"], log.cache["flag_new_value"]) where log.cache["flag_new_value"] != nil
+          - set(log.attributes["actor"], log.cache["actor"]) where log.cache["actor"] != nil
+          - set(log.attributes["revision"], log.cache["revision"]) where log.cache["revision"] != nil
+          # Drop the Docker fields and anything not copied above.
+          - keep_keys(log.attributes, ["service.name", "service.version", "env", "logger", "route", "method", "status", "duration_ms", "user_hash", "error_type", "check", "outcome", "kind", "rule", "decision", "engine", "count", "flag_key", "flag_old_value", "flag_new_value", "actor", "revision"])
+          # The message only (a constant template written by the app logger); "" if absent.
+          - set(log.body, "")
+          - set(log.body, log.cache["message"]) where IsString(log.cache["message"])
+          # Free-text guard mirroring scrub_text (backend/app/telemetry/privacy.py): mask emails and
+          # tokens, then cap the length. Kept in sync by test_collector_allow_lists.py.
+          - replace_pattern(log.body, "[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+", "[email]")
+          - replace_pattern(log.body, "(?i)\\bbearer\\s+\\S+", "Bearer [token]")
+          - replace_pattern(log.body, "\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+", "[token]")
+          - set(log.body, Concat([Substring(log.body, 0, 256), "..."], "")) where Len(log.body) > 256
+
+  # A line that is not a JSON object from the app logger (a traceback printed before logging is
+  # configured, a stray print) never went through the allow-list: drop it.
+  filter/unparsed_logs:
+    error_mode: ignore
+    logs:
+      log_record:
+        - log.attributes["service.name"] == nil
+
+  # service.name / service.version / env move from the records to the resource, so Loki indexes
+  # them as labels (service_name, env) like the OTLP signals.
+  groupbyattrs/logs:
+    keys: [service.name, service.version, env]
+
+  # Spans: second gate behind the backend's SanitizingSpanExporter.
+  transform/traces:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          # --- SPAN_ATTRIBUTES + the `fitwise.` prefix (backend/app/telemetry/privacy.py) ---
+          - keep_matching_keys(span.attributes, "^(?:http\\.method|http\\.request\\.method|http\\.route|http\\.status_code|http\\.response\\.status_code|http\\.scheme|url\\.scheme|http\\.flavor|network\\.protocol\\.version|server\\.address|server\\.port|net\\.host\\.name|net\\.host\\.port|net\\.peer\\.name|net\\.peer\\.port|net\\.transport|network\\.transport|network\\.peer\\.port|error\\.type|http\\.url|url\\.full|db\\.system|db\\.system\\.name|db\\.name|db\\.namespace|db\\.statement|db\\.query\\.text|db\\.operation|db\\.operation\\.name|db\\.collection\\.name|db\\.sql\\.table|exception\\.type|exception\\.escaped|user_hash|fitwise\\..+)$")
+          # --- SENSITIVE_FIELD_NAMES as the last segment of a `fitwise.` key ---
+          - delete_matching_keys(span.attributes, "^fitwise\\.(?:.+\\.)?(?:email|display_name|name|first_name|last_name|password|current_password|new_password|token|access_token|refresh_token|authorization|cookie|set_cookie|weight_kg|height_cm|body_fat_pct|neck_cm|waist_cm|hip_cm|food_name|note|notes|text|body|query|search_terms|user_id)$")
+          - set(span.status.message, "")
+      - context: spanevent
+        statements:
+          # Exception events keep the class name only (never exception.message / stacktrace).
+          - keep_matching_keys(spanevent.attributes, "^exception\\.(?:type|escaped)$")
+
+  # Metrics: labels outside METRIC_ATTRIBUTES are dropped (backend already applies the same view).
+  transform/metrics:
+    error_mode: ignore
+    metric_statements:
+      - context: datapoint
+        statements:
+          # --- METRIC_ATTRIBUTES (backend/app/telemetry/privacy.py) ---
+          - keep_keys(datapoint.attributes, ["route", "method", "status", "kind", "rule", "decision", "outcome", "http.method", "http.request.method", "http.status_code", "http.response.status_code", "server.address", "net.peer.name", "error.type", "pool.name", "state", "db.client.connection.pool.name", "db.client.connection.state"])
+
+  # Keep the sender's `env`; add it only when missing (action insert never overwrites).
+  resource/env:
+    attributes:
+      - key: env
+        value: ${env:FITWISE_ENV}
+        action: insert
+
+  batch:
+    timeout: 2s
+
+exporters:
+  otlp_grpc/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  # Prometheus' native OTLP receiver (--web.enable-otlp-receiver); exemplars included.
+  otlp_http/prometheus:
+    metrics_endpoint: http://prometheus:9090/api/v1/otlp/v1/metrics
+    tls:
+      insecure: true
+  # Loki's native OTLP endpoint; index labels are configured in observability/loki/loki.yaml.
+  otlp_http/loki:
+    logs_endpoint: http://loki:3100/otlp/v1/logs
+    tls:
+      insecure: true
+
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: warn
+    metrics:
+      level: none
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/traces, resource/env, batch]
+      exporters: [otlp_grpc/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/metrics, resource/env, batch]
+      exporters: [otlp_http/prometheus]
+    logs:
+      receivers: [fluent_forward]
+      processors: [memory_limiter, transform/logs, filter/unparsed_logs, groupbyattrs/logs, resource/env, batch]
+      exporters: [otlp_http/loki]

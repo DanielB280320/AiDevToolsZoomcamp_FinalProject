@@ -1,0 +1,15 @@
+# Dashboards are loaded from observability/grafana/dashboards/*.json (spec §14) into the
+# "FitWise" folder; UI edits are not allowed and never saved back: change the JSON in git.
+apiVersion: 1
+
+providers:
+  - name: fitwise
+    folder: FitWise
+    folderUid: fitwise
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

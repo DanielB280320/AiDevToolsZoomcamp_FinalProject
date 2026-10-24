@@ -1,0 +1,66 @@
+# Loki, single binary, filesystem storage under /loki (a volume). Logs arrive from the collector
+# over OTLP (/otlp/v1/logs). Started with -config.expand-env=true: ${LOKI_RETENTION} is set in
+# compose.observability.yaml (default 168h = 7 days).
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2026-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
+  compaction_interval: 10m
+  retention_delete_delay: 2h
+
+limits_config:
+  retention_period: ${LOKI_RETENTION:-168h}
+  allow_structured_metadata: true
+  volume_enabled: true
+  # OTLP mapping: these resource attributes become index labels (service_name, env); every
+  # log attribute (route, status, user_hash, ...) is structured metadata, not a label, so a
+  # user_hash never creates a stream. trace_id/span_id are stored as structured metadata.
+  otlp_config:
+    resource_attributes:
+      ignore_defaults: true
+      attributes_config:
+        - action: index_label
+          attributes: [service.name, env]
+        - action: structured_metadata
+          attributes: [service.version]
+
+pattern_ingester:
+  enabled: false
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+
+analytics:
+  reporting_enabled: false
