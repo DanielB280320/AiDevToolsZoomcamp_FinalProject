@@ -4,7 +4,7 @@ OpenTelemetry Collector, Prometheus, Loki, Tempo and Grafana for FitWise (spec �
 [ADR 0006](../docs/adr/0006-self-hosted-observability-on-prod.md),
 [architecture §5](../docs/architecture.md#5-observability-and-incident-flow)). Everything here is
 provisioned from files; nothing is configured by hand in Grafana. Running it on prod and the
-dev → prod forwarding are #67; the alert rules are #18.
+dev → prod forwarding are #67; the alert rules are in `grafana/provisioning/alerting/` (#18).
 
 ## Run it locally
 
@@ -103,12 +103,9 @@ All pinned in `compose.observability.yaml`: `otel/opentelemetry-collector-contri
 `busybox:1.37.0` (the readiness probe for the collector and Loki, whose images have no shell).
 To upgrade, change a tag and run `make up-obs && make check-obs`.
 
-## Adding alerts (#18)
+## Alerts (#18)
 
-Put `rules.yaml`, `contact-points.yaml` and `policies.yaml` into
-`grafana/provisioning/alerting/` (see its README). Rules reference the datasource UID `prometheus`;
-annotations link the dashboard UIDs `fitwise-key-journey` / `fitwise-service-health` and a runbook
-in `docs/runbooks/`. The logging endpoints are the route templates
-`/api/v1/sessions/{session_id}/sets`, `/api/v1/sessions/{session_id}/finish` and
-`/api/v1/athletes/{athlete_id}/meal-logs` (method `POST`) on
-`http_server_duration_seconds_{bucket,count}`.
+`grafana/provisioning/alerting/` holds the KeyJourneyErrors and KeyJourneyLatency rules, the webhook
+contact point and the notification policy (see its README). The webhook URL is `ONCALL_WEBHOOK_URL`
+(`.env.example`; on prod the host's env file, #67). The logging endpoints exist from M2, so the rules
+show no data (OK) until then; the fires-and-resolves test is #97.

@@ -1,0 +1,117 @@
+# User-impact alerts (spec §15.1, #18), provisioned as code; nothing is configured by hand.
+# Both watch the key-journey logging endpoints in prod only (env="prod"). The routes exist from M2
+# (#29, #37): until then the queries return no series, which is treated as OK (noDataState: OK).
+# The "fires and resolves" test is #97 (D53).
+#
+# Labels and annotations carry only route / window / severity / env: never user data (rule 6).
+# Each rule is one PromQL query (A), reduced to the last value (B) and compared to its threshold (C).
+# The route regex is the three route templates of the logging endpoints (method POST).
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: key-journey
+    folder: FitWise
+    interval: 1m
+    rules:
+      - uid: fitwise-key-journey-errors
+        title: KeyJourneyErrors
+        condition: C
+        # 5xx ratio per route over 5 min, only for routes with >= 20 requests in the window.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              range: false
+              expr: >-
+                (
+                  sum by (route) (increase(http_server_duration_seconds_count{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs", status=~"5.."}[5m]))
+                  /
+                  sum by (route) (increase(http_server_duration_seconds_count{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs"}[5m]))
+                )
+                and
+                sum by (route) (increase(http_server_duration_seconds_count{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs"}[5m])) >= 20
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              settings: {mode: dropNN}
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: {type: gt, params: [0.05]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "More than 5 % of {{ .Labels.route }} requests fail with 5xx"
+          route: "{{ .Labels.route }}"
+          window: "5 minutes (at least 20 requests)"
+          dashboard_url: "{{ externalURL }}d/fitwise-key-journey/key-journey?var-env=prod"
+          runbook_url: "https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/blob/main/docs/runbooks/key-journey-errors.md"
+        labels:
+          severity: page
+          env: prod
+          service: fitwise-backend
+        isPaused: false
+
+      - uid: fitwise-key-journey-latency
+        title: KeyJourneyLatency
+        condition: C
+        # p95 latency per route over 10 min, in seconds.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              range: false
+              expr: >-
+                histogram_quantile(0.95, sum by (route, le) (increase(http_server_duration_seconds_bucket{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs"}[10m])))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              settings: {mode: dropNN}
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: {type: gt, params: [1]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "p95 latency of {{ .Labels.route }} is above 1 s"
+          route: "{{ .Labels.route }}"
+          window: "10 minutes"
+          dashboard_url: "{{ externalURL }}d/fitwise-key-journey/key-journey?var-env=prod"
+          runbook_url: "https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/blob/main/docs/runbooks/key-journey-latency.md"
+        labels:
+          severity: page
+          env: prod
+          service: fitwise-backend
+        isPaused: false

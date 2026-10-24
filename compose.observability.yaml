@@ -141,12 +141,17 @@ services:
       GF_NEWS_NEWS_FEED_ENABLED: "false"
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
       GF_SERVER_ROOT_URL: http://localhost:${GRAFANA_PORT:-3030}
+      # Webhook to the on-call responder (#18); the real URL is set on prod (#67).
+      ONCALL_WEBHOOK_URL: ${ONCALL_WEBHOOK_URL:-http://host.docker.internal:8099/alerts}
       GF_LOG_LEVEL: warn
       GF_LOG_MODE: console
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
+    # host.docker.internal resolves on Linux too (default webhook target on the Docker host).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${GRAFANA_BIND:-127.0.0.1}:${GRAFANA_PORT:-3030}:3000"
     read_only: true

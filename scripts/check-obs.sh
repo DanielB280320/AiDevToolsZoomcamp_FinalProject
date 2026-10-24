@@ -202,6 +202,18 @@ ds=$(gcurl "$graf/api/datasources" || true)
 for uid in prometheus loki tempo; do
   grep -q "\"uid\":\"${uid}\"" <<<"$ds" && pass "datasource ${uid}" || fail "datasource ${uid} missing"
 done
+# Alert rules (#18): provisioned from files, healthy; no data = OK (nothing hits the routes yet).
+rules=$(gcurl "$graf/api/prometheus/grafana/api/v1/rules" || true)
+for name in KeyJourneyErrors KeyJourneyLatency; do
+  if grep -q "\"name\":\"${name}\"" <<<"$rules" && ! grep -q '"health":"error"' <<<"$rules"; then
+    pass "alert rule ${name} loaded, health not error"
+  else fail "alert rule ${name} missing or unhealthy"; fi
+done
+cps=$(gcurl "$graf/api/v1/provisioning/contact-points" || true)
+grep -q '"name":"oncall-responder"' <<<"$cps" && pass "contact point oncall-responder (webhook) provisioned" || fail "contact point missing"
+pol=$(gcurl "$graf/api/v1/provisioning/policies" || true)
+grep -q '"receiver":"oncall-responder"' <<<"$pol" && pass "notification policy routes to oncall-responder" || fail "notification policy missing"
+
 anon=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$graf/api/dashboards/uid/fitwise-key-journey")
 [[ "$anon" == "401" ]] && pass "anonymous access refused (401)" || fail "anonymous request returned ${anon}"
 
