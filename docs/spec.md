@@ -645,7 +645,7 @@ Where migrations run ([D50](#19-decisions-log), [ADR 0009](adr/0009-separate-mig
 |---|---|
 | Local `make up` | Runs before the backend starts |
 | Deploy to dev, promote to prod (`deploy/deploy.sh <sha>`) | Runs before the backend starts. If it fails, the deploy fails and the backend isn't started on the new tag |
-| Rollback to `PREVIOUS_TAG` (automatic after a failed prod smoke test, "Rollback production", on-call `rollback.sh`) | **Skipped.** The previous backend starts against the newer schema as it is. No down-migration |
+| Rollback to `PREVIOUS_TAG` (automatic on the host after a failed health check, "Rollback production", on-call `rollback.sh`) | **Skipped.** The previous backend starts against the newer schema as it is. No down-migration |
 | Backend restart (on-call `restart`, container restart policy) | Not involved. The backend never migrates on start |
 
 ## 14. Observability
