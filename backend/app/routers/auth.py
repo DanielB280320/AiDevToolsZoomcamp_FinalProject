@@ -34,7 +34,7 @@ def sign_up(
     clock: ClockDep,
 ) -> Me:
     """Create an account and start a session (F1.1-F1.4)."""
-    me = accounts.me_view(accounts.sign_up(session, body, clock.now()))
+    me = accounts.me_view(session, accounts.sign_up(session, body, clock.now()))
     _start_session(response, settings, me, clock)
     return me
 
@@ -53,7 +53,7 @@ def log_in(
     clock: ClockDep,
 ) -> Me:
     """Sign in (F1.6 rate limit: 5 failures per email per 15 min)."""
-    me = accounts.me_view(accounts.log_in(session, body.email, body.password, clock.now()))
+    me = accounts.me_view(session, accounts.log_in(session, body.email, body.password, clock.now()))
     _start_session(response, settings, me, clock)
     return me
 

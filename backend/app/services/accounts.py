@@ -16,6 +16,7 @@ from app.errors import ProblemError
 from app.models import SignInFailure, User
 from app.schemas.problem import FieldError
 from app.schemas.users import Me, SignUpRequest, UpdateMeRequest
+from app.services.athlete import is_onboarded
 from app.services.clock import age_on, local_today
 from app.services.passwords import hash_password, needs_rehash, verify_password
 
@@ -127,9 +128,9 @@ def update_me(session: Session, user: User, request: UpdateMeRequest, now: dt.da
     return user
 
 
-def me_view(user: User) -> Me:
-    """The `Me` body. Onboarding, coach links and notifications arrive in later milestones;
-    until then athletes are not onboarded, coaches always are, and the rest is empty."""
+def me_view(session: Session, user: User) -> Me:
+    """The `Me` body. Athletes are onboarded once their profile exists, coaches always are;
+    coach links and notifications arrive in later milestones and are empty until then."""
     return Me(
         id=user.id,
         email=user.email,
@@ -140,7 +141,7 @@ def me_view(user: User) -> Me:
         timezone=user.timezone,
         disclaimer_accepted_at=user.disclaimer_accepted_at.astimezone(dt.UTC),
         created_at=user.created_at.astimezone(dt.UTC),
-        onboarding_completed=user.role == "coach",
+        onboarding_completed=is_onboarded(session, user),
         active_coach=None,
         pending_coach_link_id=None,
         unread_notification_count=0,

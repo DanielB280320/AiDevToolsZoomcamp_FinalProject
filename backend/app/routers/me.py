@@ -14,8 +14,8 @@ _PROBLEM = {"model": Problem}
 
 
 @router.get("", operation_id="getMe", response_model=Me, responses={401: _PROBLEM})
-def get_me(user: CurrentUser) -> Me:
-    return accounts.me_view(user)
+def get_me(user: CurrentUser, session: SessionDep) -> Me:
+    return accounts.me_view(session, user)
 
 
 @router.patch(
@@ -26,4 +26,4 @@ def get_me(user: CurrentUser) -> Me:
 )
 def update_me(body: UpdateMeRequest, user: CurrentUser, session: SessionDep, clock: ClockDep) -> Me:
     """Partial update of display name, units and time zone."""
-    return accounts.me_view(accounts.update_me(session, user, body, clock.now()))
+    return accounts.me_view(session, accounts.update_me(session, user, body, clock.now()))
