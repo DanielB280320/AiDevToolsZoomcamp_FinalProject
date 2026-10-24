@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted (deploy mechanism amended by [ADR 0010](0010-pull-based-deploy.md)) |
 | **Date** | 2026-10-21 |
 | **Deciders** | Owner |
 | **Spec** | [spec §11](../spec.md#11-containerization-and-local-run), [§12 Deployment](../spec.md#12-deployment-aws), [§13 CI/CD](../spec.md#13-cicd-github-actions), [§19](../spec.md#19-decisions-log) D2, D3 |
@@ -17,7 +17,8 @@ We will:
 
 - Run each environment on its **own EC2 instance** (`fitwise-dev`, `fitwise-prod`) with Docker and **Docker Compose**; Postgres 16 runs as a **container** with a volume on the instance.
 - Build images **once per commit** in GitHub Actions and push them to **GHCR** tagged with the git SHA. Dev auto-deploys every merge to `main`; prod gets a SHA already running on dev through the "Promote to production" workflow, which requires approval in the `production` GitHub Environment.
-- Keep `CURRENT_TAG` and `PREVIOUS_TAG` on each host. A failed prod smoke test redeploys `PREVIOUS_TAG` automatically; "Rollback production" and the on-call `rollback.sh` do the same.
+- Keep `CURRENT_TAG` and `PREVIOUS_TAG` on each host. A failed health check after a deploy redeploys `PREVIOUS_TAG` automatically on the host; "Rollback production" (moves the `deploy/prod` ref back) and the on-call `rollback.sh` do the same (as amended by ADR 0010).
+- **Amended by [ADR 0010](0010-pull-based-deploy.md):** CI does not push deploys to the hosts. It records the approved tag and a systemd timer on each host pulls and deploys it, and rolls back by itself.
 - Back up prod with a nightly `pg_dump` to S3 (7-day retention). Bootstrap is scripted and documented in `deploy/README.md`.
 
 ## Alternatives considered

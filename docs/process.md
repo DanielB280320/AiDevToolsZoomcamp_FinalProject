@@ -128,7 +128,7 @@ Same as [CLAUDE.md — Definition of done](../CLAUDE.md#definition-of-done): all
 |---|---|---|
 | Deploy to **dev** | Every merge to `main` (CI builds images tagged with the commit SHA, deploys, runs smoke tests) | Automatic |
 | Promote to **prod** | `Promote to production` workflow with a SHA already running on dev; requires approval in the `production` environment | Owner approves; DevOps prepares |
-| **Rollback** | Automatic when the prod smoke test fails; manual `Rollback production` workflow; or the on-call agent's `rollback.sh` | Automatic / owner / on-call agent |
+| **Rollback** | Automatic on the host when its post-deploy health check fails (pull-based deploy, ADR 0010); manual `Rollback production` workflow (moves the `deploy/prod` ref back); or the on-call agent's `rollback.sh` on the host | Automatic / owner / on-call agent |
 
 Details: [spec §12–13](spec.md#12-deployment-aws).
 

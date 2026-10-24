@@ -24,7 +24,7 @@ All resources are tagged `Project=fitwise`, `Env=dev|prod`.
 | Public IPv4 / Elastic IP ($0.005/h) | ~$3.6 | ~$3.6 |
 | Total | ~$21 | ~$68 |
 
-About **$89/month** for both hosts (owner approved "$57 or more" on 2026-10-24; this is the real figure, the owner should confirm). Free-plan credits may offset part of it. IAM, security groups and SSM are free. Data transfer and the S3 backup bucket (#66) are extra. Re-check the EC2 prices on the AWS pricing page before relying on them.
+About **$89/month** for both hosts (approved by the owner on 2026-10-24). Free-plan credits may offset part of it. IAM, security groups and SSM are free. Data transfer and the S3 backup bucket (#66) are extra. Re-check the EC2 prices on the AWS pricing page before relying on them.
 
 ## Access method: SSM, not SSH
 
@@ -42,7 +42,7 @@ Port 22 is closed on both hosts and there is no key pair. Reasons: no long-lived
 | 3000 (Grafana) | owner IP /32 (auto-detected, override with `OWNER_CIDR`) | prod |
 | 4317 (OTLP gRPC) | dev Elastic IP /32 | prod |
 
-Rules are added only when missing; if the owner IP changes, update the rule by hand (`aws ec2 revoke/authorize-security-group-ingress`) or re-run with the new `OWNER_CIDR` after revoking the old rule.
+Re-running `provision.sh` makes ports 3000 and 4317 allow exactly the detected owner IP (or `OWNER_CIDR`) and the dev Elastic IP: a stale CIDR on those ports is revoked and the new one added, so a changed owner IP is fixed by re-running.
 
 ## Steps
 

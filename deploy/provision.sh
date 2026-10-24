@@ -62,6 +62,18 @@ allow() { # <sg> <port> <cidr> <desc>  (only a duplicate-rule error is ignored)
     esac
   fi
 }
+only_from() { # <sg> <port> <cidr> <desc>: the port allows exactly this CIDR; stale CIDRs are revoked
+  local old c
+  old="$(aws ec2 describe-security-groups --group-ids "$1" \
+    --query "SecurityGroups[0].IpPermissions[?FromPort==\`$2\`].IpRanges[].CidrIp" --output text)"
+  for c in $old; do
+    if [ "$c" != "$3" ]; then
+      log "port $2 on $1: replacing $c with $3"
+      aws ec2 revoke-security-group-ingress --group-id "$1" --protocol tcp --port "$2" --cidr "$c" >/dev/null
+    fi
+  done
+  allow "$1" "$2" "$3" "$4"
+}
 declare -A SG
 for env in dev prod; do SG[$env]="$(ensure_sg "$env")"; allow "${SG[$env]}" 80 0.0.0.0/0 "HTTP public"; done
 
@@ -92,8 +104,8 @@ for env in dev prod; do
 done
 
 # --- Security group rules that need the addresses above ---------------------
-allow "${SG[prod]}" "$GRAFANA_PORT" "$OWNER_CIDR" "Grafana owner IP"
-allow "${SG[prod]}" "$OTLP_PORT" "${EIP[dev]}/32" "OTLP from dev instance"
+only_from "${SG[prod]}" "$GRAFANA_PORT" "$OWNER_CIDR" "Grafana owner IP"
+only_from "${SG[prod]}" "$OTLP_PORT" "${EIP[dev]}/32" "OTLP from dev instance"
 # Port 22 is intentionally never opened: access is via SSM (see README).
 
 cat <<OUT

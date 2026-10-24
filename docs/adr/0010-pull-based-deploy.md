@@ -28,7 +28,12 @@ Deployment is **pull-based**:
 4. The poller remembers the last tag it attempted or that was rolled back, so it does not redeploy a failed tag in a loop and does not undo an on-call `rollback.sh`; it acts again only when the approved ref moves.
 5. Hosts open **no inbound ports** for deployment and GitHub holds **no AWS keys**. The only credential on the host is none at all, provided the repository and GHCR packages are public (see below).
 
-The poller (`deploy/deploy.sh`, systemd unit and timer) is built in #13 and #14. This ADR only fixes the design.
+The poller (`deploy/deploy.sh`, systemd unit and timer) is built in #13 and #14. This ADR only fixes the design and sets these constraints for that work:
+
+- **Images are pulled by digest, not by tag.** CI records the digest next to the SHA (for example in the ref's annotated tag message or a release asset), and the host deploys `image@sha256:...` so a re-pushed tag cannot change what runs.
+- **Polling stays within the unauthenticated GitHub API limit of 60 requests per hour per IP.** Use conditional requests (`ETag`/`If-None-Match`) and an interval chosen so that, counting every request including retries and the digest lookup, a host stays below 60 an hour even if 304 responses are counted (so at least 2 minutes between polls, with a margin). #14 sets the interval and records it in the README.
+- **#14 defines how rollback finds `PREVIOUS_TAG`** (the host's `/opt/fitwise/PREVIOUS_TAG` and, for the "Rollback production" workflow, the SHA to move the ref back to), including what happens when it is empty on a first deploy.
+- **Moving the `deploy/prod` ref is restricted to a token held only as a `production` environment secret**, so only the approved, gated job can promote to prod. `deploy/dev` uses a separate token in the `dev` environment. Neither token is an AWS credential.
 
 ## Alternatives considered
 
