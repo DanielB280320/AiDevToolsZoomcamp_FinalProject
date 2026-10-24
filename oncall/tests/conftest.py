@@ -22,7 +22,8 @@ USER = "grafana"
 PASSWORD = "test-password"
 AUTH = {"Authorization": "Basic " + base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()}
 
-EMAIL_LINE = '{"level": "error", "message": "boom", "note": "contact alice@example.com"}'
+# The collector keeps only the message as the line body, so this is what Loki returns.
+EMAIL_LINE = "boom, contact alice@example.com"
 
 
 def fixture(name: str) -> dict[str, Any]:
@@ -35,6 +36,7 @@ class StubBackends:
 
     def __init__(self) -> None:
         self.down: set[str] = set()  # "prometheus" | "loki" | "tempo" -> answer 503
+        self.bad_queries: list[str] = []
         self.requests: list[tuple[str, dict[str, list[str]]]] = []
         stub = self
 
@@ -42,6 +44,20 @@ class StubBackends:
             def do_GET(self) -> None:
                 parsed = urlparse(self.path)
                 stub.requests.append((parsed.path, parse_qs(parsed.query)))
+                if parsed.path == "/loki/api/v1/query_range":
+                    # Selector and filter must match what the collector/Loki really expose
+                    # (collector config.yaml, service-health dashboard): index labels
+                    # service_name/env, level via detected_level; never a text match on the body.
+                    query = parse_qs(parsed.query).get("query", [""])[0]
+                    expected = (
+                        '{service_name="fitwise-backend", env="prod"}'
+                        ' | detected_level=~"error|critical|fatal"'
+                    )
+                    if query != expected:
+                        stub.bad_queries.append(query)
+                        self.send_response(400)
+                        self.end_headers()
+                        return
                 backend, body = {
                     "/api/v1/query_range": (
                         "prometheus",

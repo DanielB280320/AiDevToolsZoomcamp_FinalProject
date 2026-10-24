@@ -21,6 +21,8 @@ from responder.launcher import launch
 from responder.log import log
 from responder.store import Incident, IncidentStore, InvalidFingerprintError, check_fingerprint
 
+LAUNCHED_MARKER = "launched"
+
 
 def is_test_notification(alert: dict[str, Any]) -> bool:
     """Grafana's "Test" button on a contact point sends alertname=TestAlert."""
@@ -54,7 +56,7 @@ class Responder:
         self.settings = settings
         self.store = IncidentStore(settings.incidents_dir)
         self.pool = ThreadPoolExecutor(max_workers=settings.workers, thread_name_prefix="incident")
-        self.futures: list[Future[None]] = []
+        self.futures: set[Future[None]] = set()
 
     def handle_alert(self, alert: dict[str, Any]) -> None:
         fingerprint = check_fingerprint(str(alert.get("fingerprint", "")))
@@ -66,7 +68,7 @@ class Responder:
                 return
             (incident.path / "alert.json").write_text(json.dumps(alert, indent=2, sort_keys=True))
             log("incident_opened", incident_id=incident.id, fingerprint=fingerprint)
-            self.futures.append(self.pool.submit(self._run, incident, alert))
+            self._submit(incident, alert)
         elif status == "resolved":
             closed = self.store.close_incident(fingerprint)
             log(
@@ -78,9 +80,25 @@ class Responder:
         else:
             log("alert_ignored", fingerprint=fingerprint, reason="unknown status")
 
+    def _submit(self, incident: Incident, alert: dict[str, Any]) -> None:
+        future = self.pool.submit(self._run, incident, alert)
+        self.futures.add(future)
+        future.add_done_callback(self.futures.discard)  # finished tasks do not pile up
+
+    def resume_pending(self) -> None:
+        """After a restart, run the launcher for open incidents that never reached it."""
+        for incident in self.store.open_incidents():
+            alert_file = incident.path / "alert.json"
+            if (incident.path / LAUNCHED_MARKER).exists() or not alert_file.exists():
+                continue
+            log("incident_resumed", incident_id=incident.id)
+            self._submit(incident, json.loads(alert_file.read_text()))
+
     def _run(self, incident: Incident, alert: dict[str, Any]) -> None:
         try:
             capture_context(alert, incident.path, self.settings)
+            # Written before the (long) launcher run: a restart then knows it was handed over.
+            (incident.path / LAUNCHED_MARKER).write_text("")
             launch(incident, self.settings)
         except Exception as exc:
             log("incident_failed", incident_id=incident.id, error_type=type(exc).__name__)
@@ -89,7 +107,6 @@ class Responder:
         """Block until the background work is done (tests, shutdown)."""
         for future in list(self.futures):
             future.result()
-        self.futures.clear()
 
     def shutdown(self) -> None:
         self.pool.shutdown(wait=False, cancel_futures=True)
@@ -102,6 +119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        responder.resume_pending()
         yield
         responder.shutdown()
 
@@ -130,6 +148,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 isinstance(a, dict) for a in alerts_list
             ):
                 raise TypeError("alerts must be a list of objects")
+            for a in alerts_list:
+                if any(not isinstance(a.get(k) or {}, dict) for k in ("labels", "annotations")):
+                    raise TypeError("labels and annotations must be objects")
         except (ValueError, KeyError, TypeError):
             log("alert_rejected", reason="malformed payload", status_code=400)
             return JSONResponse({"detail": "malformed payload"}, status_code=400)

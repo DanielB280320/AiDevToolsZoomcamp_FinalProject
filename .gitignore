@@ -5,3 +5,4 @@
 
 # On-call responder runtime data (oncall/, #19): incident folders hold alert and telemetry context.
 incidents/
+__pycache__/

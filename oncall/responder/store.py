@@ -95,6 +95,15 @@ class IncidentStore:
             marker.unlink(missing_ok=True)
             return Incident(id=incident_id, path=path)
 
+    def open_incidents(self) -> list[Incident]:
+        """Currently open incidents (the dedupe markers), e.g. to resume after a restart."""
+        found = []
+        for marker in sorted(self._open_dir.iterdir()):
+            incident_id = marker.read_text().strip()
+            if incident_id and (self.root / incident_id).is_dir():
+                found.append(Incident(id=incident_id, path=self.root / incident_id))
+        return found
+
     @staticmethod
     def _write_json(path: Path, data: object) -> None:
         tmp = path.with_suffix(path.suffix + ".tmp")

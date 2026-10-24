@@ -9,8 +9,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from responder.app import create_app
 from responder.config import ConfigError, Settings
+from responder.store import IncidentStore
 from tests.conftest import (
+    AUTH,
     EMAIL_LINE,
     PASSWORD,
     StubBackends,
@@ -253,3 +256,56 @@ def test_malformed_payload_is_400(body: bytes, client: TestClient, settings: Set
 def test_missing_password_fails_closed() -> None:
     with pytest.raises(ConfigError):
         Settings.from_env({})
+
+
+def test_loki_query_uses_level_label_not_line_text(
+    client: TestClient, stubs: StubBackends, settings: Settings
+) -> None:
+    client.post("/alerts", json=fixture("firing"))
+    responder_of(client).wait()
+    assert stubs.bad_queries == []
+    (incident,) = incident_dirs(settings)
+    assert json.loads((incident / "capture.json").read_text())["loki"] == "ok"
+
+
+@pytest.mark.parametrize("key", ["labels", "annotations"])
+def test_labels_or_annotations_not_object_is_400(
+    key: str, client: TestClient, settings: Settings
+) -> None:
+    body = fixture("firing")
+    body["alerts"][0][key] = ["x"]
+    assert client.post("/alerts", json=body).status_code == 400
+    assert incident_dirs(settings) == []
+
+
+def test_finished_tasks_are_dropped(client: TestClient) -> None:
+    for fp in ("aaa", "bbb", "ccc"):
+        body = fixture("firing")
+        body["alerts"][0]["fingerprint"] = fp
+        client.post("/alerts", json=body)
+    responder_of(client).wait()
+    deadline = time.monotonic() + 2
+    while responder_of(client).futures and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert responder_of(client).futures == set()
+
+
+def test_restart_relaunches_incident_whose_launcher_never_ran(
+    settings: Settings, launcher_log: Path
+) -> None:
+    # A crash after the incident was opened, before the launcher ran: marker and alert.json only.
+    store = IncidentStore(settings.incidents_dir)
+    incident = store.open_incident("9d1f0c2a7b3e4a55")
+    assert incident is not None
+    alert = fixture("firing")["alerts"][0]
+    (incident.path / "alert.json").write_text(json.dumps(alert))
+
+    with TestClient(create_app(settings), headers=AUTH) as restarted:  # startup resumes it
+        responder_of(restarted).wait()
+    assert launched(launcher_log) == [incident.id]
+    assert (incident.path / "launched").exists()
+    assert len(incident_dirs(settings)) == 1
+
+    with TestClient(create_app(settings), headers=AUTH) as again:  # already launched: left alone
+        responder_of(again).wait()
+    assert launched(launcher_log) == [incident.id]

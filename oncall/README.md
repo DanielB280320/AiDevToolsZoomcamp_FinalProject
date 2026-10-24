@@ -25,7 +25,13 @@ cd oncall
 ONCALL_WEBHOOK_PASSWORD=<secret> uv run --locked python -m responder
 ```
 
-It listens on `127.0.0.1:8099` (`ONCALL_HOST`, `ONCALL_PORT`). Grafana reaches it through the
+It listens on `127.0.0.1:8099` (`ONCALL_HOST`, `ONCALL_PORT`).
+
+**Docker wiring (#67/#69):** Grafana runs in a container and calls the responder at
+`host.docker.internal:8099` (default `ONCALL_WEBHOOK_URL`), which does not reach a service bound
+to the host's `127.0.0.1`. On the prod host set `ONCALL_HOST` to the Docker bridge address (the
+`docker0` gateway, usually `172.17.0.1`) or to `0.0.0.0` behind a firewall that only allows the
+Docker networks, and keep the basic-auth credential set either way. Never expose the port publicly. Grafana reaches it through the
 contact point `oncall-responder` (`observability/grafana/provisioning/alerting/contact-points.yaml`).
 
 ## Behaviour
@@ -39,6 +45,13 @@ contact point `oncall-responder` (`observability/grafana/provisioning/alerting/c
 | `firing`, incident already open | `202`, ignored (no second incident) |
 | `resolved` for an open incident | `202`; incident closed (`closed_at` set); a later `firing` opens a new one |
 
+Test notifications are recognised by Grafana's default test labels (`alertname=TestAlert` and the
+annotation `summary=Notification test`). A test sent from the UI with custom labels or annotations
+would open a real incident.
+
+After a restart the service re-runs the launcher for open incidents that never reached it (no
+`launched` file in the folder); incidents already handed over are left alone.
+
 The response never waits for the capture or the launcher, so it is well under Grafana's timeout
 even when the hook is slow.
 
@@ -51,7 +64,7 @@ incidents/
     incident.json             id, fingerprint, opened_at, closed_at
     alert.json                the alert as Grafana sent it
     prometheus.json           range queries: 5xx requests, all requests, p95 latency
-    loki.json                 error log lines for the window
+    loki.json                 error log lines for the window (filter: detected_level, as the dashboard)
     tempo.json                {"trace_ids": [...]} of failing traces in the window
     capture.json              per backend: "ok" or "failed: <HTTP status | exception type>"
 ```

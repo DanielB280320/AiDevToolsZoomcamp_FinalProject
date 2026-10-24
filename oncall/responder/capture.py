@@ -59,7 +59,10 @@ def prometheus_queries(labels: dict[str, str]) -> dict[str, str]:
 
 def loki_query(labels: dict[str, str]) -> str:
     env = _selector_value(labels.get("env", "prod"))
-    return f'{{env="{env}"}} |~ `"level": ?"error"`'
+    # The collector turns the JSON line into a message-only body and moves the level to the
+    # severity, which Loki exposes as detected_level (same filter as the service-health dashboard).
+    service = _selector_value(labels.get("service", "fitwise-backend"))
+    return f'{{service_name="{service}", env="{env}"}} | detected_level=~"error|critical|fatal"'
 
 
 def _get_json(url: str, params: dict[str, str], timeout: float) -> Any:
