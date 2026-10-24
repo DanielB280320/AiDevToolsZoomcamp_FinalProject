@@ -239,7 +239,7 @@ Release mechanics ([spec §12](spec.md#12-deployment-aws), [§13](spec.md#13-cic
 - Each host keeps `CURRENT_TAG` and `PREVIOUS_TAG`. Rollback means redeploying `PREVIOUS_TAG`, either from the "Rollback production" workflow or from the on-call agent's `rollback.sh`.
 - Because migrations are expand → migrate → contract, the previous release always works against the current schema and rollback never needs a down-migration.
 - Migrations and the seed run as a separate one-shot step from the image being deployed, before the backend starts. Forward deploys run it; a rollback skips it. The backend never migrates on start, so an older image can always start on a newer schema ([ADR 0009](adr/0009-separate-migration-step.md), D50).
-- Security groups: 80 open; 22 restricted to the owner's IP and GitHub Actions deploy (or SSM); Grafana restricted to the owner's IP; the prod OTLP port open only to the dev instance. Elastic IPs keep the addresses stable.
+- Security groups: 80 open; 22 closed (SSM for owner access and GitHub Actions deploys); Grafana restricted to the owner's IP; the prod OTLP port open only to the dev instance. Elastic IPs keep the addresses stable.
 - Configuration and secrets (JWT secret, DB credentials, API keys) come from environment variables / GitHub Environment secrets; `.env.example` documents them and nothing secret is committed.
 
 ## 5. Observability and incident flow
