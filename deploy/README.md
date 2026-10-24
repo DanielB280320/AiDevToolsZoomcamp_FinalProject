@@ -95,6 +95,7 @@ Actions > "Promote to production" (workflow_dispatch, input: full SHA of a relea
 - **Digests.** The `publish` job uploads the `release-record` artifact (90 days). A release that predates it is accepted only while `deploy/dev` still carries it.
 - **Poller on prod.** Identical to dev: one conditional (`ETag`) request to `deploy/prod` every 150 s = 24 requests per hour counting 304s (limit 60), no token on the host, images pulled by digest. Install or refresh with `deploy/bootstrap-remote.sh prod` (idempotent; the timer and `/etc/fitwise-deploy.env` are only rewritten when they differ). No inbound deploy port, no credential.
 - **Automatic rollback on prod.** Same as dev: if `/readyz` or the `version` check fails within 120 s, `rollback.sh <old CURRENT_TAG>` starts the previous release **without the migration step** and without any down-migration (D50), so `alembic_version` is unchanged. The failed ref is recorded in `LAST_REF` and not retried; the poller acts again only when `deploy/prod` moves. The smoke job then fails with a message saying the host may have rolled back. Inspect: `journalctl -u fitwise-deploy -o cat` on `fitwise-prod`.
+- **Rollback demo (temporary host switch, D60).** While the line `FITWISE_DEMO_FAIL_HEALTH=1` exists in `/opt/fitwise/.env`, `deploy.sh` starts the new release and then treats the health check as failed, so the normal path runs: `rollback.sh <CURRENT_TAG>` without migration. Off by default on every host, ignored by `rollback.sh`, not read by the application, never printed. It exists only for the demo; remove it afterwards. Procedure in the PR for #14 (also below).
 - **Manual rollback workflow** is a separate issue (#113); until then use `sudo /opt/fitwise/bin/rollback.sh` on the host.
 - **Only `main`.** The workflow's first job runs only when dispatched from `main`.
 
@@ -107,3 +108,23 @@ Manual step for the owner: set required reviewers on the `production` GitHub env
 ## Teardown (destructive, owner only)
 
 Terminate instances, release Elastic IPs, delete security groups and the role/profile by the `Project=fitwise` tag. Never done by agents without explicit owner confirmation.
+
+## Rollback demo on prod (owner commands, issue #14)
+
+Prerequisite: the scripts on `fitwise-prod` include the switch (re-run `deploy/bootstrap-remote.sh prod` after the PR is merged), and prod already serves one release A (promote any dev-proven SHA first, so there is a `CURRENT_TAG` to roll back to). Pick a second dev-proven SHA B.
+
+```bash
+IID=$(aws ec2 describe-instances --region us-east-2 --filters Name=tag:Name,Values=fitwise-prod Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)
+run() { aws ssm start-session --region us-east-2 --target "$IID" --document-name AWS-StartInteractiveCommand --parameters command="$1"; }   # or open a shell: aws ssm start-session --target "$IID"
+```
+
+On the host (as root, `sudo -i`):
+
+1. Record the starting state: `cat /opt/fitwise/CURRENT_TAG /opt/fitwise/PREVIOUS_TAG; docker exec $(docker ps -qf name=backend) alembic current` and `curl -s localhost/api/v1/healthz` (version = A).
+2. Switch on: `echo 'FITWISE_DEMO_FAIL_HEALTH=1' >> /opt/fitwise/.env`
+3. In GitHub, run "Promote to production" with sha = B and approve it. Link the run in the issue.
+4. Watch: `journalctl -u fitwise-deploy -f -o cat`. Expect `deploy/prod moved ... release B`, `FITWISE_DEMO_FAIL_HEALTH is set ... forced to fail`, `rolling back`, `rollback: ... A`, `FAILED B, rolled back to A`. The `smoke-prod` job fails (expected) with the "host may have rolled back" message.
+5. Verify: `cat /opt/fitwise/CURRENT_TAG` is A; `curl -s localhost/api/v1/healthz` version = A; `curl -s -o /dev/null -w '%{http_code}' localhost/api/v1/readyz` is 200; `alembic current` is the same revision as in step 1; `cat /opt/fitwise/LAST_REF` is the deploy/prod commit of B.
+6. No retry: wait for two more polls (about 5 minutes) and check `journalctl -u fitwise-deploy --since '-6min' -o cat`: no further deploy of B.
+7. **Switch off (required):** `sed -i '/^FITWISE_DEMO_FAIL_HEALTH=1$/d' /opt/fitwise/.env; grep -c FITWISE_DEMO_FAIL_HEALTH /opt/fitwise/.env` must print 0.
+8. Evidence for the issue: the journal excerpt (no `.env` contents appear in it), the run link, and `journalctl -u fitwise-deploy | grep -Ei 'ghp_|github_pat_|bearer'` printing nothing. Re-promote B afterwards (switch off) to show it deploys normally.

@@ -277,6 +277,7 @@ jobs:
         with:
           persist-credentials: false
       - run: bash scripts/test-promote-verify.sh
+      - run: bash scripts/test-deploy-demo-flag.sh
 
   ci-passed:
     name: CI passed

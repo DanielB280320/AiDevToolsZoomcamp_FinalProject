@@ -56,7 +56,9 @@ stop_placeholder
 compose_release "$sha" up -d --no-deps --wait --wait-timeout 90 backend frontend ||
   log "deploy: compose up reported a failure"
 
-if wait_healthy "$sha"; then
+if demo_health_fail; then
+  log "deploy: FITWISE_DEMO_FAIL_HEALTH is set on this host: the health check is forced to fail (rollback demo)"
+elif wait_healthy "$sha"; then
   if [ -n "$cur" ] && [ "$cur" != "$sha" ]; then write_state "$PREVIOUS_TAG_FILE" "$cur"; fi
   write_state "$CURRENT_TAG_FILE" "$sha"
   log "deploy: OK, serving $sha (previous: $(read_tag "$PREVIOUS_TAG_FILE"))"
@@ -68,7 +70,7 @@ if wait_healthy "$sha"; then
   exit 0
 fi
 
-log "deploy: $sha is NOT healthy within ${HEALTH_TIMEOUT_SECONDS}s; rolling back"
+log "deploy: $sha is NOT healthy; rolling back"
 compose_release "$sha" logs --no-color --tail 15 backend 2>&1 | sed 's/^/  backend: /' || true
 if [ -n "$cur" ]; then
   # CURRENT_TAG still names the release that was serving; PREVIOUS_TAG is not touched.
