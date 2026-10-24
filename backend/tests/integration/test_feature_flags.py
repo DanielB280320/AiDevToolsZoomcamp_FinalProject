@@ -341,7 +341,7 @@ def test_latency_flag_set_by_cli_delays_logging_routes_only(
     api: Api, migrated_database_url: str
 ) -> None:
     router = APIRouter()
-    for path in ["/api/v1/sessions/{sid}/sets", "/api/v1/sessions/{sid}/move"]:
+    for path in ["/api/v1/sessions/{sid}/sets", "/api/v1/sessions/{sid}/archive"]:
         router.add_api_route(path, lambda: {"ok": True}, methods=["POST"])
     api.app.include_router(router)
     client = TestClient(api.app)
@@ -360,7 +360,7 @@ def test_latency_flag_set_by_cli_delays_logging_routes_only(
     api.clock.advance(seconds=FLAG_CACHE_TTL_SECONDS)
 
     assert timed("/api/v1/sessions/a/sets") >= 0.4
-    assert timed("/api/v1/sessions/a/move") < 0.3
+    assert timed("/api/v1/sessions/a/archive") < 0.3
 
     assert (
         run_cli(
