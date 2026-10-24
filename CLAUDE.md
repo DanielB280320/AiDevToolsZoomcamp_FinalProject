@@ -66,7 +66,7 @@ docs/            spec, process, team, architecture, adr/, runbooks/
 
 ## Agent models
 
-Engineer and DevOps agents implement already-groomed issues on **Sonnet with medium effort**, set in their `.claude/agents/*.md` frontmatter; don't override it when starting them. See [docs/team.md](docs/team.md#models-and-effort).
+All subagents (PM, Engineer, QA, DevOps) run on **Sonnet with medium effort**, set in their `.claude/agents/*.md` frontmatter; don't override it when starting them. The one exception: QA may run on Opus for a security-, hook-, auth- or migration-heavy PR. See [docs/team.md](docs/team.md#models-and-effort).
 
 ## Rules for every agent
 
