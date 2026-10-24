@@ -116,6 +116,7 @@ test: ## Backend unit + integration (Postgres container) and frontend tests
 	@rc=0; \
 	$(MAKE) test-backend || rc=1; \
 	$(MAKE) test-frontend || rc=1; \
+	$(MAKE) test-oncall || rc=1; \
 	if [ $$rc -ne 0 ]; then echo "make test: FAILED (see output above)" >&2; fi; \
 	exit $$rc
 
@@ -154,6 +155,7 @@ lint: ## ruff (lint + format check), mypy, eslint, tsc, API client drift, openap
 	@rc=0; \
 	$(MAKE) lint-backend || rc=1; \
 	$(MAKE) lint-frontend || rc=1; \
+	$(MAKE) lint-oncall || rc=1; \
 	$(MAKE) lint-openapi || rc=1; \
 	if [ $$rc -ne 0 ]; then echo "make lint: FAILED (see output above)" >&2; fi; \
 	exit $$rc
@@ -163,6 +165,16 @@ lint-backend: check-uv ## ruff check, ruff format --check, mypy
 	cd $(BACKEND) && uv run --locked ruff check
 	cd $(BACKEND) && uv run --locked ruff format --check
 	cd $(BACKEND) && uv run --locked mypy
+
+.PHONY: lint-oncall
+lint-oncall: check-uv ## On-call responder (oncall/): ruff check, ruff format --check, mypy
+	cd oncall && uv run --locked ruff check
+	cd oncall && uv run --locked ruff format --check
+	cd oncall && uv run --locked mypy
+
+.PHONY: test-oncall
+test-oncall: check-uv ## On-call responder unit tests (stub backends, no network, no database)
+	cd oncall && uv run --locked pytest
 
 .PHONY: lint-frontend
 lint-frontend: $(NPM_STAMP) ## eslint, tsc --noEmit, generated API client up to date
@@ -201,6 +213,10 @@ scan-secrets: ## gitleaks over the full history of HEAD (needs a regular clone, 
 scan-deps: check-uv $(NPM_STAMP) ## pip-audit (locked backend deps) and npm audit (high and above)
 	reqs=$$(mktemp); trap 'rm -f "$$reqs"' EXIT; \
 	cd $(BACKEND) && uv export --locked --format requirements-txt --no-emit-project --quiet \
+	  --output-file "$$reqs" && \
+	uvx --quiet $(PIP_AUDIT) --progress-spinner off --strict --disable-pip --require-hashes -r "$$reqs"
+	reqs=$$(mktemp); trap 'rm -f "$$reqs"' EXIT; \
+	cd oncall && uv export --locked --format requirements-txt --no-emit-project --quiet \
 	  --output-file "$$reqs" && \
 	uvx --quiet $(PIP_AUDIT) --progress-spinner off --strict --disable-pip --require-hashes -r "$$reqs"
 	cd $(FRONTEND) && npm audit --audit-level=high

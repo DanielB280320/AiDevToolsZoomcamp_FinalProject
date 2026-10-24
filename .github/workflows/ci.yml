@@ -279,6 +279,23 @@ jobs:
       - run: bash scripts/test-promote-verify.sh
       - run: bash scripts/test-deploy-demo-flag.sh
 
+  oncall:
+    name: On-call responder (ruff, mypy, pytest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: oncall/uv.lock
+      - run: make lint-oncall
+      - run: make test-oncall
+
   ci-passed:
     name: CI passed
     if: always()
@@ -294,6 +311,7 @@ jobs:
       - rollback-compat
       - hook-tests
       - deploy-script-tests
+      - oncall
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

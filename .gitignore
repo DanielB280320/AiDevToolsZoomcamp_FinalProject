@@ -2,3 +2,6 @@
 .env
 .env.*
 !.env.example
+
+# On-call responder runtime data (oncall/, #19): incident folders hold alert and telemetry context.
+incidents/
