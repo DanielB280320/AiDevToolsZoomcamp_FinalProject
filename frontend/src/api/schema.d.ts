@@ -840,7 +840,9 @@ export interface paths {
          * @description Accepted values become the targets for the next sessions of that exercise (progression) or
          *     the new daily targets from today, rescaling future meal-day portions only (calories, recalc;
          *     F14.4). Optional `overrides` implement edit-then-accept; overrides must match the suggestion
-         *     kind (422) and calorie overrides are never below the floor (F3.6). Already decided →
+         *     kind (`422 invalid_overrides`) and calorie overrides are never below the floor (F3.6).
+         *     Progression targets are stored as a new plan version, so past sessions keep their targets
+         *     (F8.1). Already decided →
          *     `409 suggestion_already_decided`. The athlete or their linked coach can decide.
          */
         post: operations["acceptSuggestion"];
@@ -1347,7 +1349,7 @@ export interface components {
              *     `wrong_role`, `not_linked`, `not_found`, `not_onboarded`, `email_taken`,
              *     `already_onboarded`, `plan_revision_conflict`, `day_occupied`, `session_finished`,
              *     `outside_week`, `date_in_past`,
-             *     `edit_window_closed`, `suggestion_already_decided`, `link_exists`, `link_not_pending`,
+             *     `edit_window_closed`, `suggestion_already_decided`, `invalid_overrides`, `link_exists`, `link_not_pending`,
              *     `validation_error`, `underage`, `disclaimer_required`, `rate_limited`,
              *     `off_unavailable`, `not_ready`. New codes may be added.
              */
@@ -3898,7 +3900,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
         };
@@ -3926,7 +3927,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };
     };

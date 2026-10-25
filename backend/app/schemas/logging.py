@@ -2,13 +2,14 @@
 
 import datetime as dt
 import uuid
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import Field
 
 from app.schemas.base import RequestModel, ResponseModel
 from app.schemas.calendar import EnergyBalance, Session
 from app.schemas.plans import ExerciseSummary
+from app.schemas.suggestions import Suggestion
 
 
 class SetLogInput(RequestModel):
@@ -29,8 +30,7 @@ class FinishSessionRequest(RequestModel):
 
 class FinishSessionResult(ResponseModel):
     session: Session
-    # Progression suggestions are created by #85; until then none are generated.
-    suggestions: list[Any]
+    suggestions: list[Suggestion]
 
 
 class ActivityInput(RequestModel):
