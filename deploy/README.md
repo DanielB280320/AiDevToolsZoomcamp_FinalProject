@@ -97,8 +97,30 @@ Actions > "Promote to production" (workflow_dispatch, input: full SHA of a relea
 - **Poller on prod.** Identical to dev: one conditional (`ETag`) request to `deploy/prod` every 150 s = 24 requests per hour counting 304s (limit 60), no token on the host, images pulled by digest. Install or refresh with `deploy/bootstrap-remote.sh prod` (idempotent; the timer and `/etc/fitwise-deploy.env` are only rewritten when they differ). No inbound deploy port, no credential.
 - **Automatic rollback on prod.** Same as dev: if `/readyz` or the `version` check fails within 120 s, `rollback.sh <old CURRENT_TAG>` starts the previous release **without the migration step** and without any down-migration (D50), so `alembic_version` stays where it is. That is the old revision only if the failed release carried no migration; if it carried an expand-only migration the revision has advanced and is not downgraded, and the previous release keeps serving on the expanded schema (backward-compatible migrations, `/readyz` accepts a database ahead of the release). The failed ref is recorded in `LAST_REF` and not retried; the poller acts again only when `deploy/prod` moves. The smoke job then fails with a message saying the host may have rolled back. Inspect: `journalctl -u fitwise-deploy -o cat` on `fitwise-prod`.
 - **Rollback demo (temporary host switch, D61).** While the line `FITWISE_DEMO_FAIL_HEALTH=1` exists in `/opt/fitwise/.env`, `deploy.sh` starts the new release and then treats the health check as failed, so the normal path runs: `rollback.sh <CURRENT_TAG>` without migration. Off by default on every host, ignored by `rollback.sh`, not read by the application, never printed. It exists only for the demo; remove it afterwards. Procedure in the PR for #14 (also below).
-- **Manual rollback workflow** is a separate issue (#113); until then use `sudo /opt/fitwise/bin/rollback.sh` on the host.
+- **Manual rollback:** the "Rollback production" workflow (below), or `sudo /opt/fitwise/bin/rollback.sh` on the host.
 - **Only `main`.** The workflow's first job runs only when dispatched from `main`.
+
+### Rollback production (issue #113)
+
+```
+Actions > "Rollback production" (workflow_dispatch, no inputs; only from main)
+  plan         scripts/rollback-plan.sh: reads the history of deploy/prod, prints "from -> to"; fails here, before any
+               approval, if there is no previous release
+  rollback     job in environment `production` (same required reviewer, `contents: write`, GITHUB_TOKEN): after
+               approval re-runs the plan with the version prod serves NOW (public /healthz), then moves deploy/prod
+               to a deploy commit carrying the target's release record (scripts/move-deploy-ref.sh, as for promotion)
+  prod host    poll.sh sees the ref move to its PREVIOUS_TAG (stored on the host) and runs rollback.sh <sha>:
+               no migration step (D50), alembic_version untouched
+  verify-prod  waits (12 min max) until /healthz `version` == target SHA, then readyz 200 and the e2e smoke
+```
+
+- **How it learns the previous SHA.** CI has no access to the host, so the source is the history of the ref `deploy/prod`, which CI can read: every promotion or rollback adds one deploy commit whose message is the release record (`source`, `backend`, `frontend` digests). Newest first, that is the order in which releases were approved for prod. `current` is the `version` on prod's `/healthz` (what is really running; if prod is unreachable, the newest record). `target` is the next older record with a different `source`. Using `/healthz` rather than the ref head matters after a failed promotion: the ref head is then the failed release while the host (having rolled itself back) serves the one before it, and the rollback goes to the release before that. If the served version is not in the history, the plan refuses. The result is cross-checked after the move: `verify-prod` only passes when `/healthz` `version` equals the target SHA.
+- **No previous release** (first deploy ever, or only one release in the history): `plan` fails with a clear message before anything is moved. On the host the same situation is `rollback.sh` exit 3 (`PREVIOUS_TAG` empty): it logs and keeps the current tag.
+- **No migration.** The host runs `rollback.sh`, which never starts the `migrate` step. `poll.sh` routes a release equal to `PREVIOUS_TAG` (with its files stored under `releases/`) to `rollback.sh`; any other release goes through the normal deploy. If the host's `PREVIOUS_TAG` differs from the history-derived target (for example someone ran `rollback.sh <sha>` by hand), the target is deployed normally, including its (idempotent) migration step, and `verify-prod` still checks the served version. Check `alembic current` before and after for the demo.
+- **Rolling back twice** goes forward again: after A to B to rollback-to-A, the history is A, B, A, and the next plan from A picks B (the newest older release that differs). The `plan` summary shows `from -> to` before the approval is requested; reject the `rollback` job if it is not what you want.
+- **On-call.** `oncall/ops/rollback.sh` is a thin wrapper over `/opt/fitwise/bin/rollback.sh` on the host (no SSM, no AWS credential, no arguments, `sudo -n` when not root); the exit code passes through (0 healthy, 1 failed, 3 nothing to roll back to). Tests: `bash scripts/test-oncall-rollback.sh`, `bash scripts/test-rollback-plan.sh` (CI job `deploy-script-tests`).
+- **Secrets.** Nothing secret is read or printed: the workflow handles SHAs, image references and statuses; the token is the built-in `GITHUB_TOKEN`, masked by Actions. Evidence for the issue: `journalctl -u fitwise-deploy | grep -Ei 'ghp_|github_pat_|ghs_|bearer'` prints nothing, and the same for the downloaded run log.
+- **After merging:** re-run `deploy/bootstrap-remote.sh prod` (and dev) so the hosts get the new `poll.sh`.
 
 GitHub settings for prod (owner): environment `production` with required reviewers and deployment branches limited to `main`, and variable `PROD_BASE_URL` (e.g. `http://<prod elastic ip>`).
 

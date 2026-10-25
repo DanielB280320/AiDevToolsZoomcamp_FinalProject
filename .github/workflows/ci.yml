@@ -279,6 +279,8 @@ jobs:
       - run: bash scripts/test-promote-verify.sh
       - run: bash scripts/test-deploy-demo-flag.sh
       - run: bash scripts/test-move-deploy-ref.sh
+      - run: bash scripts/test-rollback-plan.sh
+      - run: bash scripts/test-oncall-rollback.sh
 
   oncall:
     name: On-call responder (ruff, mypy, pytest)
