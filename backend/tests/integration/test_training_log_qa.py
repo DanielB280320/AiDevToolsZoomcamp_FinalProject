@@ -140,7 +140,19 @@ def test_logging_endpoints_keep_health_data_out_of_logs_spans_and_metrics(
             uid = db.scalars(select(User.id)).one()
             names = [db.get(Exercise, uuid.UUID(e)).name for e in (ex, timed)]  # type: ignore[union-attr]
 
-    exported = " ".join(str(s.to_json()) for s in captured.span_exporter.get_finished_spans())
+    # Only fields that can carry data: random trace/span ids and timestamps
+    # would otherwise contain short numeric secrets like "1234" by chance.
+    exported = " ".join(
+        str(
+            (
+                s.name,
+                dict(s.attributes or {}),
+                [(e.name, dict(e.attributes or {})) for e in s.events],
+                dict(s.resource.attributes),
+            )
+        )
+        for s in captured.span_exporter.get_finished_spans()
+    )
     for secret in ("123.75", "4321.5", "1234", "9876", "ana@x.test", str(uid), *names):
         assert secret not in json_logs.text, secret
         assert secret not in exported, secret
