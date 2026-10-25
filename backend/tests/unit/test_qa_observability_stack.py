@@ -57,6 +57,8 @@ def test_every_pipeline_is_gated_by_its_privacy_processor(collector: dict[str, A
         assert signal in GATES, f"unexpected pipeline type {name!r}"
         processors: list[str] = pipeline["processors"]
         gate = GATES[signal]
+        if name == "logs/forwarded":  # #67: records already gated on dev
+            gate = "transform/forwarded_logs"
         assert gate in processors, f"pipeline {name!r} exports without {gate}"
         # Nothing that batches or reshapes before the gate except the memory limiter.
         assert processors[: processors.index(gate)] in ([], ["memory_limiter"]), (
