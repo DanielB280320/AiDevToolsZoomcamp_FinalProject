@@ -10,7 +10,7 @@ Incident runbooks for the on-call agent ([spec §15.2](../spec.md#152-on-call-re
 ## Rules every runbook follows
 
 - One investigation, **one mitigation**, then verify recovery (condition under threshold for 5 minutes), then an incident issue (template inside each runbook).
-- Only allow-listed commands (spec §15.2): read-only queries to Prometheus, Loki and Tempo, read-only `docker compose ps` and `docker compose logs`, `oncall/ops/flag.sh <key> <value>`, `oncall/ops/rollback.sh`, `oncall/ops/restart.sh <backend|frontend>`, `gh issue create`, and a branch push plus `gh pr create` on a separate clone. Nothing writes to the database or reads secrets.
+- Only allow-listed commands (spec §15.2): read-only queries to Prometheus, Loki and Tempo, read-only `docker compose ps` and `docker compose logs`, `oncall/ops/flag.sh <key> <value>`, `oncall/ops/rollback.sh`, `oncall/ops/restart.sh <backend|frontend>`, `gh issue create`, and a branch push plus `gh pr create` on a separate clone. There are no direct database writes and no secret reads; the only state change besides rollback and restart is `oncall/ops/flag.sh` (flag state via the app CLI).
 - `rollback.sh` runs locally on the host and redeploys `PREVIOUS_TAG` without migrations. The pull-based poller does not redeploy the rolled-back tag until the `deploy/prod` ref moves, and the fix goes out through "Promote to production" ([ADR 0010](../adr/0010-pull-based-deploy.md)).
 - No health data in issues or logs: identify users only by `user_hash`.
 - If the incident reveals a gap, DevOps updates the runbook in the fix PR.

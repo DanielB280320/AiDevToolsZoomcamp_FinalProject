@@ -87,7 +87,7 @@ curl -sG http://127.0.0.1:3100/loki/api/v1/query_range \
   --data-urlencode 'query=sum by (service_version) (count_over_time({service_name="fitwise-backend", env="prod"} [5m]))' \
   --data-urlencode since=6h --data-urlencode step=300
 docker compose ps                                  # container state, restarts, health
-docker compose logs --since 30m backend | tail -200
+docker compose logs --since 30m --tail 200 backend
 ```
 
 Compare the time the slowdown started (the 15-minutes-ago query above, `incidents/<id>/prometheus.json`) with the first appearance of the current `service_version` and with the last "feature flag changed" line.
@@ -102,7 +102,7 @@ Apply **one** mitigation, the first row whose evidence matches. If no row matche
 | A "feature flag changed" line for `progression_engine` to `v2` shortly before the slowdown, and slow spans are `engine.progression` | Return the engine flag to its safe value | `oncall/ops/flag.sh progression_engine v1` |
 | Slow spans are outgoing HTTP calls to Open Food Facts and `off_search_enabled` is `true` | Turn the upstream feature off (the app degrades to `available: false`) | `oncall/ops/flag.sh off_search_enabled false` |
 | Slowdown began within a few minutes after a new `service_version` first appeared in the logs, no flag changed, the 15-minutes-ago p95 was under 1 s | Roll back to the previous release | `oncall/ops/rollback.sh` |
-| No deploy or flag change, `docker compose ps` shows the backend restarting or unhealthy, or latency grows steadily with no matching slow span | Restart the backend container | `oncall/ops/restart.sh backend` |
+| No deploy or flag change, `docker compose ps` shows the backend restarting or unhealthy, or latency grows steadily with no matching slow span | Restart the backend container | `oncall/ops/restart.sh backend` (until #69 lands: escalate to the owner) |
 | Slow spans are database spans, the host is saturated, or traffic volume is far above normal with healthy spans | No mitigation is on the allow-list. Open the incident issue and page the owner | none |
 | Few requests (a handful in 10 min), one slow outlier, p50 normal | No mitigation. Keep watching, open the issue | none |
 

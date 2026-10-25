@@ -85,7 +85,7 @@ curl -sG http://127.0.0.1:3100/loki/api/v1/query_range \
   --data-urlencode 'query=sum by (service_version) (count_over_time({service_name="fitwise-backend", env="prod"} [5m]))' \
   --data-urlencode since=6h --data-urlencode step=300
 docker compose ps                                  # container state, restarts, health
-docker compose logs --since 30m backend | tail -200
+docker compose logs --since 30m --tail 200 backend
 ```
 
 Compare the time the errors started (the 15-minute-ago query above, `incidents/<id>/prometheus.json`) with the first appearance of the current `service_version` and with the last "feature flag changed" line.
@@ -99,8 +99,8 @@ Apply **one** mitigation, the first row whose evidence matches. If no row matche
 | Errors began within a few minutes after a new `service_version` first appeared in the logs (the 15-minutes-ago ratio is low), the same `error_type` dominates the error logs and no flag changed since | Roll back to the previous release | `oncall/ops/rollback.sh` |
 | A "feature flag changed" line shortly before the errors, and the failing traces or logs show `engine.progression` (or `engine=...`) and `progression_engine` is `v2` | Return the engine flag to its safe value | `oncall/ops/flag.sh progression_engine v1` |
 | Failing traces show outgoing HTTP errors to Open Food Facts and `off_search_enabled` is `true` | Turn the upstream feature off (the app degrades to `available: false`) | `oncall/ops/flag.sh off_search_enabled false` |
-| No deploy or flag change, `docker compose ps` shows the backend unhealthy, restarting or exited, or traces show a stuck connection pool | Restart the backend container | `oncall/ops/restart.sh backend` |
-| Frontend/nginx returns 502/504 while backend metrics are clean (5xx come from the proxy, not `error_type` logs) | Restart the frontend container | `oncall/ops/restart.sh frontend` |
+| No deploy or flag change, `docker compose ps` shows the backend unhealthy, restarting or exited, or traces show a stuck connection pool | Restart the backend container | `oncall/ops/restart.sh backend` (until #69 lands: escalate to the owner) |
+| Frontend/nginx returns 502/504 while backend metrics are clean (5xx come from the proxy, not `error_type` logs) | Restart the frontend container | `oncall/ops/restart.sh frontend` (until #69 lands: escalate to the owner) |
 | Database errors (`error_type` such as `OperationalError`, readiness `check=database`), disk full, or anything else not above | No mitigation is on the allow-list. Open the incident issue and page the owner | none |
 | Low traffic (close to 20 requests) and a handful of errors from one user (`user_hash`), no pattern | No mitigation. Keep watching, open the issue | none |
 
