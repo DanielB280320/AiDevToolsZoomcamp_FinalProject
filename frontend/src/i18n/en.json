@@ -203,7 +203,10 @@
       "burned": "Burned (kcal)",
       "balance": "Balance (kcal)",
       "estimated": "All calorie numbers are estimates.",
-      "attention": "{{suggestions}} suggestions and {{notes}} coach notes are waiting for you."
+      "attention": "{{suggestions}} suggestions and {{notes}} coach notes are waiting for you.",
+      "startWorkout": "Start workout",
+      "continueWorkout": "Continue workout",
+      "viewWorkout": "View workout"
     }
   },
   "onboarding": {
@@ -390,7 +393,7 @@
       "title": "Check your answers",
       "lead": "Creating your plan calculates your targets and generates your training and meal plan.",
       "edit": "Edit {{section}}",
-    "editButton": "Edit",
+      "editButton": "Edit",
       "notGiven": "Not given",
       "none": "None",
       "rows": {
@@ -444,6 +447,71 @@
     "errors": {
       "alreadyOnboarded": "You already completed onboarding. Open Today to see your plan.",
       "invalidRequest": "Some answers weren't accepted. Check the highlighted step and try again."
+    }
+  },
+  "workout": {
+    "progress": "Completion so far: {{value}}",
+    "statusDone": "Finished. You can still edit sets until the end of tomorrow.",
+    "locked": "This workout can no longer be edited.",
+    "setName": "Set {{number}}",
+    "extra": "Extra",
+    "target": "Target: {{value}}",
+    "noTarget": "No target",
+    "logged": "Logged: {{value}}",
+    "skipped": "Skipped",
+    "glyph": { "logged": "✓ ", "skipped": "– " },
+    "asPlanned": "Done as planned",
+    "forSet": "{{exercise}}, set {{number}}",
+    "edit": "Edit",
+    "skip": "Skip",
+    "save": "Save set",
+    "cancel": "Cancel",
+    "addSet": "Add set",
+    "addExercise": "Add exercise",
+    "searchExercise": "Search exercises by name",
+    "restPlanned_one": "Rest {{count}} second between sets",
+    "restPlanned_other": "Rest {{count}} seconds between sets",
+    "reps_one": "{{count}} rep",
+    "reps_other": "{{count}} reps",
+    "seconds": "{{count}} s",
+    "meters": "{{count}} m",
+    "optional": "(optional)",
+    "invalidNumber": "Enter a valid number.",
+    "fields": {
+      "reps": "Reps",
+      "weight": "Weight ({{unit}})",
+      "seconds": "Duration (s)",
+      "distance": "Distance (m)"
+    },
+    "finish": "Finish workout",
+    "finishAgain": "Save changes and finish again",
+    "finishing": "Finishing…",
+    "backToToday": "Back to Today",
+    "rest": {
+      "label": "Rest timer",
+      "title": "Rest",
+      "over": "Rest over",
+      "skip": "Skip rest",
+      "dismiss": "Dismiss",
+      "overAnnounce": "Rest is over. Ready for {{name}}."
+    },
+    "summary": {
+      "title": "Workout finished",
+      "completion": "Completion",
+      "kcal": "Burned (kcal)",
+      "duration": "Duration",
+      "minutes_one": "{{count}} min",
+      "minutes_other": "{{count}} min",
+      "estimated": "Calories are estimated.",
+      "suggestions": "New suggestions",
+      "noSuggestions": "No new suggestions.",
+      "backToToday": "Back to Today",
+      "review": "Review sets"
+    },
+    "errors": {
+      "edit_window_closed": "This workout can no longer be edited.",
+      "invalid_set": "Those values don't fit this exercise. Check them and try again.",
+      "generic": "That didn't save. Try again."
     }
   }
 }
