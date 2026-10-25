@@ -16,7 +16,9 @@ cat > "$tmp/bin/gh" <<'FAKE'
 #!/usr/bin/env bash
 S="$FAKE_STATE"; a="$*"
 case "$a" in
-  *"git/ref/heads/deploy/"*) [ -f "$S/ref" ] && cat "$S/ref" || exit 1 ;;
+  *"git/ref/heads/deploy/"*)
+     if [ -f "$S/ref" ]; then cat "$S/ref"
+     else echo "gh: ${FAKE_READ_ERR:-Not Found (HTTP 404)}" >&2; exit 1; fi ;;
   *"git/commits/$FAKE_HEAD"*) echo tree-old-wf ;;
   *"git/commits/$FAKE_REL"*) echo tree-rel-wf ;;
   *"git/trees"*) cat >/dev/null; echo tree-readme ;;
@@ -59,6 +61,13 @@ if gh api -X PATCH x 2>/dev/null; then bad "fake accepted a workflow change"; el
 rm -f "$S"/*
 "$here/move-deploy-ref.sh" dev "$REL" "$B" "$F" >/dev/null 2>&1
 if [ -f "$S/created" ] && [ "$(cat "$S/last_tree")" = tree-readme ] && [ ! -f "$S/last_parent" ]; then ok "first deploy: README-only tree, no parent, ref created"; else bad "first deploy"; fi
+
+# 3b. Reading the ref fails with something other than 404: exit non-zero, real status shown, no write.
+for e in "Internal Server Error (HTTP 500)" "Resource not accessible by integration (HTTP 403)" "dial tcp: lookup api.github.com: no such host"; do
+  rm -f "$S"/*
+  msg="$(FAKE_READ_ERR="$e" "$here/move-deploy-ref.sh" dev "$REL" "$B" "$F" 2>&1 >/dev/null)"; rc=$?
+  if [ "$rc" != 0 ] && [ ! -f "$S/created" ] && [ ! -f "$S/moved" ] && [ ! -f "$S/last_tree" ] && [[ "$msg" == *"$e"* ]]; then ok "read error '${e: -10}': fails, shows cause, no write"; else bad "read error '$e': rc=$rc msg=$msg"; fi
+done
 
 # 4. Input validation.
 "$here/move-deploy-ref.sh" staging "$REL" "$B" "$F" >/dev/null 2>&1; if [ $? = 2 ]; then ok "rejects unknown env"; else bad "env"; fi
