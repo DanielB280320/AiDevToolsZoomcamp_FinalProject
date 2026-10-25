@@ -4,6 +4,7 @@ import { AppShell } from "./components/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
 import { HomePage } from "./pages/HomePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { OnboardingPage } from "./pages/OnboardingPage";
 import { SignInPage } from "./pages/SignInPage";
 import { SignUpPage } from "./pages/SignUpPage";
 import { TodayPage } from "./pages/TodayPage";
@@ -20,7 +21,10 @@ export const routes: RouteObject[] = [
       {
         // Signed-in pages: `GET /me` must succeed, a 401 redirects to sign-in.
         element: <RequireAuth />,
-        children: [{ path: paths.today, element: <TodayPage /> }],
+        children: [
+          { path: paths.today, element: <TodayPage /> },
+          { path: paths.onboarding, element: <OnboardingPage /> },
+        ],
       },
       { path: "*", element: <NotFoundPage /> },
     ],
