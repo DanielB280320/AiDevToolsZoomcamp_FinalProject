@@ -351,6 +351,7 @@ def test_latency_flag_set_by_cli_delays_logging_routes_only(
         assert client.post(path).status_code in (200, 401)
         return time.perf_counter() - start
 
+    timed("/api/v1/sessions/a/sets")  # warm-up: the first request pays one-off start-up costs
     assert timed("/api/v1/sessions/a/sets") < 0.3  # default 0: no delay
 
     result = run_cli(
