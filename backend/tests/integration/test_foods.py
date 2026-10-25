@@ -73,10 +73,6 @@ def _all(client: TestClient, url: str, **params: Any) -> list[dict[str, Any]]:
             return items
 
 
-def _food_id(client: TestClient, name: str) -> str:
-    return next(f["id"] for f in _all(client, FOODS, q=name) if f["name"] == name)
-
-
 # ───────────── seed ─────────────
 
 
