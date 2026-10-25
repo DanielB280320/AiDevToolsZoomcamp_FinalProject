@@ -128,4 +128,34 @@ To upgrade, change a tag and run `make up-obs && make check-obs`.
 `grafana/provisioning/alerting/` holds the KeyJourneyErrors and KeyJourneyLatency rules, the webhook
 contact point and the notification policy (see its README). The webhook URL is `ONCALL_WEBHOOK_URL`
 (`.env.example`; on prod the host's env file, #67). The logging endpoints exist from M2, so the rules
-show no data (OK) until then; the fires-and-resolves test is #97.
+show no data (OK) until then; the fires-and-resolves test is below (#97).
+
+### Fires-and-resolves test (#97, D53)
+
+```bash
+make test-alerts                          # same as observability/alert-test/run.sh
+observability/alert-test/run.sh --down    # ... and remove the test stack (and its volumes) afterwards
+```
+
+Runs the **real provisioned rules** (5 min / 10 min windows, no shortened mode) against a stub
+webhook receiver. It takes about 30-40 min and needs Docker; it is not part of CI (`make test`
+only checks that the payload checks agree with `rules.yaml`: `test_alert_test_driver.py`). It starts
+its own stack (project `fitwise-alerttest`, ports 18088 app, 13030 Grafana, 14319 OTLP, 24225 fluentd,
+18099 stub; override with `ALERT_TEST_*` variables) with `APP_ENV=prod`, so the `env="prod"` rules
+match, and Grafana's contact point pointed at the stub on the Docker host (basic auth checked like the
+on-call responder). It never touches another compose project, and must not be pointed at a real host:
+it stops the database of the stack it started.
+
+| Alert | Fault | Removed by |
+|---|---|---|
+| KeyJourneyErrors (> 5 % 5xx of >= 20 requests / 5 min) | `docker compose stop db` while traffic hits `POST /sessions/{id}/sets` and `/finish` (they answer 500) | `docker compose up -d --wait db` |
+| KeyJourneyLatency (p95 > 1 s / 10 min) | `oncall/ops/flag.sh fault_injection_latency_ms 1500` (#15) | `oncall/ops/flag.sh fault_injection_latency_ms 0` |
+
+Per alert the driver (`alert-test/driver.py`) sends healthy traffic for 90 s, injects the fault,
+waits for the `firing` webhook, removes the fault and waits for the `resolved` webhook (25 min limit
+each). Every payload is checked (`status`, `env=prod`, `route` is a logging route, `window`,
+`dashboard_url` to the Key journey dashboard, `runbook_url` to the runbook) and stored with its
+arrival time. Output, git-ignored, in `observability/alert-test/out/`: `webhook-payloads.jsonl`
+(every payload received) and `timeline.md`. The exit status is 0 only when all four payloads arrived
+and passed. Resolution takes as long as the fault's samples need to leave the rule's window (about
+5 and 10 min), unless healthy traffic dilutes them sooner.

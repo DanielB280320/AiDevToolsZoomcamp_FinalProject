@@ -14,7 +14,7 @@ Each alert carries the annotations `route`, `window`, `dashboard_url` (Key journ
 Labels are only `severity`, `env`, `service` plus the query's `route`: never user data.
 
 The logging endpoints arrive in M2/M3 (#29, #37), so until then the rules see no series and stay OK
-(D53). The fires-and-resolves test with a stub receiver is #97.
+(D53). The fires-and-resolves test with a stub receiver is `make test-alerts` (#97, see `../../../README.md`).
 
 Checks: `backend/tests/unit/test_alert_rules.py` (static, runs in `make test`) and `make check-obs`
 (Grafana loaded the rules, contact point and policy). The datasource UIDs are in
