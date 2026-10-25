@@ -27,7 +27,7 @@ from app.telemetry.logs import LOG_EVENT_FIELDS
 from app.telemetry.privacy import LOG_BASE_FIELDS, user_hash
 from tests.conftest import Captured, captured_telemetry, make_settings, unreachable_database_url
 
-ROUTE = "/api/v1/sessions/{session_id}/sets"
+ROUTE = "/api/v1/qa/sessions/{session_id}/sets"
 RAW_USER_ID = "4b1f6a3e-9c2d-4e8f-a7b6-5d4c3b2a1f0e"
 LEAK_MARKERS = {
     "email": "qa.zelda@example.org",
@@ -164,7 +164,7 @@ def qa_client(qa_app: FastAPI) -> Iterator[TestClient]:
 
 def _sensitive_post(client: TestClient) -> Any:
     return client.post(
-        f"/api/v1/sessions/{uuid.uuid4()}/sets",
+        f"/api/v1/qa/sessions/{uuid.uuid4()}/sets",
         params={"email": LEAK_MARKERS["email"], "food": LEAK_MARKERS["food_name"]},
         json={
             "email": LEAK_MARKERS["email"],

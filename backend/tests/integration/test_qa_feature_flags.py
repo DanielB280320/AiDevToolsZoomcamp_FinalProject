@@ -18,7 +18,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 
@@ -118,13 +118,10 @@ def test_invalid_hand_stored_value_never_reaches_the_logs(db: Engine, json_logs:
 
 def test_unreachable_database_fails_open_with_no_delay(offline_app: FastAPI) -> None:
     """The real create_app wiring (real FlagReader, DB unreachable): no delay, request served."""
-    router = APIRouter()
-    router.add_api_route("/api/v1/sessions/{sid}/finish", lambda: {"ok": True}, methods=["POST"])
-    offline_app.include_router(router)
     with TestClient(offline_app) as client:
         client.post("/api/v1/sessions/a/finish")  # first read may wait for the connect timeout
         start = time.perf_counter()
         response = client.post("/api/v1/sessions/a/finish")
         elapsed = time.perf_counter() - start
-    assert response.status_code == 200
+    assert response.status_code == 401  # the real route: served, no session
     assert elapsed < 0.3  # cached defaults within the TTL: latency 0, no repeated DB attempts

@@ -18,7 +18,7 @@ from app.telemetry.metrics import UNMATCHED_ROUTE
 from app.telemetry.privacy import METRIC_ATTRIBUTES, user_hash
 from tests.conftest import Captured, JsonLogs, make_settings, unreachable_database_url
 
-SETS_ROUTE = "/api/v1/sessions/{session_id}/sets"
+SETS_ROUTE = "/api/v1/_test/sessions/{session_id}/sets"
 SESSION_ID = "6f1c2a8e-0b7d-4c55-9a51-3d2f0e7b9c11"
 USER_ID = uuid.UUID("0d9e8f7a-6b5c-4d3e-8f2a-1b0c9d8e7f6a")
 # Values that must never show up in any exported span, metric or log line.
@@ -51,7 +51,7 @@ def client(captured: Captured) -> Iterator[TestClient]:
 
 def _post_set(client: TestClient) -> Any:
     response = client.post(
-        f"/api/v1/sessions/{SESSION_ID}/sets?food={SECRETS['query']}",
+        f"/api/v1/_test/sessions/{SESSION_ID}/sets?food={SECRETS['query']}",
         json={"note": SECRETS["body"], "weight_kg": 84.2},
         headers={
             "Authorization": SECRETS["authorization"],

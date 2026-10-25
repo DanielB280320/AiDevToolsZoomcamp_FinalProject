@@ -341,14 +341,14 @@ def test_latency_flag_set_by_cli_delays_logging_routes_only(
     api: Api, migrated_database_url: str
 ) -> None:
     router = APIRouter()
-    for path in ["/api/v1/sessions/{sid}/sets", "/api/v1/sessions/{sid}/archive"]:
-        router.add_api_route(path, lambda: {"ok": True}, methods=["POST"])
+    # `/sets` is a real route now (401 without a session); only the delay is measured.
+    router.add_api_route("/api/v1/sessions/{sid}/archive", lambda: {"ok": True}, methods=["POST"])
     api.app.include_router(router)
     client = TestClient(api.app)
 
     def timed(path: str) -> float:
         start = time.perf_counter()
-        assert client.post(path).status_code == 200
+        assert client.post(path).status_code in (200, 401)
         return time.perf_counter() - start
 
     assert timed("/api/v1/sessions/a/sets") < 0.3  # default 0: no delay
