@@ -250,9 +250,14 @@ def test_accept_updates_targets_and_leaves_history_untouched(athlete: Api) -> No
     assert body["decided_by"]["role"] == "athlete"
     assert body["decided_at"].startswith("2026-10-22T10:00:00")
     assert body["payload"]["applied"] == proposed
-    planned = _planned(athlete, planned_id)
-    assert planned.target_weight_kg == proposed["target_weight_kg"]
-    assert planned.reps_min == proposed["reps_min"]
+    old = _planned(athlete, planned_id)
+    assert old.target_weight_kg == 50.0  # the version the session was performed against
+    plan = athlete.client.get(f"{BASE}/athletes/me/plan").json()
+    assert plan["version"] == 2
+    new = plan["training_days"][1]["exercises"][0]  # Thursday
+    assert new["target_weight_kg"] == proposed["target_weight_kg"]
+    assert new["reps_min"] == proposed["reps_min"]
+    assert _session(athlete, THU)["exercises"][0]["sets"][0]["target_weight_kg"] == 50.0
     with Session(athlete.app.state.engine) as session:
         after = [
             (log.id, log.target_weight_kg, log.target_reps)
@@ -272,8 +277,15 @@ def test_accept_with_overrides_applies_the_edited_values(athlete: Api) -> None:
     assert response.status_code == 200, response.text
     applied = response.json()["payload"]["applied"]
     assert applied["target_weight_kg"] == 51.0 and applied["reps_min"] == applied["reps_max"] == 6
-    planned = _planned(athlete, suggestion["payload"]["planned_exercise_id"])
-    assert (planned.target_weight_kg, planned.reps_min, planned.reps_max) == (51.0, 6, 6)
+    thursday = athlete.client.get(f"{BASE}/athletes/me/plan").json()["training_days"][1][
+        "exercises"
+    ][0]
+    assert (thursday["target_weight_kg"], thursday["reps_min"], thursday["reps_max"]) == (
+        51.0, 6, 6)  # fmt: skip
+    # Other exercises and days are copied unchanged into the new version.
+    days = athlete.client.get(f"{BASE}/athletes/me/plan").json()["training_days"]
+    assert [d["weekday"] for d in days] == ["mon", "thu", "fri"]
+    assert days[0]["exercises"][0]["target_weight_kg"] == 50.0
 
 
 @pytest.mark.parametrize(

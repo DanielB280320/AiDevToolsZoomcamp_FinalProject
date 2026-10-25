@@ -6,8 +6,9 @@
   the session's still-pending suggestions; decided ones are never touched.
 * The engine version comes from the `progression_engine` flag (F11.5). Only `v1` exists, so any
   other value (including a stored unknown one) runs `v1`.
-* Accepting writes the accepted (or edited) values onto the planned exercise, which is where
-  future sessions read their targets. Set logs keep their own target snapshots (rule 7).
+* Accepting stores the accepted (or edited) values as a new plan version (F8.2), so finished
+  and in-progress sessions keep the targets they were performed against (rule 7, F8.1) and
+  untouched sessions from today on use the new ones.
 * Rejecting changes nothing but the suggestion. The next finished session of the exercise
   simply produces a fresh pending suggestion.
 * Only the athlete decides until coach linking lands (#47). Another athlete's suggestion, and an
@@ -41,6 +42,8 @@ from app.models import (
 from app.models import Suggestion as Row
 from app.schemas import suggestions as out
 from app.schemas.users import UserRef
+from app.services.clock import local_today
+from app.services.plans import NewPlannedExercise, NewTrainingDay, create_plan_version
 from app.telemetry.metrics import SuggestionRule
 
 Engine = Callable[[ProgressionInput], progression.Suggestion]
@@ -359,30 +362,121 @@ def _applied(row: Row, overrides: out.SuggestionOverrides | None) -> dict[str, A
     return applied
 
 
-def _target_planned(db: Session, row: Row) -> PlannedExercise | None:
-    """The planned exercise to update: the suggestion's own if its plan is still active, else
-    the same exercise on the same weekday of the active plan."""
+def _active_plan(db: Session, athlete_id: uuid.UUID) -> Plan | None:
+    return db.scalar(select(Plan).where(Plan.athlete_id == athlete_id, Plan.active.is_(True)))
+
+
+def _target_in_plan(db: Session, row: Row, plan: Plan) -> PlannedExercise | None:
+    """The planned exercise of the active `plan` that the suggestion targets: its own row if that
+    row is in `plan`, else the same exercise on the same weekday (the plan was replaced since)."""
     planned = db.get(PlannedExercise, row.planned_exercise_id) if row.planned_exercise_id else None
     if planned is None:
         return None
     day = db.get(TrainingDay, planned.training_day_id)
     assert day is not None  # noqa: S101 - FK guarantees it
-    plan = db.get(Plan, day.plan_id)
-    assert plan is not None  # noqa: S101 - FK guarantees it
-    if plan.active:
+    if day.plan_id == plan.id:
         return planned
     return db.scalar(
         select(PlannedExercise)
         .join(TrainingDay, TrainingDay.id == PlannedExercise.training_day_id)
-        .join(Plan, Plan.id == TrainingDay.plan_id)
         .where(
-            Plan.athlete_id == row.athlete_id,
-            Plan.active.is_(True),
+            TrainingDay.plan_id == plan.id,
             TrainingDay.weekday == day.weekday,
             PlannedExercise.exercise_id == planned.exercise_id,
         )
+        .order_by(PlannedExercise.position)
         .limit(1)
     )
+
+
+def _apply_to_plan(
+    db: Session, user: User, row: Row, applied: dict[str, Any], now: dt.datetime
+) -> None:
+    """Write the accepted targets as a new plan version (F8.2), like any other plan edit.
+
+    Finished and in-progress sessions stay on the version they were performed against, so their
+    targets and completion never change (rule 7, F8.1). Sessions that are still untouched from
+    today on move to the new version, so they use the accepted targets. Pending suggestions
+    follow their planned exercise to the new version."""
+    old = _active_plan(db, row.athlete_id)
+    target = None if old is None else _target_in_plan(db, row, old)
+    if old is None or target is None:
+        return
+    timed = row.payload["exercise"]["type"] == "timed"
+    days: list[NewTrainingDay] = []
+    for day in old.training_days:
+        items: list[NewPlannedExercise] = []
+        for p in day.exercises:
+            hit = p.id == target.id
+            items.append(
+                NewPlannedExercise(
+                    exercise_id=p.exercise_id,
+                    sets=p.sets,
+                    rest_seconds=p.rest_seconds,
+                    rule=p.rule,
+                    increment_kg=p.increment_kg,
+                    reps_min=applied["reps_min"] if hit and not timed else p.reps_min,
+                    reps_max=applied["reps_max"] if hit and not timed else p.reps_max,
+                    target_weight_kg=(
+                        applied["target_weight_kg"] if hit and not timed else p.target_weight_kg
+                    ),
+                    target_seconds=applied["target_seconds"] if hit and timed else p.target_seconds,
+                    deload_enabled=p.deload_enabled,
+                    planned_kcal=p.planned_kcal,
+                )
+            )
+        days.append(NewTrainingDay(day.weekday, day.name, items, day.planned_kcal))
+    old_days = list(old.training_days)
+    # created_at is kept so the template still applies from the same first day (calendar).
+    new = create_plan_version(
+        db,
+        athlete_id=row.athlete_id,
+        author_id=user.id,
+        source=old.source,
+        days=days,
+        now=old.created_at,
+    )
+    new.updated_at = now
+    db.add(
+        PlanChange(
+            plan_id=new.id,
+            author_id=user.id,
+            change={"kind": "suggestion_accepted", "suggestion_id": str(row.id)},
+            created_at=now,
+        )
+    )
+    day_map = {o.id: n for o, n in zip(old_days, new.training_days, strict=True)}
+    planned_map: dict[uuid.UUID, uuid.UUID] = {}
+    for o, n in zip(old_days, new.training_days, strict=True):
+        for op, np_ in zip(o.exercises, n.exercises, strict=True):
+            planned_map[op.id] = np_.id
+    today = local_today(now, user.timezone)
+    untouched = select(SetLog.session_id).where(SetLog.session_id == TrainingSession.id)
+    for session in db.scalars(
+        select(TrainingSession).where(
+            TrainingSession.athlete_id == row.athlete_id,
+            TrainingSession.plan_id == old.id,
+            TrainingSession.status == "planned",
+            TrainingSession.date >= today,
+            ~untouched.exists(),
+        )
+    ):
+        session.plan_id = new.id
+        session.training_day_id = day_map[session.training_day_id].id
+    for pending in db.scalars(
+        select(Row).where(
+            Row.athlete_id == row.athlete_id,
+            Row.kind == "progression",
+            Row.status == "pending",
+            Row.planned_exercise_id.in_(list(planned_map)),
+        )
+    ):
+        assert pending.planned_exercise_id is not None  # noqa: S101 - filtered above
+        pending.planned_exercise_id = planned_map[pending.planned_exercise_id]
+        pending.payload = {
+            **pending.payload,
+            "planned_exercise_id": str(pending.planned_exercise_id),
+        }
 
 
 def accept(
@@ -394,28 +488,7 @@ def accept(
 ) -> Row:
     row = _locked(db, user, suggestion_id)
     applied = _applied(row, overrides)
-    target = _target_planned(db, row)
-    if target is not None:
-        if row.payload["exercise"]["type"] == "timed":
-            target.target_seconds = applied["target_seconds"]
-        else:
-            target.target_weight_kg = applied["target_weight_kg"]
-            target.reps_min = applied["reps_min"]
-            target.reps_max = applied["reps_max"]
-        day = db.get(TrainingDay, target.training_day_id)
-        assert day is not None  # noqa: S101 - FK guarantees it
-        plan = db.get(Plan, day.plan_id)
-        assert plan is not None  # noqa: S101 - FK guarantees it
-        plan.revision += 1
-        plan.updated_at = now
-        db.add(
-            PlanChange(
-                plan_id=plan.id,
-                author_id=user.id,
-                change={"kind": "suggestion_accepted", "suggestion_id": str(row.id)},
-                created_at=now,
-            )
-        )
+    _apply_to_plan(db, user, row, applied, now)
     row.payload = {**row.payload, "applied": applied}
     row.status = "accepted"
     row.decided_by = user.id

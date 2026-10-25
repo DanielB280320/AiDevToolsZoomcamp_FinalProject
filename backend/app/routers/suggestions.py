@@ -45,7 +45,7 @@ def list_suggestions(
     "/suggestions/{suggestion_id}/accept",
     operation_id="acceptSuggestion",
     response_model=Suggestion,
-    responses={**_COMMON, 404: _PROBLEM, 409: _PROBLEM, 422: _PROBLEM},
+    responses={**_COMMON, 409: _PROBLEM, 422: _PROBLEM},
 )
 def accept_suggestion(
     suggestion_id: uuid.UUID,
@@ -57,7 +57,7 @@ def accept_suggestion(
 ) -> Suggestion:
     """Accept, optionally with edited values; they become the exercise's next targets."""
     row = suggestions.accept(db, user, suggestion_id, body.overrides if body else None, clock.now())
-    telemetry.metrics.suggestion_decided("progression", "accepted")
+    telemetry.metrics.suggestion_decided(row.kind, "accepted")  # type: ignore[arg-type]
     return suggestions.view(db, row)
 
 
@@ -65,7 +65,7 @@ def accept_suggestion(
     "/suggestions/{suggestion_id}/reject",
     operation_id="rejectSuggestion",
     response_model=Suggestion,
-    responses={**_COMMON, 404: _PROBLEM, 409: _PROBLEM},
+    responses={**_COMMON, 409: _PROBLEM},
 )
 def reject_suggestion(
     suggestion_id: uuid.UUID,
@@ -76,5 +76,5 @@ def reject_suggestion(
 ) -> Suggestion:
     """Reject; nothing else changes (F11.3)."""
     row = suggestions.reject(db, user, suggestion_id, clock.now())
-    telemetry.metrics.suggestion_decided("progression", "rejected")
+    telemetry.metrics.suggestion_decided(row.kind, "rejected")  # type: ignore[arg-type]
     return suggestions.view(db, row)
