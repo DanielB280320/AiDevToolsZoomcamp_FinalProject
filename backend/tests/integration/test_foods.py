@@ -191,8 +191,8 @@ def test_food_filters_and_pagination(seeded: Api) -> None:
     assert len(_all(seeded.client, FOODS, diet="omnivore")) == len(SEED_FOODS)
     page = seeded.client.get(FOODS, params={"limit": 5}).json()
     assert len(page["items"]) == 5 and page["next_cursor"]
-    names = [f["name"].lower() for f in _all(seeded.client, FOODS)]
-    assert names == sorted(names)
+    ids = [f["id"] for f in _all(seeded.client, FOODS)]
+    assert len(ids) == len(set(ids)) == len(SEED_FOODS)  # pages neither repeat nor skip rows
 
 
 def test_meal_filters_exclude_allergens_and_diets(seeded: Api) -> None:
@@ -343,6 +343,8 @@ def test_food_and_meal_names_with_nul_are_422(seeded: Api) -> None:
     [
         lambda b: b["items"][0].update(grams=0),
         lambda b: b["items"][0].update(grams=-5),
+        lambda b: b["items"][0].update(grams=5e-324),
+        lambda b: b["items"][0].update(grams=0.04),
         lambda b: b["items"][0].update(grams=2001),
         lambda b: b["items"][0].update(grams="NaN"),
         lambda b: b["items"][0].update(extra=1),

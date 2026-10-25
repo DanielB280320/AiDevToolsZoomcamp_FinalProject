@@ -4,6 +4,7 @@ import uuid
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator, Field, StringConstraints
+from pydantic_core import PydanticCustomError
 
 from app.schemas.base import RequestModel, ResponseModel
 from app.schemas.users import UserRef
@@ -62,9 +63,19 @@ class FoodSummary(ResponseModel):
     source: FoodSource
 
 
+def _grams_to_tenth(value: float) -> float:
+    """Grams are stored to 0.1 g; a positive amount that rounds to zero is invalid."""
+    rounded = round(value, 1)
+    if rounded <= 0:
+        raise PydanticCustomError("out_of_range", "Use at least 0.1 g.")
+    return rounded
+
+
 class FoodGrams(RequestModel):
     food_id: uuid.UUID
-    grams: Annotated[float, Field(gt=0, le=2000, allow_inf_nan=False)]
+    grams: Annotated[
+        float, Field(gt=0, le=2000, allow_inf_nan=False), AfterValidator(_grams_to_tenth)
+    ]
 
 
 class MealInput(RequestModel):
