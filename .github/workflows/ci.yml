@@ -281,6 +281,7 @@ jobs:
       - run: bash scripts/test-move-deploy-ref.sh
       - run: bash scripts/test-rollback-plan.sh
       - run: bash scripts/test-oncall-rollback.sh
+      - run: bash scripts/test-obs-mode.sh
       - run: bash scripts/test-backup.sh
 
   oncall:

@@ -138,6 +138,20 @@ processors:
         value: ${env:FITWISE_ENV}
         action: insert
 
+  # Logs forwarded by another collector (dev -> prod, #67). That collector already parsed, allow-listed
+  # and scrubbed them, so the records carry only allow-listed attributes: the same attribute allow-list
+  # is applied again here as a second gate (kept in sync with transform/logs by the allow-list test).
+  transform/forwarded_logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - keep_keys(log.attributes, ["service.name", "service.version", "env", "logger", "route", "method", "status", "duration_ms", "user_hash", "error_type", "check", "outcome", "kind", "rule", "decision", "engine", "count", "flag_key", "flag_old_value", "flag_new_value", "actor", "revision"])
+          - replace_pattern(log.body, "[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+", "[email]")
+          - replace_pattern(log.body, "(?i)\\bbearer\\s+\\S+", "Bearer [token]")
+          - replace_pattern(log.body, "\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+", "[token]")
+          - set(log.body, Concat([Substring(log.body, 0, 256), "..."], "")) where Len(log.body) > 256
+
   batch:
     timeout: 2s
 
@@ -176,4 +190,9 @@ service:
     logs:
       receivers: [fluent_forward]
       processors: [memory_limiter, transform/logs, filter/unparsed_logs, groupbyattrs/logs, resource/env, batch]
+      exporters: [otlp_http/loki]
+    # Logs sent by the dev collector over OTLP (already gated there); see transform/forwarded_logs.
+    logs/forwarded:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/forwarded_logs, resource/env, batch]
       exporters: [otlp_http/loki]

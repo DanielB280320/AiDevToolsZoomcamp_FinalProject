@@ -36,6 +36,7 @@ for f in compose.yaml deploy/compose.deploy.yaml; do
     "https://raw.githubusercontent.com/$repo/$sha/$f" -o "$dir/$(basename "$f")" ||
     { log "deploy: cannot fetch $f at $sha"; exit 1; }
 done
+fetch_obs_compose_files "$sha"   # observability overlay of this commit, best effort (#67)
 printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\n' "$backend_image" "$frontend_image" > "$dir/release.env"
 
 log "deploy: pulling images by digest"
@@ -62,6 +63,8 @@ elif wait_healthy "$sha"; then
   if [ -n "$cur" ] && [ "$cur" != "$sha" ]; then write_state "$PREVIOUS_TAG_FILE" "$cur"; fi
   write_state "$CURRENT_TAG_FILE" "$sha"
   log "deploy: OK, serving $sha (previous: $(read_tag "$PREVIOUS_TAG_FILE"))"
+  # Telemetry stack (prod: full, dev: forwarder). Best effort: never changes the deploy result (#67).
+  "$here/obs.sh" "$sha" || log "deploy: obs.sh failed (ignored)"
   # Keep the five newest stored releases (the files are tiny; this only bounds growth).
   # shellcheck disable=SC2012
   ls -1t "$RELEASES_DIR" | tail -n +6 | while read -r old; do

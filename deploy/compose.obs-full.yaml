@@ -1,0 +1,35 @@
+# Prod host overlay (issue #67; spec §12/§14, ADR 0006): the full observability stack next to the app.
+# Layered by deploy/lib.sh compose_release on compose.yaml + compose.deploy.yaml + compose.observability.yaml
+# when OBS_MODE=full in /opt/fitwise/.env. Differences from the local stack:
+#  - configuration is read from $OBS_CONFIG_DIR (/opt/fitwise/observability, refreshed by obs.sh), not
+#    from the release directory, so a deploy does not recreate the containers;
+#  - the collector's OTLP/gRPC port is published on the host for the dev collector (the security group
+#    admits only the dev Elastic IP; see deploy/provision.sh), and Grafana on 0.0.0.0:3000 (security
+#    group: owner IP only);
+#  - Grafana's public URL comes from GRAFANA_ROOT_URL in the env file.
+# Credentials (GRAFANA_ADMIN_PASSWORD) come from the root-only env file, never from git.
+services:
+  otel-collector:
+    volumes:
+      - ${OBS_CONFIG_DIR:?}/collector:/etc/otelcol:ro
+    ports:
+      - "${OTLP_GRPC_BIND:-127.0.0.1}:${OTLP_GRPC_PORT:-4317}:4317"
+  prometheus:
+    volumes:
+      - ${OBS_CONFIG_DIR:?}/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+  loki:
+    volumes:
+      - ${OBS_CONFIG_DIR:?}/loki:/etc/loki:ro
+      - loki-data:/loki
+  tempo:
+    volumes:
+      - ${OBS_CONFIG_DIR:?}/tempo:/etc/tempo:ro
+      - tempo-data:/var/tempo
+  grafana:
+    environment:
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+    volumes:
+      - ${OBS_CONFIG_DIR:?}/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${OBS_CONFIG_DIR:?}/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana

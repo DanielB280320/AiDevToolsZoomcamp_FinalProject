@@ -23,19 +23,60 @@ read_tag() { if [ -s "$1" ]; then tr -d '[:space:]' < "$1"; fi; }
 # Atomic single-line state file.
 write_state() { printf '%s\n' "$2" > "$1.tmp" && mv -f "$1.tmp" "$1"; }
 
+# --- Observability on the host (issue #67; spec §12/§14, ADR 0006) ------------------------------
+# OBS_MODE in the root-only env file selects what runs next to the app (set by bootstrap.sh):
+#   full     prod: collector, Prometheus, Loki, Tempo, Grafana (compose.obs-full.yaml)
+#   forward  dev: only the collector, exporting OTLP/gRPC to the prod collector (compose.obs-forward.yaml)
+# Unset or incomplete (no Grafana password / no upstream endpoint) = off, so a half-configured host
+# never breaks the app deploy. The observability configuration lives in $OBS_DIR, refreshed by obs.sh.
+OBS_DIR="${OBS_DIR:-$APP_DIR/observability}"
+OBS_HASH_FILE="$APP_DIR/OBS_CONFIG_HASH"
+OBS_COMPOSE_FILES=(compose.observability.yaml compose.obs-full.yaml compose.obs-forward.yaml)
+
+# env_has <KEY>: true when the env file has a non-empty KEY=value line. The value is never printed.
+env_has() { [ -r "$ENV_FILE" ] && grep -Eq "^$1=.+" "$ENV_FILE"; }
+env_is() { [ -r "$ENV_FILE" ] && grep -qx "$1=$2" "$ENV_FILE"; }
+
+# obs_mode: prints full | forward, or nothing when observability is off or incomplete.
+obs_mode() {
+  if env_is OBS_MODE full && env_has GRAFANA_ADMIN_PASSWORD; then echo full
+  elif env_is OBS_MODE forward && env_has GRAFANA_ADMIN_PASSWORD && env_has OTLP_UPSTREAM_ENDPOINT; then echo forward
+  elif env_has OBS_MODE; then log "observability: OBS_MODE is set but incomplete or invalid (needs GRAFANA_ADMIN_PASSWORD, and OTLP_UPSTREAM_ENDPOINT for forward): off" >&2
+  fi
+  return 0
+}
+
+# fetch_obs_compose_files <sha>: the observability compose files of that commit, best effort (a commit
+# that predates #67 has none; then the release simply runs without them).
+fetch_obs_compose_files() {
+  local sha="$1" repo="${GITHUB_REPOSITORY:?}" f dest dir="$RELEASES_DIR/$1"
+  for f in compose.observability.yaml deploy/compose.obs-full.yaml deploy/compose.obs-forward.yaml; do
+    dest="$dir/$(basename "$f")"
+    curl -fsSL --retry 3 --retry-delay 2 --max-time 30 \
+      "https://raw.githubusercontent.com/$repo/$sha/$f" -o "$dest.tmp" 2>/dev/null && mv -f "$dest.tmp" "$dest" || rm -f "$dest.tmp" "$dest"
+  done
+  return 0
+}
+
 # compose_release <sha> <compose args...>: docker compose for a stored release, images by digest.
+# With OBS_MODE on, the release's observability files are layered on top (backend exports to the
+# collector); a release without them runs as before.
 compose_release() {
   local sha="$1"; shift
-  local dir="$RELEASES_DIR/$sha"
+  local dir="$RELEASES_DIR/$sha" files=(-f compose.yaml -f compose.deploy.yaml) mode
   [ -f "$dir/release.env" ] || die "release $sha is not stored on this host"
+  mode="$(obs_mode)"
+  if [ -n "$mode" ] && [ -f "$dir/compose.observability.yaml" ] && [ -f "$dir/compose.obs-$mode.yaml" ]; then
+    files+=(-f compose.observability.yaml -f "compose.obs-$mode.yaml")
+  fi
   (
     set -a
     # shellcheck disable=SC1091
     . "$dir/release.env"
     set +a
-    export TAG="$sha" HTTP_BIND=0.0.0.0 HTTP_PORT=80 COMPOSE_PROJECT_NAME=fitwise
+    export TAG="$sha" HTTP_BIND=0.0.0.0 HTTP_PORT=80 COMPOSE_PROJECT_NAME=fitwise OBS_CONFIG_DIR="$OBS_DIR"
     cd "$dir"
-    docker compose --progress quiet --env-file "$ENV_FILE" -f compose.yaml -f compose.deploy.yaml "$@"
+    docker compose --progress quiet --env-file "$ENV_FILE" "${files[@]}" "$@"
   )
 }
 

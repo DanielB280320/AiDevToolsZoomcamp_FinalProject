@@ -194,3 +194,35 @@ def test_every_pipeline_passes_its_privacy_processor(config: dict[str, Any]) -> 
     assert config["processors"]["resource/env"]["attributes"] == [
         {"key": "env", "value": "${env:FITWISE_ENV}", "action": "insert"}
     ]
+
+
+# --- dev -> prod forwarding (#67) ----------------------------------------------------------
+
+
+def test_forwarded_logs_get_the_same_attribute_allow_list(config: dict[str, Any]) -> None:
+    """Prod re-applies the log attribute allow-list to logs that arrive from the dev collector."""
+    forwarded = _statements(config, "transform/forwarded_logs", "log_statements")
+    keep = next(s for s in forwarded if s.startswith("keep_keys(log.attributes"))
+    main = _statements(config, "transform/logs", "log_statements")
+    main_keep = next(s for s in main if s.startswith("keep_keys(log.attributes"))
+    assert _string_list(keep) == _string_list(main_keep)
+    assert any(s.startswith("replace_pattern(log.body") and "[email]" in s for s in forwarded)
+    pipeline = config["service"]["pipelines"]["logs/forwarded"]
+    assert pipeline["receivers"] == ["otlp"]
+    assert "transform/forwarded_logs" in pipeline["processors"]
+    assert "resource/env" in pipeline["processors"]
+
+
+def test_forward_overlay_only_swaps_exporters() -> None:
+    """The dev overlay keeps every gate of config.yaml and only changes where data goes."""
+    forward = yaml.safe_load(CONFIG.with_name("config.forward.yaml").read_text(encoding="utf-8"))
+    assert set(forward) == {"exporters", "service"}
+    assert set(forward["service"]) == {"pipelines"}
+    base = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    assert set(forward["service"]["pipelines"]) == {"traces", "metrics", "logs"}
+    for name, pipeline in forward["service"]["pipelines"].items():
+        assert set(pipeline) == {"exporters"}, name
+        assert pipeline["exporters"] == ["otlp_grpc/upstream"]
+        assert name in base["service"]["pipelines"]
+    upstream = forward["exporters"]["otlp_grpc/upstream"]
+    assert upstream["endpoint"] == "${env:OTLP_UPSTREAM_ENDPOINT}"

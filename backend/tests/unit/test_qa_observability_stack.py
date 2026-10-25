@@ -57,6 +57,8 @@ def test_every_pipeline_is_gated_by_its_privacy_processor(collector: dict[str, A
         assert signal in GATES, f"unexpected pipeline type {name!r}"
         processors: list[str] = pipeline["processors"]
         gate = GATES[signal]
+        if name == "logs/forwarded":  # #67: records already gated on dev
+            gate = "transform/forwarded_logs"
         assert gate in processors, f"pipeline {name!r} exports without {gate}"
         # Nothing that batches or reshapes before the gate except the memory limiter.
         assert processors[: processors.index(gate)] in ([], ["memory_limiter"]), (
@@ -223,3 +225,38 @@ def test_key_journey_has_rate_errors_and_p95_for_the_logging_endpoints() -> None
     assert "rate(http_server_duration_seconds_count" in text
     assert 'status=~\\"5..\\"' in text
     assert "histogram_quantile(0.95" in text
+
+
+# --- #67: prod host / dev forwarding -------------------------------------------------------
+
+
+def test_forwarded_logs_scrub_exactly_like_the_main_log_gate(collector: dict[str, Any]) -> None:
+    """The body guard of transform/forwarded_logs must not drift from transform/logs."""
+
+    def body_guard(name: str) -> list[str]:
+        stmts = collector["processors"][name]["log_statements"][0]["statements"]
+        return [
+            s for s in stmts if s.startswith(("replace_pattern(log.body", "set(log.body, Concat"))
+        ]
+
+    assert body_guard("transform/logs")
+    assert body_guard("transform/forwarded_logs") == body_guard("transform/logs")
+    forwarded = collector["service"]["pipelines"]["logs/forwarded"]
+    # The OTLP logs pipeline exports only to Loki, never to another collector.
+    assert forwarded["exporters"] == ["otlp_http/loki"]
+
+
+def test_prod_overlay_keeps_grafana_and_otlp_on_loopback_by_default() -> None:
+    """Public binds only come from the host env file (bootstrap.sh on prod); the overlay has no
+    literal 0.0.0.0, and Grafana keeps anonymous access and sign-up off."""
+    full = (ROOT / "deploy" / "compose.obs-full.yaml").read_text(encoding="utf-8")
+    assert "0.0.0.0" not in full.split("services:", 1)[1]  # noqa: S104
+    overlay = _yaml(ROOT / "deploy" / "compose.obs-full.yaml")
+    assert "GF_AUTH_ANONYMOUS_ENABLED" not in overlay["services"]["grafana"].get("environment", {})
+    assert "GF_USERS_ALLOW_SIGN_UP" not in overlay["services"]["grafana"].get("environment", {})
+    base = _yaml(COMPOSE_OBS)["services"]["grafana"]["environment"]
+    assert base["GF_AUTH_ANONYMOUS_ENABLED"] == "false"
+    assert base["GF_USERS_ALLOW_SIGN_UP"] == "false"
+    forward = _yaml(ROOT / "deploy" / "compose.obs-forward.yaml")
+    assert set(forward["services"]) == {"otel-collector"}
+    assert "ports" not in forward["services"]["otel-collector"]

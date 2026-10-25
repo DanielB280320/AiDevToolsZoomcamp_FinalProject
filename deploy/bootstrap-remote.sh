@@ -12,9 +12,16 @@ for _ in $(seq 40); do
   [ "$(aws ssm describe-instance-information --filters Key=InstanceIds,Values="$iid" --query 'length(InstanceInformationList)' --output text)" = 1 ] && break
   sleep 10
 done
+# Dev forwards telemetry to the prod collector (#67): its Elastic IP, port 4317 (OTLP gRPC).
+upstream="${OTLP_UPSTREAM:-}"
+if [ "$env" = dev ] && [ -z "$upstream" ]; then
+  pip="$(aws ec2 describe-addresses --filters Name=tag:Name,Values=fitwise-prod Name=tag:Project,Values=fitwise \
+    --query 'Addresses[0].PublicIp' --output text | sed 's/^None$//')"
+  [ -z "$pip" ] || upstream="$pip:4317"
+fi
 b64="$(base64 -w0 "$here/bootstrap.sh")"
 cid="$(aws ssm send-command --instance-ids "$iid" --document-name AWS-RunShellScript \
-  --parameters "commands=[\"echo $b64 | base64 -d > /tmp/bootstrap.sh\",\"ENV_NAME=$env DEPLOY_REF=${DEPLOY_REF:-main} bash /tmp/bootstrap.sh\"]" \
+  --parameters "commands=[\"echo $b64 | base64 -d > /tmp/bootstrap.sh\",\"ENV_NAME=$env DEPLOY_REF=${DEPLOY_REF:-main} OTLP_UPSTREAM=$upstream bash /tmp/bootstrap.sh\"]" \
   --query Command.CommandId --output text)"
 echo "ssm command id: $cid"
 aws ssm wait command-executed --command-id "$cid" --instance-id "$iid" || true
