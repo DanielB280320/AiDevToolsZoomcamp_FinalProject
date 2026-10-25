@@ -117,7 +117,8 @@ def test_the_app_wires_the_middleware_and_the_delay_is_measured(
     offline_app.include_router(stub_router())
     with TestClient(offline_app) as client:
         start = time.perf_counter()
-        assert client.post(LOGGING_POSTS[0]).status_code == 200
+        # The real route answers 401 (no session) after the delay; the delay is what is measured.
+        assert client.post(LOGGING_POSTS[0]).status_code == 401
         delayed = time.perf_counter() - start
         start = time.perf_counter()
         assert client.post("/api/v1/sessions/abc/archive").status_code == 200
@@ -126,7 +127,7 @@ def test_the_app_wires_the_middleware_and_the_delay_is_measured(
     assert delayed >= 0.3
     assert undelayed < 0.3
     durations = {line["route"]: line["duration_ms"] for line in json_logs.with_message("request")}
-    assert durations[LOGGING_POSTS[0]] >= 300
+    assert durations["/api/v1/sessions/{session_id}/sets"] >= 300
     assert durations["/api/v1/sessions/abc/archive"] < 300
     # The middleware itself writes nothing, so it cannot log request data.
     assert not [line for line in json_logs.lines() if line["logger"] == "app.fault_injection"]

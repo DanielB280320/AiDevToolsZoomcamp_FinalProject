@@ -646,6 +646,8 @@ export interface paths {
          *     session to `in_progress`. The log stores a snapshot of the targets it was performed against.
          *     After finishing, sets can be edited until `Session.editable_until` (same day + 1 day,
          *     F10.3); later returns `409 edit_window_closed`. Coaches get `403` (F16.4).
+         *     Values must fit the exercise type (strength: `reps` + `weight_kg`; bodyweight: `reps`; timed:
+         *     `seconds`), else `422 invalid_set`; `as_planned`/`skipped` are sent without values.
          */
         post: operations["logSet"];
         delete?: never;
@@ -694,6 +696,8 @@ export interface paths {
          *     estimated exercise kcal (F13.2), and runs the progression engine (F11), returning the new
          *     pending suggestions. Calling it again within the edit window recomputes completion and
          *     replaces this session's pending suggestions (F10.3); after the window `409 edit_window_closed`.
+         *     `finished_at` must not be in the future or before the first set (`422 invalid_finished_at`).
+         *     Only the first finish increments `fitwise_workouts_finished_total`.
          */
         post: operations["finishSession"];
         delete?: never;

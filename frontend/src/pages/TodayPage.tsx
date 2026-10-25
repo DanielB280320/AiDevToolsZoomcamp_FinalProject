@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
+import { Navigate } from "react-router";
 
 import { useSignedInUser } from "../components/RequireAuth";
 import { CalendarNav } from "../features/calendar/CalendarNav";
 import { TodayView } from "../features/calendar/TodayView";
 import { localDay } from "../lib/today";
+import { paths } from "../paths";
 
 /**
  * Home screen (spec F9). Athletes see their day (#28); the coach
@@ -12,6 +14,8 @@ import { localDay } from "../lib/today";
 export function TodayPage() {
   const { t, i18n } = useTranslation();
   const me = useSignedInUser();
+  // F2.2: a new athlete sets up the plan before seeing Today.
+  if (me.role === "athlete" && !me.onboarding_completed) return <Navigate to={paths.onboarding} replace />;
   const today = localDay(new Date(), me.timezone, i18n.language);
 
   return (

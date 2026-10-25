@@ -205,5 +205,245 @@
       "estimated": "All calorie numbers are estimates.",
       "attention": "{{suggestions}} suggestions and {{notes}} coach notes are waiting for you."
     }
+  },
+  "onboarding": {
+    "title": "Set up your plan",
+    "lead": "Answer a few questions and FitWise calculates your calorie and macro targets and builds a weekly training plan and meal plan. You can change everything later in your profile.",
+    "progress": "Step {{current}} of {{total}}: {{name}}",
+    "stepNames": {
+      "body": "Body",
+      "bodyFat": "Body fat",
+      "lifestyle": "Lifestyle",
+      "goal": "Goal",
+      "training": "Training",
+      "diet": "Diet",
+      "review": "Review"
+    },
+    "nav": {
+      "back": "Back",
+      "next": "Next",
+      "create": "Create my plan",
+      "creating": "Creating your plan…",
+      "goToToday": "Go to Today"
+    },
+    "body": {
+      "title": "Your body",
+      "lead": "Used for your energy needs. Estimates only.",
+      "sex": {
+        "legend": "Sex for calculations",
+        "hint": "Only picks the formula constants. \"Prefer not to say\" uses midpoint values.",
+        "male": "Male",
+        "female": "Female",
+        "unspecified": "Prefer not to say"
+      },
+      "height": {
+        "label": "Height",
+        "feet": "Height (feet)",
+        "inches": "Height (inches)"
+      },
+      "weight": {
+        "label": "Weight"
+      }
+    },
+    "bodyFat": {
+      "title": "Body fat",
+      "lead": "Optional. With a body-fat value FitWise uses a more precise formula.",
+      "method": {
+        "legend": "How do you want to give your body fat?",
+        "entered": "I know it",
+        "enteredDetail": "Type a percentage",
+        "navy": "Measure with tape",
+        "navyDetail": "US Navy method",
+        "skip": "Skip",
+        "skipDetail": "Estimate without it"
+      },
+      "percent": {
+        "label": "Body fat (%)",
+        "hint": "Between 3 and 60."
+      },
+      "neck": {
+        "label": "Neck circumference"
+      },
+      "waist": {
+        "label": "Waist circumference",
+        "hint": "Measured at the navel."
+      },
+      "hip": {
+        "label": "Hip circumference",
+        "hint": "Measured at the widest point."
+      },
+      "navyHint": "FitWise estimates body fat from these measurements. If the result is implausible it is ignored and your targets are explained without it."
+    },
+    "lifestyle": {
+      "title": "Daily activity",
+      "lead": "Your activity outside training. Training calories are added separately from your plan.",
+      "legend": "Lifestyle (non-exercise activity)",
+      "sedentary": "Sedentary",
+      "sedentaryDetail": "Desk job, little walking",
+      "lightly_active": "Lightly active",
+      "lightly_activeDetail": "Desk job and daily walks",
+      "active": "Active",
+      "activeDetail": "On your feet most of the day",
+      "very_active": "Very active",
+      "very_activeDetail": "Physical labour"
+    },
+    "goal": {
+      "title": "Your goal",
+      "lead": "Sets your calorie adjustment and protein target.",
+      "legend": "Goal",
+      "recomposition": "Body recomposition",
+      "recompositionDetail": "Lose fat, build muscle",
+      "muscle_gain": "Muscle gain",
+      "muscle_gainDetail": "Eat a small surplus",
+      "cutting": "Cutting",
+      "cuttingDetail": "Eat a deficit to lose fat",
+      "maintenance": "Maintenance",
+      "maintenanceDetail": "Hold your weight",
+      "wellness": "Overall wellness",
+      "wellnessDetail": "Stay active and healthy"
+    },
+    "training": {
+      "title": "Training preferences",
+      "lead": "FitWise builds your weekly plan from these.",
+      "experience": {
+        "legend": "Experience",
+        "beginner": "Beginner",
+        "beginnerDetail": "Under 6 months",
+        "intermediate": "Intermediate",
+        "intermediateDetail": "6 months to 2 years",
+        "advanced": "Advanced",
+        "advancedDetail": "Over 2 years"
+      },
+      "daysPerWeek": {
+        "legend": "Training days per week",
+        "option": "{{count}} days"
+      },
+      "preferredDays": {
+        "legend": "Preferred training days",
+        "hint": "Pick exactly as many days as you train per week."
+      },
+      "weekday": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      },
+      "sessionMinutes": {
+        "legend": "Session length",
+        "option": "{{count}} min"
+      },
+      "equipment": {
+        "legend": "Equipment",
+        "full_gym": "Full gym",
+        "full_gymDetail": "Barbells, machines, cables",
+        "home_dumbbells": "Home dumbbells",
+        "home_dumbbellsDetail": "Dumbbells and a bench",
+        "bodyweight_only": "Bodyweight only",
+        "bodyweight_onlyDetail": "No equipment"
+      },
+      "avoid": {
+        "legend": "Exercises to avoid",
+        "hint": "Optional. Search the catalog for exercises that hurt or that you can't do.",
+        "searchLabel": "Search exercises",
+        "searching": "Searching…",
+        "noResults": "No exercises found.",
+        "searchFailed": "The exercise search failed. Try again.",
+        "add": "Avoid {{name}}",
+        "remove": "Stop avoiding {{name}}",
+        "selected": "Avoiding"
+      }
+    },
+    "diet": {
+      "title": "Diet",
+      "lead": "Shapes your meal plan.",
+      "diet": {
+        "legend": "Diet preference",
+        "omnivore": "Omnivore",
+        "omnivoreDetail": "Eats everything",
+        "vegetarian": "Vegetarian",
+        "vegetarianDetail": "No meat or fish",
+        "vegan": "Vegan",
+        "veganDetail": "No animal products",
+        "pescatarian": "Pescatarian",
+        "pescatarianDetail": "Fish, no meat"
+      },
+      "allergies": {
+        "legend": "Allergies and exclusions",
+        "hint": "Optional. These foods are left out of your meal plan.",
+        "gluten": "Gluten",
+        "lactose": "Lactose",
+        "nuts": "Nuts",
+        "eggs": "Eggs",
+        "soy": "Soy",
+        "shellfish": "Shellfish",
+        "fish": "Fish"
+      },
+      "mealsPerDay": {
+        "legend": "Meals per day",
+        "option": "{{count}} meals"
+      }
+    },
+    "review": {
+      "title": "Check your answers",
+      "lead": "Creating your plan calculates your targets and generates your training and meal plan.",
+      "edit": "Edit {{section}}",
+    "editButton": "Edit",
+      "notGiven": "Not given",
+      "none": "None",
+      "rows": {
+        "sex": "Sex for calculations",
+        "height": "Height",
+        "weight": "Weight",
+        "bodyFat": "Body fat",
+        "lifestyle": "Lifestyle",
+        "goal": "Goal",
+        "experience": "Experience",
+        "training": "Training",
+        "equipment": "Equipment",
+        "avoid": "Exercises to avoid",
+        "diet": "Diet",
+        "allergies": "Allergies",
+        "meals": "Meals per day"
+      },
+      "bodyFatValue": {
+        "entered": "{{value}} %",
+        "navy": "Estimated from tape measurements",
+        "skip": "Skipped"
+      },
+      "trainingValue": "{{days}} days per week ({{list}}), {{minutes}} min"
+    },
+    "result": {
+      "title": "Your plan is ready",
+      "lead": "These are estimates, not medical advice. You can adjust them later.",
+      "targets": "Daily targets",
+      "kcal": "Calories",
+      "protein": "Protein",
+      "carbs": "Carbs",
+      "fat": "Fat",
+      "kcalValue": "{{value}} kcal",
+      "gramsValue": "{{value}} g",
+      "explanation": "How we calculated this",
+      "plan": "Training plan",
+      "planSummary_one": "{{count}} training day per week and a meal plan are ready.",
+      "planSummary_other": "{{count}} training days per week and a meal plan are ready.",
+      "warnings": "Notes about your plan"
+    },
+    "validation": {
+      "required": "This field is required.",
+      "number": "Enter a number, for example 72.5.",
+      "heightRange": "Height must be between {{range}}.",
+      "weightRange": "Weight must be between {{range}}.",
+      "bodyFatRange": "Body fat must be between {{min}} and {{max}} %.",
+      "measurementRange": "Measurement must be between {{range}}.",
+      "daysMismatch_one": "You train {{count}} day per week, so pick exactly {{count}} day. You picked {{picked}}.",
+      "daysMismatch_other": "You train {{count}} days per week, so pick exactly {{count}} days. You picked {{picked}}."
+    },
+    "errors": {
+      "alreadyOnboarded": "You already completed onboarding. Open Today to see your plan.",
+      "invalidRequest": "Some answers weren't accepted. Check the highlighted step and try again."
+    }
   }
 }

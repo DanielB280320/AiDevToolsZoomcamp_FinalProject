@@ -5,7 +5,7 @@ import { apiUrl } from "./handlers";
 
 type Schemas = components["schemas"];
 
-/** openapi.yaml `MeAthleteNew`, with overrides. */
+/** openapi.yaml `MeAthleteNew` but already onboarded (so Today renders), with overrides. */
 export function meFixture(overrides: Partial<Schemas["Me"]> = {}): Schemas["Me"] {
   return {
     id: "3f0b6a1e-6a55-4f3c-9a43-1c2a3a4b5c6d",
@@ -17,7 +17,7 @@ export function meFixture(overrides: Partial<Schemas["Me"]> = {}): Schemas["Me"]
     timezone: "Europe/Madrid",
     disclaimer_accepted_at: "2026-10-21T18:00:00Z",
     created_at: "2026-10-21T18:00:00Z",
-    onboarding_completed: false,
+    onboarding_completed: true,
     active_coach: null,
     pending_coach_link_id: null,
     unread_notification_count: 0,

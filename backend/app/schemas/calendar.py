@@ -12,6 +12,7 @@ from pydantic import Field
 
 from app.schemas.base import RequestModel, ResponseModel
 from app.schemas.plans import ExerciseSummary, ProgressionRule, Weekday
+from app.schemas.setlog import SetLog
 
 SessionStatus = Literal["planned", "in_progress", "done", "missed"]
 TrainingStatus = Literal["rest", "planned", "in_progress", "done", "missed"]
@@ -49,7 +50,7 @@ class SessionSet(ResponseModel):
     target_reps: int | None
     target_weight_kg: float | None
     target_seconds: int | None
-    log: None = None  # set logs arrive with #29
+    log: SetLog | None = None
 
 
 class SessionExercise(ResponseModel):

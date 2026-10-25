@@ -6,4 +6,5 @@ export const paths = {
   today: "/today",
   week: "/week",
   month: "/month",
+  onboarding: "/onboarding",
 } as const;
