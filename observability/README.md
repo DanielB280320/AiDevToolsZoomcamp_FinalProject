@@ -3,8 +3,9 @@
 OpenTelemetry Collector, Prometheus, Loki, Tempo and Grafana for FitWise (spec §14,
 [ADR 0006](../docs/adr/0006-self-hosted-observability-on-prod.md),
 [architecture §5](../docs/architecture.md#5-observability-and-incident-flow)). Everything here is
-provisioned from files; nothing is configured by hand in Grafana. Running it on prod and the
-dev → prod forwarding are #67; the alert rules are in `grafana/provisioning/alerting/` (#18).
+provisioned from files; nothing is configured by hand in Grafana. The alert rules are in
+`grafana/provisioning/alerting/` (#18). On the hosts (#67) prod runs the whole stack and dev only a
+collector that forwards to prod: see [On the hosts](#on-the-hosts-67).
 
 ## Run it locally
 
@@ -91,10 +92,29 @@ stdout that bypass the app logger.
 
 Local demo traffic is far below 1 req/s, so a laptop needs well under 1 GB. Measured after a 1 h
 local session: Prometheus 5.8 MB, Tempo 12 MB, Loki 0.1 MB, Grafana 1.7 MB. On the prod host (#67)
-plan **≈ 3 GB** for the stack at the defaults (Prometheus's 2 GB cap dominates).
+plan **≈ 3 GB** for the stack at the defaults (Prometheus's 2 GB cap dominates); with the images that is about 5 GB of prod's 30 GB root volume (budget in deploy/README.md).
 
 Loki deletes expired chunks through its compactor (`retention_delete_delay` 2 h). Tempo 3.x applies
 retention in the backend scheduler/worker.
+
+## On the hosts (#67)
+
+| | prod (`fitwise-prod`) | dev (`fitwise-dev`) |
+|---|---|---|
+| `OBS_MODE` in `/opt/fitwise/.env` | `full` | `forward` |
+| Runs | collector, Prometheus, Loki, Tempo, Grafana | collector only (`config.yaml` + `config.forward.yaml`) |
+| Overlay | `deploy/compose.obs-full.yaml` | `deploy/compose.obs-forward.yaml` |
+| `env` label | `prod` | `dev` (backend `APP_ENV`; the dev collector also inserts `FITWISE_ENV=dev`) |
+| Inbound | OTLP/gRPC 4317 from the dev Elastic IP only; Grafana 3000 from the owner IP only (security group) | none |
+
+`deploy/deploy.sh` (run by the host poller, ADR 0010) calls `deploy/obs.sh` after a healthy release:
+it downloads `observability/` of that commit into `/opt/fitwise/observability`, recreates the
+containers only when the files changed, and never fails the release. The same overlay makes the
+backend export to the collector and ship its logs through the fluentd driver. Everything is
+`restart: unless-stopped`, so it comes back after a reboot. dev → prod: the dev collector keeps all
+privacy gates, then sends traces, metrics and logs with OTLP/gRPC to prod's collector, whose
+`logs/forwarded` pipeline applies the log attribute allow-list again. Operations and verification:
+[deploy/README.md](../deploy/README.md#observability-on-the-hosts-issue-67).
 
 ## Images
 

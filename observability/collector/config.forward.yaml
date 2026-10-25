@@ -1,0 +1,27 @@
+# Dev: forward everything to the prod collector instead of storing it locally (issue #67, spec §14).
+# Loaded after config.yaml (`--config=config.yaml --config=config.forward.yaml`, the collector merges
+# them; lists such as `exporters` are replaced). Receivers and all privacy processors are those of
+# config.yaml, so dev gates its telemetry before it leaves the host; prod filters it a second time.
+# `env` is the sender's own (dev backend: APP_ENV=dev), so it arrives in prod Grafana as env="dev".
+#
+# OTLP_UPSTREAM_ENDPOINT is host:4317 of the prod collector. The connection is plain gRPC over the
+# internet: the prod security group admits only this instance's Elastic IP, and only allow-listed,
+# health-data-free fields exist at this point. TLS is a follow-up together with HTTPS for the app.
+exporters:
+  otlp_grpc/upstream:
+    endpoint: ${env:OTLP_UPSTREAM_ENDPOINT}
+    tls:
+      insecure: true
+    sending_queue:
+      queue_size: 2000
+    retry_on_failure:
+      max_elapsed_time: 300s
+
+service:
+  pipelines:
+    traces:
+      exporters: [otlp_grpc/upstream]
+    metrics:
+      exporters: [otlp_grpc/upstream]
+    logs:
+      exporters: [otlp_grpc/upstream]

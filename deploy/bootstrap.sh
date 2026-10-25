@@ -53,6 +53,30 @@ ensure_env SESSION_COOKIE_SECURE false
 ensure_env POSTGRES_PASSWORD "$(openssl rand -hex 24)"
 ensure_env JWT_SECRET "$(openssl rand -hex 32)"
 ensure_env USER_HASH_SALT "$(openssl rand -hex 24)"
+
+# --- Observability settings (#67): prod runs the stack, dev forwards to prod --------------------
+# set_env replaces a line (used for the upstream address, which changes when prod's IP does).
+set_env() {
+  if grep -q "^$1=" "$APP_DIR/.env"; then
+    local tmp; tmp="$(mktemp)"; grep -v "^$1=" "$APP_DIR/.env" > "$tmp"; cat "$tmp" > "$APP_DIR/.env"; rm -f "$tmp"
+  fi
+  printf '%s=%s\n' "$1" "$2" >> "$APP_DIR/.env"
+}
+ensure_env GRAFANA_ADMIN_USER admin
+ensure_env GRAFANA_ADMIN_PASSWORD "$(openssl rand -hex 16)"   # prod: the Grafana login (never printed)
+if [ "$ENV_NAME" = prod ]; then
+  ensure_env OBS_MODE full
+  ensure_env GRAFANA_BIND 0.0.0.0          # reachable only from the owner IP (security group, provision.sh)
+  ensure_env GRAFANA_PORT 3000
+  ensure_env OTLP_GRPC_BIND 0.0.0.0        # reachable only from the dev instance (security group)
+  token="$(curl -fsS --max-time 3 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' http://169.254.169.254/latest/api/token 2>/dev/null || true)"
+  pub="$(curl -fsS --max-time 3 -H "X-aws-ec2-metadata-token: $token" http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true)"
+  if [[ "$pub" =~ ^[0-9.]+$ ]]; then set_env GRAFANA_ROOT_URL "http://$pub:3000"; fi
+else
+  ensure_env OBS_MODE forward
+  # host:4317 of the prod collector; passed by bootstrap-remote.sh (looked up from AWS) or by hand.
+  if [[ "${OTLP_UPSTREAM:-}" =~ ^[A-Za-z0-9.-]+:[0-9]+$ ]]; then set_env OTLP_UPSTREAM_ENDPOINT "$OTLP_UPSTREAM"; fi
+fi
 chown root:root "$APP_DIR/.env"; chmod 600 "$APP_DIR/.env"
 
 # --- Pull-based deploy poller (#13, ADR 0010) -------------------------------------------------
@@ -70,7 +94,7 @@ install_file() {  # install_file <name> <destination> <mode>: copies only when t
   if ! cmp -s "$src" "$2"; then install -m "$3" -o root -g root "$src" "$2"; changed=1; fi
   rm -f "$tmp"
 }
-for f in lib.sh poll.sh deploy.sh rollback.sh; do install_file "$f" "$APP_DIR/bin/$f" 755; done
+for f in lib.sh poll.sh deploy.sh rollback.sh obs.sh; do install_file "$f" "$APP_DIR/bin/$f" 755; done
 install_file fitwise-deploy.service /etc/systemd/system/fitwise-deploy.service 644
 install_file fitwise-deploy.timer /etc/systemd/system/fitwise-deploy.timer 644
 conf="$(printf 'GITHUB_REPOSITORY=%s\nDEPLOY_ENV=%s\nIMAGE_NAMESPACE=%s' "$REPO" "$ENV_NAME" "$IMAGE_NAMESPACE")"

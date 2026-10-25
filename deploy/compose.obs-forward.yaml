@@ -1,0 +1,14 @@
+# Dev host overlay (issue #67; spec §14): only the OpenTelemetry Collector runs here. Its gates (the
+# privacy allow-lists) are the same as on prod; observability/collector/config.forward.yaml replaces the
+# exporters so that all three signals go to the prod collector (OTLP/gRPC, env="dev" from APP_ENV).
+# Layered by deploy/lib.sh when OBS_MODE=forward and OTLP_UPSTREAM_ENDPOINT (host:4317 of prod) are set
+# in /opt/fitwise/.env. Prometheus, Loki, Tempo and Grafana are not started on dev.
+services:
+  otel-collector:
+    command:
+      - --config=/etc/otelcol/config.yaml
+      - --config=/etc/otelcol/config.forward.yaml
+    environment:
+      OTLP_UPSTREAM_ENDPOINT: ${OTLP_UPSTREAM_ENDPOINT:?host:4317 of the prod collector}
+    volumes:
+      - ${OBS_CONFIG_DIR:?}/collector:/etc/otelcol:ro

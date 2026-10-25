@@ -128,6 +128,32 @@ GitHub settings behind dev: environment `dev` (deploys from `main` only) with va
 
 Manual step for the owner: set required reviewers on the `production` GitHub environment (Settings, Environments) and the `PROD_BASE_URL` variable; there is no ruleset for `deploy/*` (see above).
 
+## Observability on the hosts (issue #67)
+
+Prod runs the whole stack of #17 next to the app; dev runs only an OpenTelemetry Collector that forwards to prod (spec §12/§14, [ADR 0006](../docs/adr/0006-self-hosted-observability-on-prod.md)). Same pull-based mechanism as the app, no SSM and no AWS credential involved:
+
+- **Switch.** `OBS_MODE=full` (prod) or `forward` (dev) in the root-only `/opt/fitwise/.env`, written by `bootstrap.sh` together with a random `GRAFANA_ADMIN_PASSWORD` (generated on the host, never in git, never printed), `GRAFANA_BIND=0.0.0.0`, `GRAFANA_PORT=3000`, `OTLP_GRPC_BIND=0.0.0.0` and `GRAFANA_ROOT_URL` on prod, and `OTLP_UPSTREAM_ENDPOINT=<prod elastic ip>:4317` on dev (`bootstrap-remote.sh dev` looks the prod address up; or pass `OTLP_UPSTREAM=host:4317`). A host with an incomplete setting runs without observability and says so in the journal; the app deploy is never affected.
+- **Deploy.** `deploy.sh` stores `compose.observability.yaml` and `deploy/compose.obs-{full,forward}.yaml` with the release, so the backend gets the collector endpoint and the fluentd log driver; after the health check it runs `obs.sh`, which downloads `observability/` of the same commit to `/opt/fitwise/observability` and starts the services (`--force-recreate` only when the files changed; hash in `OBS_CONFIG_HASH`). A failure is logged (`obs: WARNING`) and ignored. `sudo /opt/fitwise/bin/obs.sh` applies it without a new release (uses `CURRENT_TAG`).
+- **Reboot.** Docker is enabled at boot and every service is `restart: unless-stopped`; nothing needs the poller to come back.
+- **Security groups** (created by `provision.sh`, see the table above): Grafana 3000 from the owner IP /32, OTLP gRPC 4317 from the dev Elastic IP /32; nothing else is added. The dev collector reaches prod over the public address, so the traffic is plain gRPC from one allowed IP carrying only allow-listed fields (no health data); TLS for it and for Grafana comes with HTTPS (follow-up).
+- **Grafana login.** `admin` and the password in `/opt/fitwise/.env` on `fitwise-prod`. Read it once over SSM (it prints the secret, run it only in your own terminal): `aws ssm start-session --target <prod-instance-id>` then `sudo grep '^GRAFANA_ADMIN_PASSWORD=' /opt/fitwise/.env`. Grafana stores the password on first start; changing the env value later does not change the login (use `docker exec fitwise-grafana-1 grafana cli admin reset-admin-password <new>`).
+- **Disk and memory on prod** (30 GB root volume, 4 GiB RAM). Retention comes from `.env` and defaults to `PROM_RETENTION_TIME=15d` with `PROM_RETENTION_SIZE=2GB`, `LOKI_RETENTION=168h`, `TEMPO_RETENTION=72h` ([numbers](../observability/README.md#retention-and-disk-use)). Budget: telemetry data about 3 GB at most (Prometheus is capped at 2 GB; Loki and Tempo about 0.2 GB each at 1 request per second, which demo traffic is far below; dev traffic adds the same order), observability images about 2 GB, application images and database about 3 GB, OS about 5 GB, container logs at most 30 MB per container (`json-file`, 10 MB x 3). Roughly 13 GB of 30 GB. Memory limits add up to 2.3 GiB for the stack (256 + 3 x 512 + 512 MiB, real use is a fraction).
+
+Verification once the hosts are bootstrapped (owner or orchestrator; copy results to #67):
+
+```bash
+# prod host
+sudo journalctl -u fitwise-deploy -o cat | grep 'obs:'                  # "obs: OK (full)"
+sudo docker ps --format '{{.Names}} {{.Status}}' | grep -E 'otel|prometheus|loki|tempo|grafana'
+# dev host
+sudo docker ps --format '{{.Names}} {{.Status}}' | grep otel            # collector only
+# from anywhere: one request on each environment, then in prod Grafana (Explore > Prometheus)
+curl -s http://<dev-ip>/api/v1/healthz; curl -s http://<prod-ip>/api/v1/healthz
+#   sum by (env) (http_server_duration_seconds_count)   -> series for env="dev" and env="prod"
+# security groups (read-only)
+aws ec2 describe-security-groups --group-names fitwise-prod --query 'SecurityGroups[0].IpPermissions[].[FromPort,IpRanges[].CidrIp]'
+```
+
 ## Teardown (destructive, owner only)
 
 Terminate instances, release Elastic IPs, delete security groups and the role/profile by the `Project=fitwise` tag. Never done by agents without explicit owner confirmation.
