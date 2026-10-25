@@ -1,0 +1,14 @@
+[Unit]
+Description=FitWise nightly database backup (pg_dump to S3, issue #66)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Optional settings (bucket override), no secrets. AWS credentials come from the instance role.
+EnvironmentFile=-/etc/fitwise-backup.env
+ExecStart=/opt/fitwise/bin/backup.sh
+TimeoutStartSec=30min
+Nice=10
+# A non-zero exit marks the unit failed: `systemctl --failed`, `journalctl -u fitwise-backup`.
