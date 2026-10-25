@@ -1,10 +1,12 @@
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import { type DayView, useDay } from "../../api/calendar";
 import type { Me } from "../../api/session";
 import { QueryState } from "./QueryState";
 import { StatusBadge } from "./StatusBadge";
 import { badgeKind } from "./status";
+import { paths } from "../../paths";
 
 type SessionExercise = NonNullable<DayView["session"]>["exercises"][number];
 
@@ -65,6 +67,14 @@ export function TodayView({ me }: { me: Me }) {
           <StatusBadge kind={kind} />
           <span className="font-semibold">{session?.training_day_name ?? t("calendar.restDay")}</span>
         </p>
+        {session && (
+          <Link
+            to={paths.workout(session.id)}
+            className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-md bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark sm:w-auto"
+          >
+            {t(session.status === "planned" ? "calendar.today.startWorkout" : session.status === "done" ? "calendar.today.viewWorkout" : "calendar.today.continueWorkout")}
+          </Link>
+        )}
         {session && (
           <ul className="mt-2">
             {session.exercises.map((exercise) => (

@@ -10,6 +10,7 @@ import { SignInPage } from "./pages/SignInPage";
 import { SignUpPage } from "./pages/SignUpPage";
 import { TodayPage } from "./pages/TodayPage";
 import { WeekPage } from "./pages/WeekPage";
+import { WorkoutPage } from "./pages/WorkoutPage";
 import { paths } from "./paths";
 
 /** All routes render inside the shared shell (header, content, footer). */
@@ -27,6 +28,7 @@ export const routes: RouteObject[] = [
           { path: paths.today, element: <TodayPage /> },
           { path: paths.week, element: <WeekPage /> },
           { path: paths.month, element: <MonthPage /> },
+          { path: paths.workoutPattern, element: <WorkoutPage /> },
           { path: paths.onboarding, element: <OnboardingPage /> },
         ],
       },
