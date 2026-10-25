@@ -98,6 +98,13 @@ class Responder:
             except ValueError:  # includes JSONDecodeError
                 log("incident_resume_skipped", incident_id=incident.id, reason="corrupt alert.json")
                 continue
+            except OSError:  # e.g. permission denied; never log the message (it can carry a path)
+                log(
+                    "incident_resume_skipped",
+                    incident_id=incident.id,
+                    reason="unreadable alert.json",
+                )
+                continue
             log("incident_resumed", incident_id=incident.id)
             self._submit(incident, alert)
 

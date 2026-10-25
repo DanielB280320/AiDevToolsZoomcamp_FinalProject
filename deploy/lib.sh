@@ -4,6 +4,23 @@
 # NEVER prints the contents of /opt/fitwise/.env, request headers or tokens: only tags, digests
 # and statuses.
 
+# Poller settings (GITHUB_REPOSITORY, DEPLOY_ENV, IMAGE_NAMESPACE) come from /etc/fitwise-deploy.env,
+# which only the systemd unit loads. When a script is run by hand (sudo /opt/fitwise/bin/obs.sh) the
+# variables are unset, so read them from that file here (issue #120). Variables already set win; the
+# file is parsed line by line (KEY=value, only these keys), never executed. No secrets in it.
+DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-/etc/fitwise-deploy.env}"
+load_deploy_env() {
+  local key value
+  [ -r "$DEPLOY_ENV_FILE" ] || return 0
+  for key in GITHUB_REPOSITORY DEPLOY_ENV IMAGE_NAMESPACE; do
+    [ -z "${!key:-}" ] || continue
+    value="$(sed -n "s/^$key=//p" "$DEPLOY_ENV_FILE" | head -n1)"
+    [ -z "$value" ] || export "$key=$value"
+  done
+  return 0
+}
+load_deploy_env
+
 APP_DIR="${APP_DIR:-/opt/fitwise}"
 ENV_FILE="$APP_DIR/.env"
 RELEASES_DIR="$APP_DIR/releases"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections.abc import Callable
 from dataclasses import replace
@@ -342,3 +343,23 @@ def test_resume_skips_corrupt_alert_json(
         responder_of(restarted).wait()
     assert launched(launcher_log) == [good.id]
     assert "incident_resume_skipped" in capsys.readouterr().out
+
+
+def test_resume_skips_unreadable_alert_json(
+    settings: Settings, launcher_log: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = IncidentStore(settings.incidents_dir)
+    broken = store.open_incident("badbadbad")
+    good = store.open_incident("9d1f0c2a7b3e4a55")
+    assert broken is not None and good is not None
+    (broken.path / "alert.json").write_text(json.dumps({"secret": "do-not-log"}))
+    (broken.path / "alert.json").chmod(0)  # OSError (permission denied) unless running as root
+    (good.path / "alert.json").write_text(json.dumps(fixture("firing")["alerts"][0]))
+
+    with TestClient(create_app(settings), headers=AUTH) as restarted:  # must not crash startup
+        responder_of(restarted).wait()
+    out = capsys.readouterr().out
+    assert "incident_resume_skipped" in out
+    assert "do-not-log" not in out and "alert.json'" not in out
+    if os.geteuid() != 0:
+        assert launched(launcher_log) == [good.id]

@@ -66,7 +66,7 @@ merge to main -> CI (all gates) -> publish: images ghcr.io/<owner>/fitwise-{back
               -> smoke-dev: waits for GET /api/v1/healthz `version` == <sha>, then the e2e smoke test
 ```
 
-- **The ref.** `deploy/dev` is a branch moved only by the `deploy-dev` job. It points at a *deploy commit*: tree = the tree of the previous deploy commit (never a release tree, so no `.github/workflows` change; see "Deploy commit tree"), parent = the previous deploy commit, message = the release record (`source:` SHA, `backend:` and `frontend:` image references with their `@sha256:` digests). One `GET /repos/<repo>/branches/deploy/dev` returns it, so a poll needs one API request and no credentials.
+- **The ref.** `deploy/dev` is a branch moved only by the `deploy-dev` job. It points at a *deploy commit*: tree = the tree of the previous deploy commit (so no `.github/workflows` change; see "Deploy commit tree"). The existing `deploy/dev` and `deploy/prod` refs keep the release tree of `5005280` (they predate the fix, #14) and every later deploy commit reuses the previous deploy commit's tree; only a brand-new ref starts from a README-only tree, parent = the previous deploy commit, message = the release record (`source:` SHA, `backend:` and `frontend:` image references with their `@sha256:` digests). One `GET /repos/<repo>/branches/deploy/dev` returns it, so a poll needs one API request and no credentials.
 - **Rate limit.** One conditional request (`If-None-Match`) per 150 s = 24 per hour; the limit is 60 per IP. Compose files come from `raw.githubusercontent.com` and images from GHCR, neither counts against the API limit. A 403/429 is logged and skipped.
 - **Deploy (`deploy.sh`).** Fetch that commit's `compose.yaml` and `deploy/compose.deploy.yaml` into `/opt/fitwise/releases/<sha>/`, pull both images by digest, start the database, run the `migrate` one-shot on its own (a failure stops here and the old release keeps serving), `compose up -d --no-deps --wait backend frontend`, then wait up to 120 s for `/readyz` = 200 and `/healthz` `version` = the SHA. On success `PREVIOUS_TAG` = old `CURRENT_TAG` and `CURRENT_TAG` = the new SHA.
 - **Automatic rollback.** Unhealthy release: `rollback.sh <old CURRENT_TAG>` starts the old release from its stored digests with **no migration step** (D50). `CURRENT_TAG` never moves to the failed SHA. First deploy with nothing to roll back to: the new containers are stopped and the nginx placeholder is restored.
@@ -171,6 +171,7 @@ fitwise-backup.timer (03:00 UTC, +-10 min, Persistent) -> fitwise-backup.service
 Restoring into a scratch database (this is also the test; do it after the first backup and after any change to the schema tooling). On `fitwise-prod` as root:
 
 ```bash
+umask 077                                                              # the dump holds all user data: owner-only files
 B=fitwise-prod-backups-$(aws sts get-caller-identity --query Account --output text)
 KEY=$(aws s3 ls "s3://$B/prod/" | sort | tail -n1 | awk '{print $4}')      # newest dump
 aws s3 cp "s3://$B/prod/$KEY" /var/tmp/restore.dump
@@ -184,7 +185,7 @@ docker exec "$DB" sh -c 'psql -U "$POSTGRES_USER" -d restore_test -Atc "select v
 docker exec "$DB" sh -c 'dropdb -U "$POSTGRES_USER" restore_test'; shred -u /var/tmp/restore.dump
 ```
 
-Restoring over production after data loss (owner decision, destructive): stop the app (`docker compose -p fitwise stop backend frontend` from the current release directory under `/opt/fitwise/releases/`), restore into a new database as above, then rename: terminate connections, `ALTER DATABASE fitwise RENAME TO fitwise_old; ALTER DATABASE restore_test RENAME TO fitwise;`, start the app, check `/readyz`, and drop `fitwise_old` only after the owner confirms. The dump is the schema and data as of the backup, including `alembic_version`; the running release must be compatible with that revision (migrations are backward compatible, D50). Data written after the backup is lost: at most one day.
+Restoring over production after data loss (owner decision, destructive): start with `umask 077` (the dump is downloaded to `/var/tmp`), stop the app (`docker compose -p fitwise stop backend frontend` from the current release directory under `/opt/fitwise/releases/`), restore into a new database as above, then rename: terminate connections, `ALTER DATABASE fitwise RENAME TO fitwise_old; ALTER DATABASE restore_test RENAME TO fitwise;`, start the app, check `/readyz`, and drop `fitwise_old` only after the owner confirms. The dump is the schema and data as of the backup, including `alembic_version`; the running release must be compatible with that revision (migrations are backward compatible, D50). Data written after the backup is lost: at most one day.
 
 ## Teardown (destructive, owner only)
 
