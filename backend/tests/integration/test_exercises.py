@@ -12,6 +12,7 @@ from app.models import Exercise
 from app.models.exercise import EQUIPMENT, MUSCLE_GROUPS
 from app.seed import run_seed
 from app.seed_exercises import SEED_EXERCISES, load_exercises
+from app.seed_foods import SEED_FOODS, SEED_MEALS
 from tests.contract import assert_matches_schema, schema_validator
 from tests.integration.auth_helpers import Api, field_errors, problem
 
@@ -106,7 +107,10 @@ def test_seed_runs_twice_without_changing_rows(api: Api) -> None:
             ]
 
     with Session(engine) as session:
-        assert run_seed(session) == len(SEED_EXERCISES)
+        assert load_exercises(session) == len(SEED_EXERCISES)
+        assert run_seed(session) == len(SEED_FOODS) + len(SEED_MEALS) + sum(
+            len(m.items) for m in SEED_MEALS
+        )
     first = snapshot()
     with Session(engine) as session:
         assert run_seed(session) == 0

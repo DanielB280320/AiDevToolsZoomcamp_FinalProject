@@ -21,6 +21,7 @@ from app.config import ProcessSettings
 from app.migrate import run_migration_step
 from app.migrations import ALEMBIC_DIR, BACKEND_DIR, load_migration_scripts
 from app.seed_exercises import SEED_EXERCISES
+from app.seed_foods import SEED_FOODS, SEED_MEALS
 from tests.conftest import JsonLogs, unreachable_database_url
 
 # A value that would be health data if it were a real row; it must never reach the logs.
@@ -106,8 +107,9 @@ def test_default_seed_hook_loads_the_exercise_catalog_once(
 ) -> None:
     """The F4.1 hook runs after the migrations and inserts the seed exercises."""
     assert run_migration_step(_settings(fresh_database_url)) == 0
+    meal_rows = len(SEED_MEALS) + sum(len(meal.items) for meal in SEED_MEALS)
     assert [line["count"] for line in json_logs.with_message("seed completed")] == [
-        len(SEED_EXERCISES)
+        len(SEED_EXERCISES) + len(SEED_FOODS) + meal_rows
     ]
 
 

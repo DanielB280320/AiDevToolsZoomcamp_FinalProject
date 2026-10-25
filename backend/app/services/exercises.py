@@ -7,22 +7,17 @@ empty, so a custom exercise is returned to its creator only.
 Nothing here logs: exercise names are user content (spec §6.5).
 """
 
-import base64
-import binascii
-import json
-import uuid
-
 from sqlalchemy import func, or_, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import ProblemError
 from app.models import Exercise, User
-from app.schemas.base import contains_nul
 from app.schemas.exercises import Exercise as ExerciseOut
 from app.schemas.exercises import ExerciseInput, ExercisePage
 from app.schemas.problem import FieldError
 from app.schemas.users import UserRef
+from app.services.paging import decode_cursor, encode_cursor, escape_like
 
 
 def _view(exercise: Exercise, owner: User | None) -> ExerciseOut:
@@ -49,41 +44,6 @@ def _view(exercise: Exercise, owner: User | None) -> ExerciseOut:
     )
 
 
-def _encode_cursor(exercise: Exercise) -> str:
-    raw = json.dumps([exercise.name.lower(), str(exercise.id)]).encode()
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
-
-
-def _bad_cursor() -> ProblemError:
-    return ProblemError(
-        400,
-        "bad_request",
-        "One or more parameters are invalid.",
-        errors=[
-            FieldError(field="cursor", code="invalid_format", message="The cursor is invalid.")
-        ],
-    )
-
-
-def _decode_cursor(cursor: str) -> tuple[str, uuid.UUID]:
-    try:
-        padded = cursor + "=" * (-len(cursor) % 4)
-        name, exercise_id = json.loads(base64.urlsafe_b64decode(padded))
-        if isinstance(name, str) and contains_nul(name):
-            raise _bad_cursor()
-        return str(name) if isinstance(name, str) else _no_name(), uuid.UUID(str(exercise_id))
-    except (binascii.Error, ValueError, TypeError):
-        raise _bad_cursor() from None
-
-
-def _no_name() -> str:
-    raise ValueError("cursor has no name")
-
-
-def _escape_like(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
 def list_exercises(
     session: Session,
     user: User,
@@ -100,7 +60,7 @@ def list_exercises(
     statement = select(Exercise, User).outerjoin(User, User.id == Exercise.owner_id).where(visible)
     if q and q.strip():
         statement = statement.where(
-            func.lower(Exercise.name).like(f"%{_escape_like(q.strip().lower())}%", escape="\\")
+            func.lower(Exercise.name).like(f"%{escape_like(q.strip().lower())}%", escape="\\")
         )
     for column, value in (
         (Exercise.muscle_group, muscle_group),
@@ -111,7 +71,7 @@ def list_exercises(
         if value is not None:
             statement = statement.where(column == value)
     if cursor:
-        last_name, last_id = _decode_cursor(cursor)
+        last_name, last_id = decode_cursor(cursor)
         statement = statement.where(
             tuple_(func.lower(Exercise.name), Exercise.id) > tuple_(last_name, last_id)
         )
@@ -119,7 +79,7 @@ def list_exercises(
         statement.order_by(func.lower(Exercise.name), Exercise.id).limit(limit + 1)
     ).all()
     page = rows[:limit]
-    next_cursor = _encode_cursor(page[-1][0]) if len(rows) > limit else None
+    next_cursor = encode_cursor(page[-1][0].name, page[-1][0].id) if len(rows) > limit else None
     return ExercisePage(items=[_view(e, o) for e, o in page], next_cursor=next_cursor)
 
 
