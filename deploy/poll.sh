@@ -70,4 +70,12 @@ if [ "$sha" = "$(read_tag "$CURRENT_TAG_FILE")" ]; then
 fi
 
 log "poll: deploy/$env_name moved to ${ref_sha:0:12}: release $sha (rate-limit remaining ${remaining:-?})"
+# "Rollback production" (#113) moves the ref back to the release that served before. That release is
+# PREVIOUS_TAG and is stored on this host, so it is started by rollback.sh: no migration step (D50;
+# its schema is already applied, and an older image must never run `alembic upgrade` on a newer
+# database). Any other release goes through the normal deploy.
+if [ "$sha" = "$(read_tag "$PREVIOUS_TAG_FILE")" ] && [ -f "$RELEASES_DIR/$sha/release.env" ]; then
+  log "poll: $sha is PREVIOUS_TAG: rolling back without the migration step"
+  exec "$here/rollback.sh" "$sha"
+fi
 exec "$here/deploy.sh" "$sha" "$backend" "$frontend"

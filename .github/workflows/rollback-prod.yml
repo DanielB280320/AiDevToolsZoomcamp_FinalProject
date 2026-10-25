@@ -1,0 +1,152 @@
+# Rollback production (issue #113; spec §13, D50, D57, D58, ADR 0010). Manual only.
+# Moves the ref `deploy/prod` back to the release that served before the current one. The prod host
+# polls that ref (deploy/poll.sh), recognises the release as its PREVIOUS_TAG and starts it with
+# deploy/rollback.sh: the same single implementation as the automatic rollback and the on-call
+# wrapper, WITHOUT the migration step (D50). No AWS credential, PAT or App: the built-in
+# GITHUB_TOKEN, `contents: write` on the `rollback` job only, which runs in the `production`
+# environment (same required reviewer as "Promote to production").
+#   plan           read-only; works out from -> to from the deploy/prod history, fails before any
+#                  approval is asked when there is no previous release
+#   rollback       waits for the reviewer, re-checks against what prod serves, moves deploy/prod
+#   verify-prod    waits until prod serves the previous SHA, then readyz and the e2e smoke
+name: Rollback production
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-prod # shared with the promotion: never both at once
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Work out the previous release
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      current_sha: ${{ steps.plan.outputs.current_sha }}
+      target_sha: ${{ steps.plan.outputs.target_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Previous release from the deploy/prod history
+        id: plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          scripts/rollback-plan.sh | tee plan.txt
+          {
+            echo "### Rollback plan"
+            echo '```'
+            grep '^rollback plan' plan.txt
+            echo '```'
+            echo "Approve the \`rollback\` job to move \`deploy/prod\` to the target."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rollback:
+    name: Move deploy/prod back (needs approval)
+    needs: [plan]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30 # includes the time the run waits for the reviewer
+    environment: production
+    permissions:
+      contents: write # moves the deploy/prod ref; this job only
+    outputs:
+      base_url: ${{ vars.PROD_BASE_URL }}
+      target_sha: ${{ steps.plan.outputs.target_sha }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Re-check the plan against what prod serves now
+        id: plan
+        run: |
+          : "${PROD_BASE_URL:?set the PROD_BASE_URL variable in the production environment}"
+          # Time has passed since the plan (the approval). The version on prod's /healthz is the
+          # cross-check: the target is the release before the one prod really serves. Unreachable
+          # (host down) => the ref head is taken as current.
+          served="$(curl -fsS --max-time 5 "$PROD_BASE_URL/api/v1/healthz" 2>/dev/null | jq -r '.version // empty' 2>/dev/null || true)"
+          echo "prod serves: ${served:-unreachable}"
+          SERVED="$served" scripts/rollback-plan.sh
+      - name: Move deploy/prod to the previous release
+        env:
+          SHA: ${{ steps.plan.outputs.target_sha }}
+          BACKEND_IMAGE: ${{ steps.plan.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ steps.plan.outputs.frontend_image }}
+          FROM_SHA: ${{ steps.plan.outputs.current_sha }}
+          PLANNED_SHA: ${{ needs.plan.outputs.target_sha }}
+        run: |
+          : "${SHA:?missing}" "${BACKEND_IMAGE:?missing}" "${FRONTEND_IMAGE:?missing}"
+          if [ "$SHA" != "$PLANNED_SHA" ]; then
+            echo "::warning::the target changed between the plan (${PLANNED_SHA:0:12}) and the approval (${SHA:0:12}); using the re-checked one"
+          fi
+          # Same script as promotion: the deploy commit reuses the current deploy/prod tree, so no
+          # .github/workflows change (GITHUB_TOKEN would get a 403) and an older release is fine.
+          new="$(scripts/move-deploy-ref.sh prod "$SHA" "$BACKEND_IMAGE" "$FRONTEND_IMAGE")"
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "deploy/prod -> ${new} (rollback ${FROM_SHA} -> ${SHA}) at ${now}"
+          {
+            echo "### Production rollback approved"
+            echo "- from: \`${FROM_SHA}\`"
+            echo "- to: \`${SHA}\` (approved by the \`production\` environment reviewer)"
+            echo "- ref deploy/prod moved at ${now}; the host restarts it without the migration step (D50)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  verify-prod:
+    name: Prod serves the previous SHA, then smoke
+    needs: [rollback]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      SHA: ${{ needs.rollback.outputs.target_sha }}
+      PROD_BASE_URL: ${{ needs.rollback.outputs.base_url }}
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Wait until prod serves the previous SHA (up to 12 minutes)
+        run: |
+          : "${PROD_BASE_URL:?set the PROD_BASE_URL variable in the production environment}" "${SHA:?no target}"
+          # Poll interval 150 s + rollback (no migration, images already on the host) + health wait.
+          deadline=$((SECONDS + 720))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            v="$(curl -fsS --max-time 5 "$PROD_BASE_URL/api/v1/healthz" 2>/dev/null | jq -r '.version // empty' 2>/dev/null || true)"
+            echo "$(date -u +%H:%M:%SZ) prod serves: ${v:-unreachable}"
+            if [ "$v" = "$SHA" ]; then
+              echo "prod serves $SHA at $(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::prod did not serve $SHA within 12 minutes. Check 'journalctl -u fitwise-deploy' on fitwise-prod; the host's own PREVIOUS_TAG may differ from this SHA, in which case it deployed it normally (deploy/README.md, 'Rollback production')."
+          exit 1
+      - name: readyz returns 200
+        run: curl -fsS --max-time 10 -o /dev/null -w 'readyz HTTP %{http_code}\n' "$PROD_BASE_URL/api/v1/readyz"
+      - name: Playwright smoke test against prod
+        run: |
+          docker run --rm --network host --ipc=host -v "$PWD/e2e:/e2e" -w /e2e \
+            -e CI=true -e E2E_BASE_URL="$PROD_BASE_URL" \
+            "$PLAYWRIGHT_IMAGE" sh -c 'npm ci --no-audit --no-fund && npx playwright test'
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report-prod-rollback
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
