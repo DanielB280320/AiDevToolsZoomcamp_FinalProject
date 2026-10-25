@@ -283,6 +283,7 @@ jobs:
       - run: bash scripts/test-oncall-rollback.sh
       - run: bash scripts/test-obs-mode.sh
       - run: bash scripts/test-backup.sh
+      - run: bash scripts/test-deploy-env.sh
 
   oncall:
     name: On-call responder (ruff, mypy, pytest)
@@ -412,7 +413,7 @@ jobs:
       group: deploy-dev
       cancel-in-progress: false
     permissions:
-      contents: write # moves the deploy/dev ref; this job only. A ruleset on deploy/* lets only GitHub Actions do it.
+      contents: write # moves the deploy/dev ref; this job only
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BACKEND_IMAGE: ${{ needs.publish.outputs.backend_image }}

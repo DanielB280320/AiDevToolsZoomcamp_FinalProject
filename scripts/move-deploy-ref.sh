@@ -22,10 +22,16 @@ repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY not set}"
 ref="deploy/$env_name"
 msg="$(printf 'deploy %s %s\n\nsource: %s\nbackend: %s\nfrontend: %s\n' "$env_name" "$sha" "$sha" "$backend" "$frontend")"
 
-if head="$(gh api "repos/$repo/git/ref/heads/$ref" --jq .object.sha 2>/dev/null)" && [ -n "$head" ]; then
+# Read the current ref. Only a 404 means "no such ref yet" (first deploy); any other failure (5xx,
+# 401/403, network) stops here with the real cause and creates or moves nothing.
+err="$(mktemp)"; trap 'rm -f "$err"' EXIT
+if head="$(gh api "repos/$repo/git/ref/heads/$ref" --jq .object.sha 2>"$err")" && [ -n "$head" ]; then
   tree="$(gh api "repos/$repo/git/commits/$head" --jq .tree.sha)"
   new="$(gh api "repos/$repo/git/commits" -f message="$msg" -f tree="$tree" -f "parents[]=$head" --jq .sha)"
   gh api -X PATCH "repos/$repo/git/refs/heads/$ref" -f sha="$new" -F force=true >/dev/null
+elif ! grep -q 'HTTP 404' "$err"; then
+  echo "cannot read $ref (not a 404, so not creating it): $(tr '\n' ' ' < "$err")" >&2
+  exit 1
 else
   tree="$(printf '%s' '{"tree":[{"path":"README.md","mode":"100644","type":"blob","content":"Release records for the pull-based deploy (ADR 0010). Only the commit message matters; this tree holds no code and no .github/.\n"}]}' |
     gh api "repos/$repo/git/trees" --input - --jq .sha)"
