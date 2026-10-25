@@ -13,6 +13,7 @@ Nothing here logs: dates, plan names and training status are health data (spec �
 import datetime as dt
 import uuid
 from dataclasses import dataclass
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_, select
@@ -20,8 +21,17 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.engines.constants import DEFAULT_REST_SECONDS
 from app.errors import ProblemError
-from app.models import Exercise, Plan, TrainingDay, TrainingSession, User
+from app.models import (
+    Exercise,
+    Plan,
+    PlannedExercise,
+    SetLog,
+    TrainingDay,
+    TrainingSession,
+    User,
+)
 from app.models.plan import WEEKDAYS
 from app.schemas import calendar as out
 from app.services.clock import local_today
@@ -42,7 +52,7 @@ def weekday_of(day: dt.date) -> str:
     return WEEKDAYS[day.weekday()]
 
 
-def _utc_midnight_after(day: dt.date, timezone: str) -> dt.datetime:
+def utc_midnight_after(day: dt.date, timezone: str) -> dt.datetime:
     """Start of the day after `day` in `timezone`, as a UTC instant."""
     start = dt.datetime.combine(day + dt.timedelta(days=1), dt.time.min, ZoneInfo(timezone))
     return start.astimezone(dt.UTC)
@@ -138,23 +148,25 @@ def _materialise(
 
 
 def get_day(db: Session, user: User, date_text: str, now: dt.datetime) -> out.DayView:
+    from app.services import training_log
+
     day = resolve_date(date_text, user, now)
     today = local_today(now, user.timezone)
     tpl = _template(db, user)
     row = _materialise(db, user, tpl, day, now)
-    session_view = _session_view(db, user, row, today) if row else None
-    status = "rest" if session_view is None else session_view.status
+    view = session_view(db, user, row, today) if row else None
+    status = "rest" if view is None else view.status
     return out.DayView(
         date=day,
         weekday=weekday_of(day),  # type: ignore[arg-type]
         is_today=day == today,
         training_status=status,
-        session=session_view,
+        session=view,
         meals=[],
         extra_meal_logs=[],
-        activities=[],
-        energy=out.EnergyBalance(date=day),
-        training_completion=session_view.completion if session_view else None,
+        activities=training_log.day_activities(db, user, day),
+        energy=training_log.day_energy(db, user, day),
+        training_completion=view.completion if view else None,
         nutrition_completion=None,
         pending_suggestions=[],
         notes=[],
@@ -229,48 +241,62 @@ def get_calendar(
 # ───────────── session ─────────────
 
 
-def _session_view(db: Session, user: User, row: TrainingSession, today: dt.date) -> out.Session:
-    training_day = db.scalar(
-        select(TrainingDay)
-        .where(TrainingDay.id == row.training_day_id)
-        .options(selectinload(TrainingDay.exercises))
-    )
-    assert training_day is not None  # noqa: S101 - FK guarantees it
+def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) -> out.Session:
+    from app.services import training_log  # imported late: training_log builds on this module
+
+    training_day, exercises = training_log.load_day(db, row)
     plan = db.get(Plan, row.plan_id)
     assert plan is not None  # noqa: S101 - FK guarantees it
-    exercises = {
-        e.id: e
-        for e in db.scalars(
-            select(Exercise).where(Exercise.id.in_([p.exercise_id for p in training_day.exercises]))
-        )
-    }
+    logs = list(db.scalars(select(SetLog).where(SetLog.session_id == row.id)))
+    _, per_exercise = training_log.session_completion(training_day, exercises, logs)
+    logs_by_exercise: dict[uuid.UUID, dict[int, SetLog]] = {}
+    for log in sorted(logs, key=lambda x: (x.logged_at, x.set_no)):
+        logs_by_exercise.setdefault(log.exercise_id, {})[log.set_no] = log
+
+    def summary(exercise: Exercise) -> dict[str, Any]:
+        return {
+            "id": exercise.id,
+            "name": exercise.name,
+            "type": exercise.type,
+            "equipment": exercise.equipment,
+            "muscle_group": exercise.muscle_group,
+        }
+
+    def set_item(n: int, extra: bool, log: SetLog | None, planned: PlannedExercise | None) -> Any:
+        if log is not None:  # logged sets show the snapshot they were performed against
+            targets = (log.target_reps, log.target_weight_kg, log.target_seconds)
+        elif planned is not None:
+            targets = (planned.reps_min, planned.target_weight_kg, planned.target_seconds)
+        else:
+            targets = (None, None, None)
+        return {
+            "set_no": n,
+            "is_extra": extra,
+            "target_reps": targets[0],
+            "target_weight_kg": targets[1],
+            "target_seconds": targets[2],
+            "log": log,
+        }
+
     items: list[out.SessionExercise] = []
+    planned_exercise_ids: set[uuid.UUID] = set()
     for planned in training_day.exercises:
         exercise = exercises[planned.exercise_id]
+        planned_exercise_ids.add(planned.exercise_id)
+        done = logs_by_exercise.get(planned.exercise_id, {})
+        sets = [set_item(n, False, done.get(n), planned) for n in range(1, planned.sets + 1)]
+        sets += [
+            set_item(n, True, log, planned) for n, log in sorted(done.items()) if n > planned.sets
+        ]
         items.append(
             out.SessionExercise.model_validate(
                 {
                     "planned_exercise_id": planned.id,
-                    "exercise": {
-                        "id": exercise.id,
-                        "name": exercise.name,
-                        "type": exercise.type,
-                        "equipment": exercise.equipment,
-                        "muscle_group": exercise.muscle_group,
-                    },
+                    "exercise": summary(exercise),
                     "order": planned.position,
                     "is_extra": False,
                     "rule": planned.rule,
-                    "sets": [
-                        {
-                            "set_no": n,
-                            "is_extra": False,
-                            "target_reps": planned.reps_min,
-                            "target_weight_kg": planned.target_weight_kg,
-                            "target_seconds": planned.target_seconds,
-                        }
-                        for n in range(1, planned.sets + 1)
-                    ],
+                    "sets": sets,
                     "reps_min": planned.reps_min,
                     "reps_max": planned.reps_max,
                     "rest_seconds": planned.rest_seconds,
@@ -279,9 +305,34 @@ def _session_view(db: Session, user: User, row: TrainingSession, today: dt.date)
                         if planned.target_weight_kg is None and exercise.type != "timed"
                         else None
                     ),
+                    "completion": per_exercise[planned.id].ratio if done else None,
+                    "pending_suggestion_id": None,
+                },
+                from_attributes=True,
+            )
+        )
+    extra_order = max((p.position for p in training_day.exercises), default=0)
+    for exercise_id, done in logs_by_exercise.items():
+        if exercise_id in planned_exercise_ids:
+            continue
+        extra_order += 1
+        items.append(
+            out.SessionExercise.model_validate(
+                {
+                    "planned_exercise_id": None,
+                    "exercise": summary(exercises[exercise_id]),
+                    "order": extra_order,
+                    "is_extra": True,
+                    "rule": None,
+                    "sets": [set_item(n, True, log, None) for n, log in sorted(done.items())],
+                    "reps_min": None,
+                    "reps_max": None,
+                    "rest_seconds": DEFAULT_REST_SECONDS,
+                    "calibration_hint": None,
                     "completion": None,
                     "pending_suggestion_id": None,
-                }
+                },
+                from_attributes=True,
             )
         )
     return out.Session.model_validate(
@@ -297,15 +348,16 @@ def _session_view(db: Session, user: User, row: TrainingSession, today: dt.date)
             "status": _status(row.status, row.date, today),
             "started_at": row.started_at,
             "finished_at": row.finished_at,
-            "editable_until": _utc_midnight_after(row.date + dt.timedelta(days=1), user.timezone),
+            "editable_until": utc_midnight_after(row.date + dt.timedelta(days=1), user.timezone),
             "completion": row.completion,
             "kcal": row.kcal,
             "exercises": items,
-        }
+        },
+        from_attributes=True,
     )
 
 
-def _owned_session(db: Session, user: User, session_id: uuid.UUID) -> TrainingSession:
+def owned_session(db: Session, user: User, session_id: uuid.UUID) -> TrainingSession:
     """403 for an unknown id and for another athlete's session alike (D41: no id enumeration)."""
     row = db.get(TrainingSession, session_id)
     if row is None or row.athlete_id != user.id:
@@ -314,8 +366,8 @@ def _owned_session(db: Session, user: User, session_id: uuid.UUID) -> TrainingSe
 
 
 def get_session(db: Session, user: User, session_id: uuid.UUID, now: dt.datetime) -> out.Session:
-    row = _owned_session(db, user, session_id)
-    return _session_view(db, user, row, local_today(now, user.timezone))
+    row = owned_session(db, user, session_id)
+    return session_view(db, user, row, local_today(now, user.timezone))
 
 
 def _iso_week(day: dt.date) -> tuple[int, int]:
@@ -327,7 +379,7 @@ def move_session(
     db: Session, user: User, session_id: uuid.UUID, target: dt.date, now: dt.datetime
 ) -> out.Session:
     """D45: not finished, same ISO week (Monday start), today or later, target day free."""
-    row = _owned_session(db, user, session_id)
+    row = owned_session(db, user, session_id)
     if user.role != "athlete":
         raise ProblemError(403, "wrong_role", "Only the athlete can move sessions.")
     today = local_today(now, user.timezone)
@@ -354,4 +406,4 @@ def move_session(
     except IntegrityError:
         db.rollback()
         raise ProblemError(409, "day_occupied", "That day already has a session.") from None
-    return _session_view(db, user, row, today)
+    return session_view(db, user, row, today)

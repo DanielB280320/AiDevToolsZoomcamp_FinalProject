@@ -1,7 +1,9 @@
 import { useTranslation } from "react-i18next";
+import { Navigate } from "react-router";
 
 import { useSignedInUser } from "../components/RequireAuth";
 import { localDay } from "../lib/today";
+import { paths } from "../paths";
 
 /**
  * M1 placeholder for the home screen (spec F9). Both roles land here; onboarding (#26) and the
@@ -10,6 +12,8 @@ import { localDay } from "../lib/today";
 export function TodayPage() {
   const { t, i18n } = useTranslation();
   const me = useSignedInUser();
+  // F2.2: a new athlete sets up the plan before seeing Today.
+  if (me.role === "athlete" && !me.onboarding_completed) return <Navigate to={paths.onboarding} replace />;
   const today = localDay(new Date(), me.timezone, i18n.language);
 
   return (
