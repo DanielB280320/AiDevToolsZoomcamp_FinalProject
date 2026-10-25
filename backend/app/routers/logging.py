@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Response
 
 from app.dependencies import CurrentUser, SessionDep, TelemetryDep
+from app.models import Suggestion as Row
 from app.schemas.logging import (
     ActivityInput,
     ActivityResult,
@@ -16,13 +17,20 @@ from app.schemas.logging import (
 )
 from app.schemas.problem import Problem
 from app.schemas.setlog import SetLog
-from app.services import calendar, training_log
+from app.services import calendar, suggestions, training_log
 from app.services.clock import ClockDep, local_today
+from app.services.flags import FlagsDep
+from app.telemetry import Telemetry
 
 router = APIRouter(tags=["Logging"])
 
 _PROBLEM: dict[str, Any] = {"model": Problem}
 _COMMON: dict[int | str, dict[str, Any]] = {400: _PROBLEM, 401: _PROBLEM, 403: _PROBLEM}
+
+
+def _count(telemetry: Telemetry, created: list[Row]) -> None:
+    for row in created:
+        telemetry.metrics.suggestion_generated(row.kind, row.rule)  # type: ignore[arg-type]
 
 
 @router.post(
@@ -46,10 +54,17 @@ def log_set(
     db: SessionDep,
     clock: ClockDep,
     telemetry: TelemetryDep,
+    flags: FlagsDep,
 ) -> SetLog:
     """Log (or re-log) a set; idempotent per (session, exercise, set number) (F10.1)."""
-    log, created = training_log.log_set(db, user, session_id, body, clock.now())
+    now = clock.now()
+    log, created = training_log.log_set(db, user, session_id, body, now)
     telemetry.metrics.set_logged()
+    # Editing a finished session replaces its pending suggestions (F10.3).
+    _count(
+        telemetry,
+        suggestions.refresh_for_session(db, user, session_id, flags.progression_engine, now),
+    )
     if not created:
         response.status_code = 200
     return SetLog.model_validate(log, from_attributes=True)
@@ -67,8 +82,15 @@ def delete_set_log(
     user: CurrentUser,
     db: SessionDep,
     clock: ClockDep,
+    telemetry: TelemetryDep,
+    flags: FlagsDep,
 ) -> Response:
-    training_log.delete_set(db, user, session_id, set_log_id, clock.now())
+    now = clock.now()
+    training_log.delete_set(db, user, session_id, set_log_id, now)
+    _count(
+        telemetry,
+        suggestions.refresh_for_session(db, user, session_id, flags.progression_engine, now),
+    )
     return Response(status_code=204)
 
 
@@ -84,17 +106,20 @@ def finish_session(
     db: SessionDep,
     clock: ClockDep,
     telemetry: TelemetryDep,
+    flags: FlagsDep,
     body: FinishSessionRequest | None = None,
 ) -> FinishSessionResult:
-    """Close the workout: completion (F10.2) and session kcal (F13.2)."""
+    """Close the workout: completion (F10.2), kcal (F13.2) and progression suggestions (F11)."""
     now = clock.now()
     row, first = training_log.finish_session(
         db, user, session_id, body.finished_at if body else None, now
     )
     if first:
         telemetry.metrics.workout_finished()
+    created = suggestions.refresh_for_session(db, user, session_id, flags.progression_engine, now)
+    _count(telemetry, created)
     view = calendar.session_view(db, user, row, local_today(now, user.timezone))
-    return FinishSessionResult(session=view, suggestions=[])
+    return FinishSessionResult(session=view, suggestions=[suggestions.view(db, r) for r in created])
 
 
 @router.post(

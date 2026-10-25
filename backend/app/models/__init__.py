@@ -7,6 +7,7 @@ from app.models.feature_flag import FeatureFlag
 from app.models.food import Food, Meal, MealItem
 from app.models.plan import Plan, PlanChange, PlannedExercise, TrainingDay
 from app.models.session import ExtraActivity, SetLog, TrainingSession
+from app.models.suggestion import Suggestion
 from app.models.user import SignInFailure, User
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "PlannedExercise",
     "SetLog",
     "SignInFailure",
+    "Suggestion",
     "Targets",
     "TrainingDay",
     "TrainingSession",

@@ -34,6 +34,7 @@ from app.models import (
 )
 from app.models.plan import WEEKDAYS
 from app.schemas import calendar as out
+from app.services import suggestions
 from app.services.clock import local_today
 from app.services.plans import CALIBRATION_HINT, resolve_athlete
 
@@ -253,6 +254,10 @@ def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) 
     for log in sorted(logs, key=lambda x: (x.logged_at, x.set_no)):
         logs_by_exercise.setdefault(log.exercise_id, {})[log.set_no] = log
 
+    pending = suggestions.pending_by_planned_exercise(
+        db, row.athlete_id, [p.id for p in training_day.exercises]
+    )
+
     def summary(exercise: Exercise) -> dict[str, Any]:
         return {
             "id": exercise.id,
@@ -306,7 +311,7 @@ def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) 
                         else None
                     ),
                     "completion": per_exercise[planned.id].ratio if done else None,
-                    "pending_suggestion_id": None,
+                    "pending_suggestion_id": pending.get(planned.id),
                 },
                 from_attributes=True,
             )
