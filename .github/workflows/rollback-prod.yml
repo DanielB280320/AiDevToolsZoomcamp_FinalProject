@@ -76,7 +76,10 @@ jobs:
           # cross-check: the target is the release before the one prod really serves. Unreachable
           # (host down) => the ref head is taken as current.
           served="$(curl -fsS --max-time 5 "$PROD_BASE_URL/api/v1/healthz" 2>/dev/null | jq -r '.version // empty' 2>/dev/null || true)"
-          echo "prod serves: ${served:-unreachable}"
+          # Printed only when it is a commit SHA: /healthz is untrusted input to the Actions log.
+          if [ -z "$served" ]; then echo "prod serves: unreachable"
+          elif [[ "$served" =~ ^[0-9a-f]{7,40}$ ]]; then echo "prod serves: $served"
+          else echo "prod serves: a version that is not a commit SHA"; fi
           SERVED="$served" scripts/rollback-plan.sh
       - name: Move deploy/prod to the previous release
         env:
@@ -124,6 +127,7 @@ jobs:
           deadline=$((SECONDS + 720))
           while [ "$SECONDS" -lt "$deadline" ]; do
             v="$(curl -fsS --max-time 5 "$PROD_BASE_URL/api/v1/healthz" 2>/dev/null | jq -r '.version // empty' 2>/dev/null || true)"
+            [[ -z "$v" || "$v" =~ ^[0-9a-f]{7,40}$ ]] || v="(not a commit SHA)"
             echo "$(date -u +%H:%M:%SZ) prod serves: ${v:-unreachable}"
             if [ "$v" = "$SHA" ]; then
               echo "prod serves $SHA at $(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$GITHUB_STEP_SUMMARY"
