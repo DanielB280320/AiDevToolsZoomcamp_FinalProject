@@ -306,7 +306,8 @@ def test_completion_is_sum_of_min_actual_target_over_planned_sets(athlete: Api) 
     assert body["session"]["completion"] == pytest.approx(612 / 624, abs=1e-4)
     strength = body["session"]["exercises"][0]
     assert strength["completion"] == pytest.approx(12 / 24, abs=1e-4)
-    assert body["suggestions"] == []
+    # Suggestions are covered by test_suggestions.py: one per performed exercise.
+    assert [x["payload"]["exercise"]["type"] for x in body["suggestions"]] == ["strength", "timed"]
 
 
 def test_unlogged_planned_sets_count_as_zero(athlete: Api) -> None:
