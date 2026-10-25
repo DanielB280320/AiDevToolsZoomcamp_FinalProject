@@ -119,7 +119,6 @@
   "today": {
     "greeting": "Hi, {{name}}",
     "placeholder": {
-      "athlete": "Today's session, meals and energy balance will appear here once your plan is set up.",
       "coach": "Your athletes and their latest days will appear here."
     }
   },
@@ -131,5 +130,80 @@
   "errors": {
     "unexpected": "FitWise couldn't complete the request because of a problem on the server. Try again in a minute.",
     "network": "FitWise can't be reached. Check your connection and try again."
+  },
+  "calendar": {
+    "loading": "Loading your calendar…",
+    "loadFailed": "FitWise couldn't load your calendar. Check your connection and try again.",
+    "restDay": "Rest day",
+    "noMeals": "No meals planned",
+    "moved": "Moved here",
+    "todayMarker": "Today",
+    "meals": "{{eaten}} of {{planned}} meals eaten",
+    "nav": {
+      "label": "Calendar views",
+      "today": "Today",
+      "week": "Week",
+      "month": "Month"
+    },
+    "status": {
+      "done": "Done",
+      "partial": "Partial",
+      "missed": "Missed",
+      "rest": "Rest",
+      "planned": "Planned"
+    },
+    "range": {
+      "current": "Jump to current"
+    },
+    "week": {
+      "title": "{{from}} to {{to}}",
+      "prev": "Previous week",
+      "next": "Next week",
+      "listLabel": "Days of the week"
+    },
+    "month": {
+      "prev": "Previous month",
+      "next": "Next month",
+      "listLabel": "Days of the month",
+      "nutrition": "{{percent}}%",
+      "legend": "Badge: training status. Percentage: planned meals eaten. Select a day to see its week."
+    },
+    "move": {
+      "open": "Move",
+      "label": "Move {{name}} to",
+      "confirm": "Move session",
+      "moving": "Moving…",
+      "cancel": "Cancel",
+      "errors": {
+        "day_occupied": "That day already has a session. Pick another day.",
+        "session_finished": "This session is already finished, so it can't be moved.",
+        "outside_week": "A session can only move within its own week.",
+        "date_in_past": "A session can't move to a day that has passed.",
+        "generic": "The session couldn't be moved. Try again."
+      }
+    },
+    "today": {
+      "training": "Training",
+      "meals": "Meals",
+      "energy": "Estimated energy today",
+      "sets_one": "{{count}} set",
+      "sets_other": "{{count}} sets",
+      "reps_one": "{{count}} rep",
+      "reps_other": "{{count}} reps",
+      "seconds": "{{count}} s",
+      "slot": {
+        "breakfast": "Breakfast",
+        "lunch": "Lunch",
+        "dinner": "Dinner",
+        "snack": "Snack"
+      },
+      "mealEaten": "Eaten",
+      "kcal": "{{count}} kcal (estimated)",
+      "eaten": "Eaten (kcal)",
+      "burned": "Burned (kcal)",
+      "balance": "Balance (kcal)",
+      "estimated": "All calorie numbers are estimates.",
+      "attention": "{{suggestions}} suggestions and {{notes}} coach notes are waiting for you."
+    }
   }
 }

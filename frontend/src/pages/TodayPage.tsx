@@ -1,11 +1,13 @@
 import { useTranslation } from "react-i18next";
 
 import { useSignedInUser } from "../components/RequireAuth";
+import { CalendarNav } from "../features/calendar/CalendarNav";
+import { TodayView } from "../features/calendar/TodayView";
 import { localDay } from "../lib/today";
 
 /**
- * M1 placeholder for the home screen (spec F9). Both roles land here; onboarding (#26) and the
- * coach dashboard (#48) replace the body later. "Today" is the user's day in `Me.timezone`.
+ * Home screen (spec F9). Athletes see their day (#28); the coach
+ * dashboard (#48) replaces the coach placeholder later. "Today" is the user's day in `Me.timezone`.
  */
 export function TodayPage() {
   const { t, i18n } = useTranslation();
@@ -14,6 +16,7 @@ export function TodayPage() {
 
   return (
     <article className="max-w-[40rem]">
+      {me.role === "athlete" && <CalendarNav />}
       <p className="text-step-1 text-slate">{t("today.greeting", { name: me.display_name })}</p>
       <h1 className="mt-2 font-display font-bold">
         <time dateTime={today.isoDate} className="block">
@@ -23,9 +26,11 @@ export function TodayPage() {
           </span>
         </time>
       </h1>
-      <p className="mt-8 max-w-[52ch] border-t-4 border-iron pt-4 text-step-0">
-        {me.role === "coach" ? t("today.placeholder.coach") : t("today.placeholder.athlete")}
-      </p>
+      {me.role === "coach" ? (
+        <p className="mt-8 max-w-[52ch] border-t-4 border-iron pt-4 text-step-0">{t("today.placeholder.coach")}</p>
+      ) : (
+        <TodayView me={me} />
+      )}
     </article>
   );
 }

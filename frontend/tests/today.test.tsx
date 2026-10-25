@@ -62,7 +62,6 @@ describe("Today page", () => {
   });
 
   it.each<["athlete" | "coach", string]>([
-    ["athlete", en.today.placeholder.athlete],
     ["coach", en.today.placeholder.coach],
   ])("shows the M1 placeholder for a %s", async (role, text) => {
     server.use(meOk(meFixture({ role })));
