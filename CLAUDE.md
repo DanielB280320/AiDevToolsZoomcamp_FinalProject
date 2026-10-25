@@ -13,7 +13,7 @@ It is the final project of the AI Dev Tools Zoomcamp 2026 and is built by a team
 | [docs/team.md](docs/team.md) | Agent team: orchestrator, PM, Engineer, QA, DevOps/SRE — responsibilities and hand-offs. Definitions in `.claude/agents/` | ✅ |
 | [docs/architecture.md](docs/architecture.md) | Components, request flow for the key journey, environments, key design decisions | ✅ |
 | [docs/adr/](docs/adr/README.md) | Architecture decision records (template `0000-template.md` + ADRs 0001–0007) | ✅ |
-| `docs/runbooks/` | Incident runbooks used by the on-call agent | planned (M1) |
+| [docs/runbooks/](docs/runbooks/README.md) | Incident runbooks used by the on-call agent | ✅ |
 | [openapi.yaml](openapi.yaml) | API contract (written before implementation) | ✅ |
 
 When a requirement is unclear, check `docs/spec.md` first; if it doesn't answer the question, ask instead of guessing, and record the outcome in the spec (decisions log §19 or an ADR).

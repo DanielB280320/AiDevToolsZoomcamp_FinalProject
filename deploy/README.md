@@ -154,6 +154,38 @@ curl -s http://<dev-ip>/api/v1/healthz; curl -s http://<prod-ip>/api/v1/healthz
 aws ec2 describe-security-groups --group-names fitwise-prod --query 'SecurityGroups[0].IpPermissions[].[FromPort,IpRanges[].CidrIp]'
 ```
 
+## Database backups (issue #66)
+
+```
+fitwise-backup.timer (03:00 UTC, +-10 min, Persistent) -> fitwise-backup.service -> /opt/fitwise/bin/backup.sh
+  docker exec db pg_dump -Fc  ->  pg_restore --list (validation)  ->  s3://fitwise-prod-backups-<account id>/prod/<UTC timestamp>.dump
+```
+
+- **AWS side** (`deploy/provision-backups.sh`, idempotent, run once by the owner or an approved agent with AWS CLI access): bucket `fitwise-prod-backups-<account id>` in us-east-2 with all four public-access blocks on, default SSE-S3 encryption, TLS-only bucket policy and lifecycle rule `expire-prod-dumps` (prefix `prod/`, expire after 7 days). IAM role and instance profile `fitwise-ec2-prod` (SSM managed policy plus inline policy `fitwise-prod-backup-bucket`: `s3:PutObject`/`s3:GetObject` on `prod/*`, `s3:ListBucket` for prefix `prod/`, nothing else) is attached to the prod instance. The dev host keeps `fitwise-ec2-ssm` and cannot read production dumps. Cost: well under USD 0.01 per month.
+- **Host side**: `deploy/bootstrap.sh` installs `backup.sh`, the service and the timer on prod only (`deploy/bootstrap-remote.sh prod`, idempotent). Credentials come from the instance role; the bucket name is derived from the account ID (override: `BACKUP_BUCKET=` in `/etc/fitwise-backup.env`).
+- **Failure is visible.** Any error (container down, dump or validation failure, upload failure) exits non-zero: the unit is `failed` (`systemctl --failed`, `systemctl status fitwise-backup`) and the reason is in `journalctl -u fitwise-backup -o cat`. Nothing is uploaded on a pre-upload failure. The log holds only the key, size and statuses. `/opt/fitwise/LAST_BACKUP` records the last success (time, key, bytes). Tests: `bash scripts/test-backup.sh` (CI job `deploy-script-tests`).
+- **Run one now / list:** `sudo systemctl start fitwise-backup.service; journalctl -u fitwise-backup -o cat -n 5` and `sudo aws s3 ls s3://fitwise-prod-backups-<account id>/prod/` (on the host) or the same `aws s3 ls` with owner credentials.
+
+### Restore procedure
+
+Restoring into a scratch database (this is also the test; do it after the first backup and after any change to the schema tooling). On `fitwise-prod` as root:
+
+```bash
+B=fitwise-prod-backups-$(aws sts get-caller-identity --query Account --output text)
+KEY=$(aws s3 ls "s3://$B/prod/" | sort | tail -n1 | awk '{print $4}')      # newest dump
+aws s3 cp "s3://$B/prod/$KEY" /var/tmp/restore.dump
+DB=$(docker ps -qf label=com.docker.compose.service=db -f label=com.docker.compose.project=fitwise)
+docker exec "$DB" sh -c 'createdb -U "$POSTGRES_USER" restore_test'
+docker exec -i "$DB" sh -c 'pg_restore -U "$POSTGRES_USER" -d restore_test --no-owner --exit-on-error' < /var/tmp/restore.dump
+# check: same alembic revision and plausible row counts as the live database
+docker exec "$DB" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select version_num from alembic_version"'
+docker exec "$DB" sh -c 'psql -U "$POSTGRES_USER" -d restore_test -Atc "select version_num from alembic_version"'
+# clean up
+docker exec "$DB" sh -c 'dropdb -U "$POSTGRES_USER" restore_test'; shred -u /var/tmp/restore.dump
+```
+
+Restoring over production after data loss (owner decision, destructive): stop the app (`docker compose -p fitwise stop backend frontend` from the current release directory under `/opt/fitwise/releases/`), restore into a new database as above, then rename: terminate connections, `ALTER DATABASE fitwise RENAME TO fitwise_old; ALTER DATABASE restore_test RENAME TO fitwise;`, start the app, check `/readyz`, and drop `fitwise_old` only after the owner confirms. The dump is the schema and data as of the backup, including `alembic_version`; the running release must be compatible with that revision (migrations are backward compatible, D50). Data written after the backup is lost: at most one day.
+
 ## Teardown (destructive, owner only)
 
 Terminate instances, release Elastic IPs, delete security groups and the role/profile by the `Project=fitwise` tag. Never done by agents without explicit owner confirmation.

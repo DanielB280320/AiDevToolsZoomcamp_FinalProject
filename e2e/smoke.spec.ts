@@ -4,7 +4,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 /**
  * Smoke journey (#65, spec §10 journey 1 in its M1 form, §13 post-deploy smoke):
- * sign up a fresh athlete -> Today -> sign out -> sign in -> Today.
+ * sign up a fresh athlete -> onboarding wizard -> Today -> sign out -> sign in -> Today.
  *
  * Runs unchanged against `make up`, dev and prod (base URL: playwright.config.ts), so it only uses
  * fake data: a unique address on the reserved `.test` domain (RFC 2606, never deliverable), a
@@ -80,6 +80,40 @@ test("smoke: sign up a new athlete, see Today, sign out, sign in again", async (
     await expect(disclaimer).toBeChecked();
 
     await page.getByRole("button", { name: "Create account" }).click();
+  });
+
+  await test.step("completes the onboarding wizard and reads the targets before leaving", async () => {
+    await expect(page).toHaveURL(/\/onboarding$/);
+    // Radios and checkboxes are visually hidden inside labels: click the label, as a user would.
+    const choose = (label: RegExp) => page.locator("label").filter({ hasText: label }).first().click();
+    const next = () => page.getByRole("button", { name: "Next", exact: true }).click();
+
+    await expect(page.getByRole("heading", { level: 1, name: "Your body" })).toBeVisible();
+    await choose(/^Female/);
+    await page.getByLabel(/^Height/).fill("170");
+    await page.getByLabel(/^Weight/).fill("65");
+    await next();
+    await choose(/^Skip/);
+    await next();
+    await choose(/^Lightly active/);
+    await next();
+    await choose(/^Maintenance/);
+    await next();
+    await choose(/^Beginner/);
+    await choose(/^3 days/);
+    for (const day of ["Mon", "Wed", "Fri"]) await choose(new RegExp(`^${day}$`));
+    await choose(/^60 min/);
+    await choose(/^Full gym/);
+    await next();
+    await choose(/^Omnivore/);
+    await choose(/^3 meals/);
+    await next();
+    await expect(page.getByRole("heading", { level: 1, name: "Check your answers" })).toBeVisible();
+    await page.getByRole("button", { name: "Create my plan" }).click();
+
+    await expect(page.getByRole("heading", { level: 1, name: "Your plan is ready" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "How we calculated this" })).toBeVisible();
+    await page.getByRole("link", { name: "Go to Today" }).click();
   });
 
   await test.step("lands on Today with the display name and today's date", async () => {

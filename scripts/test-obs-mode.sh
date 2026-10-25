@@ -41,7 +41,7 @@ out="$(compose_release "$sha" ps)"
 case "$out" in *compose.observability*) bad "obs files used while off";; *) ok "off: app files only";; esac
 
 # Overlay shape: prod publishes OTLP gRPC + reads config from OBS_CONFIG_DIR; dev only the collector.
-grep -q '4317:4317' "$root/deploy/compose.obs-full.yaml" && ok "prod overlay publishes OTLP gRPC" || bad "prod overlay does not publish 4317"
+grep -q 'OTLP_GRPC_PORT:-4317}:4317' "$root/deploy/compose.obs-full.yaml" && ok "prod overlay publishes OTLP gRPC" || bad "prod overlay does not publish 4317"
 grep -q 'OTLP_GRPC_BIND:-127.0.0.1' "$root/deploy/compose.obs-full.yaml" && ok "OTLP binds to loopback unless the host env says otherwise" || bad "OTLP default bind is not loopback"
 ! grep -q 'prometheus\|grafana\|loki\|tempo' "$root/deploy/compose.obs-forward.yaml" && ok "dev overlay touches only the collector" || bad "dev overlay mentions a storage service"
 ! grep -Eq 'PASSWORD: *[A-Za-z0-9]' "$root"/deploy/compose.obs-*.yaml && ok "no literal passwords in the overlays" || bad "literal password in an overlay"
