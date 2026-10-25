@@ -5,7 +5,7 @@ from app.models.base import Base
 from app.models.exercise import Exercise
 from app.models.feature_flag import FeatureFlag
 from app.models.plan import Plan, PlanChange, PlannedExercise, TrainingDay
-from app.models.session import TrainingSession
+from app.models.session import ExtraActivity, SetLog, TrainingSession
 from app.models.user import SignInFailure, User
 
 __all__ = [
@@ -13,10 +13,12 @@ __all__ = [
     "Base",
     "BodyMetric",
     "Exercise",
+    "ExtraActivity",
     "FeatureFlag",
     "Plan",
     "PlanChange",
     "PlannedExercise",
+    "SetLog",
     "SignInFailure",
     "Targets",
     "TrainingDay",
