@@ -11,7 +11,7 @@
 # rolled itself back: the ref head is then the failed release, the host serves the one before it, and the
 # rollback must go to the release before THAT. If SERVED is given but is not in the history, the script
 # refuses (it will not guess).
-# Only a release that was GOOD on prod is a target (issue #122, D66). A record is good when the run that
+# Only a release that was GOOD on prod is a target (issue #122, D67). A record is good when the run that
 # wrote it ("Promote to production" or "Rollback production", named by the `run:` line of the record)
 # finished successfully, which means its last job (prod serves the SHA, readyz, e2e smoke) passed;
 # looked up with the workflow's GITHUB_TOKEN (actions: read). A release that failed on the host and was

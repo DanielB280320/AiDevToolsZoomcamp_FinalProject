@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests deploy/rollback.sh state handling (#122, D66): PREVIOUS_TAG after a rollback, ROLLED_BACK_FROM,
+# Tests deploy/rollback.sh state handling (#122, D67): PREVIOUS_TAG after a rollback, ROLLED_BACK_FROM,
 # and the refusals of a no-argument rollback. No docker, no network: fake docker and curl, temp APP_DIR.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; root="$here/.."

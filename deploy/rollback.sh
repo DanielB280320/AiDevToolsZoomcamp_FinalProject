@@ -9,7 +9,7 @@
 # reports; ROLLBACK_FROM overrides it, deploy.sh passes the failed release). The poller does not
 # redeploy a rolled-back tag: it acts again only when the approved ref moves.
 # A rollback WITHOUT an argument (on-call) is refused when it would go nowhere or back to the release
-# that was just rolled back from; going forward again is "Promote to production" (#122, D66).
+# that was just rolled back from; going forward again is "Promote to production" (#122, D67).
 # Exit: 0 rolled back and healthy | 1 failed | 3 nothing to roll back to (PREVIOUS_TAG empty or equal
 #       to CURRENT_TAG) | 4 refused: the target is the release that was rolled back from
 set -euo pipefail
