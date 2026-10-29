@@ -62,6 +62,7 @@ if demo_health_fail; then
 elif wait_healthy "$sha"; then
   if [ -n "$cur" ] && [ "$cur" != "$sha" ]; then write_state "$PREVIOUS_TAG_FILE" "$cur"; fi
   write_state "$CURRENT_TAG_FILE" "$sha"
+  rm -f "$ROLLED_BACK_FROM_FILE"   # a new release is serving: the old "rolled back from" note is stale (#122)
   log "deploy: OK, serving $sha (previous: $(read_tag "$PREVIOUS_TAG_FILE"))"
   # Telemetry stack (prod: full, dev: forwarder). Best effort: never changes the deploy result (#67).
   "$here/obs.sh" "$sha" || log "deploy: obs.sh failed (ignored)"
@@ -77,7 +78,7 @@ log "deploy: $sha is NOT healthy; rolling back"
 compose_release "$sha" logs --no-color --tail 15 backend 2>&1 | sed 's/^/  backend: /' || true
 if [ -n "$cur" ]; then
   # CURRENT_TAG still names the release that was serving; PREVIOUS_TAG is not touched.
-  if "$here/rollback.sh" "$cur"; then
+  if ROLLBACK_FROM="$sha" "$here/rollback.sh" "$cur"; then
     log "deploy: FAILED $sha, rolled back to $cur"
     exit 1
   fi

@@ -1,0 +1,5 @@
+# Releases that served healthy on prod but were promoted before deploy commits carried a `run:` line
+# (issue #122, D66). scripts/rollback-plan.sh treats a record without `run:` as good only if its source
+# SHA is listed here. Full 40-hex SHAs, one per line. Do not add to this list after the first release
+# promoted with a `run:` line; 5005280817ced5daeb2eb13ccb663254dc9b9267 failed on prod and is NOT listed.
+e769145fb4686dcd0a19777f156f025667a8d531

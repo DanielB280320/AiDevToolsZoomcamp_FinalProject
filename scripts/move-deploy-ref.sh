@@ -21,6 +21,9 @@ repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY not set}"
 
 ref="deploy/$env_name"
 msg="$(printf 'deploy %s %s\n\nsource: %s\nbackend: %s\nfrontend: %s\n' "$env_name" "$sha" "$sha" "$backend" "$frontend")"
+# The run that writes the record is named in it (#122): "Rollback production" asks the Actions API
+# whether that run reached a successful prod verification. The host ignores this line.
+if [[ "${GITHUB_RUN_ID:-}" =~ ^[0-9]{1,20}$ ]]; then msg="$(printf '%s\nrun: %s\n' "$msg" "$GITHUB_RUN_ID")"; fi
 
 # Read the current ref. Only a 404 means "no such ref yet" (first deploy); any other failure (5xx,
 # 401/403, network) stops here with the real cause and creates or moves nothing.
