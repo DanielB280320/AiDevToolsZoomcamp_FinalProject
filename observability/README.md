@@ -75,6 +75,47 @@ second, independent gate with the **same** allow-lists:
   segment is a sensitive name are dropped, status messages are cleared, exception events keep the
   class name only.
 - Metrics: labels outside `METRIC_ATTRIBUTES` are dropped.
+- Resource and scope attributes (every prod pipeline, #130): `transform/resource_allowlist` keeps
+  only `service.name`, `service.version`, `deployment.environment.name` and `env` (what
+  `make_resource` sets) and clears all scope attributes, before `resource/env` runs. A sender that
+  attaches `host.name`, `process.*` or free-form attributes loses them.
+- Logs forwarded over OTLP (`logs/forwarded`, dev -> prod): the sender is not trusted to have gated.
+  A non-string body (map, array, bytes) is blanked before the email/token scrubbing, the log
+  attribute allow-list is re-applied, and a record left with an empty body and no attributes is
+  dropped (`filter/empty_forwarded_logs`).
+
+`backend/tests/unit/test_collector_hardening_runtime.py` runs the real collector image (file
+exporters instead of Tempo/Prometheus/Loki, ephemeral port, skipped without Docker) against hostile
+OTLP/HTTP payloads for these three cases. Validate the configs the way the hosts load them:
+
+```bash
+docker run --rm -e FITWISE_ENV=x -e OTLP_UPSTREAM_ENDPOINT=h:4317 -v "$PWD/observability/collector:/c:ro" \
+  otel/opentelemetry-collector-contrib:0.161.0 validate --config=/c/config.yaml                       # prod / local
+docker run --rm -e FITWISE_ENV=x -e OTLP_UPSTREAM_ENDPOINT=h:4317 -v "$PWD/observability/collector:/c:ro" \
+  otel/opentelemetry-collector-contrib:0.161.0 validate --config=/c/config.yaml --config=/c/config.forward.yaml   # dev
+```
+
+### Do dev logs reach prod Loki with `env="dev"`? (live check, not testable in CI)
+
+By construction yes: the dev backend logs `env=dev`, dev's `groupbyattrs/logs` moves it to the
+resource, the resource allow-list keeps it, `resource/env` never overwrites it, prod's
+`logs/forwarded` pipeline keeps it, and Loki indexes `env` as a label (the runtime test sends
+`env=dev` through `logs/forwarded` and asserts it is preserved). The one thing no test can show is
+that the deployed dev host is in `OBS_MODE=forward` and sending. Read-only check on **prod** after a
+dev deploy and some dev traffic (`curl http://<dev-ip>/api/v1/healthz`), over an SSM session:
+
+```bash
+# on fitwise-prod (reads the Grafana admin password; run in your own terminal)
+PW=$(sudo grep '^GRAFANA_ADMIN_PASSWORD=' /opt/fitwise/.env | cut -d= -f2-)
+curl -s -u "admin:$PW" http://127.0.0.1:3000/api/datasources/proxy/uid/loki/loki/api/v1/label/env/values
+#   expect {"data":["dev","prod"]}
+curl -s -u "admin:$PW" -G http://127.0.0.1:3000/api/datasources/proxy/uid/loki/loki/api/v1/query_range \
+  --data-urlencode 'query={env="dev"}' --data-urlencode 'limit=5' --data-urlencode 'since=15m'
+#   expect streams with service_name="fitwise-backend", env="dev"
+# if it is empty, on fitwise-dev: grep OBS_MODE /opt/fitwise/.env; sudo docker logs --tail 50 <otel container>
+```
+
+Equivalent in Grafana Explore (Loki): `{env="dev"}`.
 
 `backend/tests/unit/test_collector_allow_lists.py` fails when the collector and `privacy.py` drift
 apart: **adding a field to the app's allow-list means adding it to `collector/config.yaml` too.**
