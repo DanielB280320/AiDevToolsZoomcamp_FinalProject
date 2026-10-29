@@ -705,7 +705,8 @@ Both include the affected route, time window, dashboard link and runbook link, h
   - `oncall/ops/rollback.sh` (redeploy `PREVIOUS_TAG`)
   - `oncall/ops/restart.sh <service>` (backend or frontend only)
   - `gh issue create`, and `git` + `gh pr create` on a separate clone (branch push only, never to `main`)
-- No database writes, no secrets access beyond its own env file, no arbitrary shell. Timeout 20 min. API key with a spend limit.
+- No database writes, no secrets access beyond its own env file, no arbitrary shell. Timeout 20 min. API key with a spend limit: USD 5 per incident run (`--max-budget-usd`, `ONCALL_AGENT_MAX_BUDGET_USD`) and a monthly limit of USD 20 on the key in the Anthropic Console (set by the owner; the key lives only in `/etc/fitwise-oncall.env`, root-only).
+- Enforcement (#69): the allow-list is the agent's `--settings` permission rules (default mode `dontAsk`), and a `PreToolUse` guard hook re-checks every Bash/Read/Write/Edit call against the exact allowed shapes, refuses chained commands, and lets only the first of `flag.sh`/`rollback.sh`/`restart.sh` run per incident. On the host the agent is the unprivileged `fitwise-oncall` user (no docker group); compose and rollback go through `sudo -n` helpers that validate their arguments again. The full transcript is saved to `incidents/<id>/transcript`.
 
 **Flow:** alert fires → agent investigates → applies **one runtime mitigation** (flag / rollback / restart) → verifies recovery (error ratio / latency back under threshold for 5 min) → opens a **GitHub issue** with an incident report (timeline, evidence, mitigation) → opens a **PR** with the root-cause fix that goes through normal CI/CD and human review.
 

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# `docker` as seen by the on-call agent (issue #69): first on its PATH, so `docker compose ps` and
+# `docker compose logs` work without the agent having Docker access. Everything goes through the
+# root helper, which accepts read-only ps/logs, restart of backend|frontend and the flag CLI only.
+# Installed as /opt/fitwise-oncall/shim/docker by deploy/install-oncall.sh.
+set -euo pipefail
+if [ "${1:-}" != compose ]; then
+  echo "error: only 'docker compose ps|logs' is available here" >&2
+  exit 2
+fi
+shift
+exec sudo -n /opt/fitwise/bin/oncall-compose.sh "$@"

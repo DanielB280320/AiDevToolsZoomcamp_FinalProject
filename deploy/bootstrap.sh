@@ -101,6 +101,7 @@ install_file fitwise-deploy.timer /etc/systemd/system/fitwise-deploy.timer 644
 # (deploy/provision-backups.sh); no AWS keys on the host.
 if [ "$ENV_NAME" = prod ]; then
   install_file backup.sh "$APP_DIR/bin/backup.sh" 755
+  install_file oncall-compose.sh "$APP_DIR/bin/oncall-compose.sh" 755   # root helper of the on-call agent (#69)
   install_file fitwise-backup.service /etc/systemd/system/fitwise-backup.service 644
   install_file fitwise-backup.timer /etc/systemd/system/fitwise-backup.timer 644
 fi
