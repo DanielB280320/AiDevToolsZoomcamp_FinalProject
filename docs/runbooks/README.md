@@ -24,7 +24,7 @@ The scenarios show the agent end to end. They run after the logging endpoints ex
 | # | Fault | Alert | Expected mitigation | Follow-up PR |
 |---|---|---|---|---|
 | S1 | **Bad release**: a build where finishing a workout raises an error is promoted to prod through "Promote to production" | KeyJourneyErrors on `/api/v1/sessions/{session_id}/finish` | `oncall/ops/rollback.sh` (previous tag) | Fix plus a regression test, promoted through "Promote to production" |
-| S2 | **Faulty engine version**: `progression_engine=v2` is enabled and v2 fails on bodyweight exercises | KeyJourneyErrors | `oncall/ops/flag.sh progression_engine v1` | Fix v2 plus a test |
+| S2 | **Faulty engine version**: `progression_engine=v2` is enabled and v2 fails on bodyweight exercises (demo-only fault in `backend/app/engines/progression_v2.py`, off unless the flag is set; default `v1`) | KeyJourneyErrors | `oncall/ops/flag.sh progression_engine v1` | Fix v2 plus a test |
 | S3 (optional) | **Latency fault**: the `fault_injection_latency_ms` flag adds a delay to the logging endpoints | KeyJourneyLatency | `oncall/ops/flag.sh fault_injection_latency_ms 0` | Runbook note |
 
 How to trigger the faults (owner or DevOps, never the agent):
