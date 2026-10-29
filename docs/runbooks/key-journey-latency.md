@@ -102,7 +102,7 @@ Apply **one** mitigation, the first row whose evidence matches. If no row matche
 | A "feature flag changed" line for `progression_engine` to `v2` shortly before the slowdown, and slow spans are `engine.progression` | Return the engine flag to its safe value | `oncall/ops/flag.sh progression_engine v1` |
 | Slow spans are outgoing HTTP calls to Open Food Facts and `off_search_enabled` is `true` | Turn the upstream feature off (the app degrades to `available: false`) | `oncall/ops/flag.sh off_search_enabled false` |
 | Slowdown began within a few minutes after a new `service_version` first appeared in the logs, no flag changed, the 15-minutes-ago p95 was under 1 s | Roll back to the previous release | `oncall/ops/rollback.sh` |
-| No deploy or flag change, `docker compose ps` shows the backend restarting or unhealthy, or latency grows steadily with no matching slow span | Restart the backend container | `oncall/ops/restart.sh backend` (until #69 lands: escalate to the owner) |
+| No deploy or flag change, `docker compose ps` shows the backend restarting or unhealthy, or latency grows steadily with no matching slow span | Restart the backend container | `oncall/ops/restart.sh backend` |
 | Slow spans are database spans, the host is saturated, or traffic volume is far above normal with healthy spans | No mitigation is on the allow-list. Open the incident issue and page the owner | none |
 | Few requests (a handful in 10 min), one slow outlier, p50 normal | No mitigation. Keep watching, open the issue | none |
 

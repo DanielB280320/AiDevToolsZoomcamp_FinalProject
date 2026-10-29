@@ -2,8 +2,8 @@
 
 ONCALL_LAUNCHER_CMD is a command line (split like a shell would, but run without a shell). The
 incident folder is appended as the last argument and also passed as ONCALL_INCIDENT_DIR and
-ONCALL_INCIDENT_ID. With no command configured the hook only logs; #69 supplies the real one
-(headless Claude Code with an allow-list).
+ONCALL_INCIDENT_ID (a test seam). With ONCALL_AGENT_ENABLED=1 the hook is the headless Claude
+Code run in responder/agent.py (#69). With neither configured the hook only logs.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import os
 import subprocess
 import time
 
+from responder.agent import run_agent
 from responder.config import Settings
 from responder.log import log
 from responder.store import Incident
@@ -19,6 +20,8 @@ from responder.store import Incident
 
 def launch(incident: Incident, settings: Settings) -> int | None:
     """Run the hook; returns its exit code, or None if no hook is configured or it timed out."""
+    if settings.agent_enabled:
+        return run_agent(incident, settings)
     if not settings.launcher_cmd:
         log("launcher_noop", incident_id=incident.id, launcher="none")
         return None

@@ -1,0 +1,31 @@
+[Unit]
+Description=FitWise on-call responder (Grafana webhook receiver and headless Claude Code agent, issue #69)
+Documentation=https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/blob/main/oncall/README.md
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+User=fitwise-oncall
+Group=fitwise-oncall
+# Root-only (0600 root:root), read by systemd before it drops privileges. Holds only the responder's
+# own secrets: ONCALL_WEBHOOK_PASSWORD, ANTHROPIC_API_KEY, GH_TOKEN, plus plain settings.
+EnvironmentFile=/etc/fitwise-oncall.env
+# The agent's PATH: the docker shim first (compose ps/logs through the root helper), no docker group.
+Environment=PATH=/opt/fitwise-oncall/shim:/usr/local/bin:/usr/bin:/bin
+Environment=ONCALL_INCIDENTS_DIR=/var/lib/fitwise-oncall/incidents
+Environment=ONCALL_AGENT_HOME=/var/lib/fitwise-oncall/home
+Environment=ONCALL_CLONE_DIR=/var/lib/fitwise-oncall/clone
+Environment=ONCALL_REPO_DIR=/opt/fitwise-oncall/app
+WorkingDirectory=/opt/fitwise-oncall/app/oncall
+ExecStart=/opt/fitwise-oncall/venv/bin/python -m responder
+Restart=on-failure
+RestartSec=5
+# Not NoNewPrivileges: oncall/ops/rollback.sh and the compose helper use `sudo -n`.
+PrivateTmp=true
+ProtectHome=true
+# An agent run lasts at most 20 min and is killed by the responder; stopping the service kills the rest.
+KillMode=control-group
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -15,7 +15,7 @@ Incident runbooks for the on-call agent ([spec §15.2](../spec.md#152-on-call-re
 - No health data in issues or logs: identify users only by `user_hash`.
 - If the incident reveals a gap, DevOps updates the runbook in the fix PR.
 
-`oncall/ops/restart.sh` is part of the allow-list but is delivered with the launcher (#69); until it exists, the restart rows in the decision tables cannot be executed and the agent should escalate instead.
+`oncall/ops/restart.sh <backend|frontend>` (#69) exits non-zero for any other service. The launcher also enforces **one** runtime mitigation per incident: a second `flag.sh`, `rollback.sh` or `restart.sh` call is refused with a message; record it in the issue instead.
 
 ## Demo scenarios (spec §15.3)
 
