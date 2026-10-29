@@ -237,6 +237,7 @@ Rep ranges and cardio by goal:
 - **Custom foods and meals** can be created by athletes and coaches.
 - **Open Food Facts search**: text search for packaged foods. A selected result is copied into the local `Food` table (source `openfoodfacts`, with its product code) so it never needs to be fetched again.
   - Requests use a descriptive `User-Agent` (`FitWise/<version> (<contact>)`), a 3 s timeout and a server-side cache of search results (24 h).
+  - Products without a numeric code of 4-14 digits, a name, or kcal/protein/carbs/fat per 100 g within the `Food` limits are left out of results (kcal falls back to kJ / 4.184). Allergen and diet tags are copied only when Open Food Facts states them. Configured by `OFF_BASE_URL`, `OFF_CONTACT`, `OFF_TIMEOUT_SECONDS`.
   - Behind the feature flag `off_search_enabled`. When disabled or failing, the UI says "Online food search is unavailable — use the library or create a custom food" and everything else keeps working.
 
 **AC**

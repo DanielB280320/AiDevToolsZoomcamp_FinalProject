@@ -2,15 +2,16 @@
 
 from typing import Annotated, get_args
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request, Response
 
-from app.dependencies import CurrentUser, SessionDep
+from app.dependencies import CurrentUser, SessionDep, TelemetryDep
 from app.errors import ProblemError
 from app.schemas.athlete import Diet
 from app.schemas.base import NoNul
 from app.schemas.foods import (
     Allergen,
     Food,
+    FoodImportRequest,
     FoodInput,
     FoodPage,
     FoodSource,
@@ -18,9 +19,13 @@ from app.schemas.foods import (
     MealInput,
     MealPage,
     MealSlot,
+    OffSearchResult,
 )
 from app.schemas.problem import FieldError, Problem
-from app.services import foods
+from app.services import food_import, foods
+from app.services.clock import ClockDep
+from app.services.flags import FlagsDep
+from app.services.off import OffClient
 
 foods_router = APIRouter(prefix="/foods", tags=["Catalog"])
 meals_router = APIRouter(prefix="/meals", tags=["Catalog"])
@@ -95,6 +100,74 @@ def list_foods(
 def create_food(body: FoodInput, user: CurrentUser, session: SessionDep) -> Food:
     """Create a custom food owned by the caller."""
     return foods.create_food(session, user, body)
+
+
+SearchTerm = Annotated[str, Query(min_length=2, max_length=100), NoNul]
+
+
+def _off(request: Request) -> OffClient:
+    client: OffClient = request.app.state.off
+    return client
+
+
+@foods_router.get(
+    "/search",
+    operation_id="searchOpenFoodFacts",
+    response_model=OffSearchResult,
+    responses={400: _PROBLEM, 401: _PROBLEM},
+)
+def search_open_food_facts(
+    request: Request,
+    user: CurrentUser,
+    session: SessionDep,
+    flags: FlagsDep,
+    clock: ClockDep,
+    telemetry: TelemetryDep,
+    q: SearchTerm,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> OffSearchResult:
+    """Open Food Facts proxy; a disabled flag or a failing upstream gives `available: false`."""
+    return food_import.search(
+        session,
+        _off(request),
+        telemetry.metrics,
+        enabled=flags.off_search_enabled,
+        query=q,
+        limit=limit,
+        now=clock.now(),
+    )
+
+
+@foods_router.post(
+    "/import",
+    operation_id="importOpenFoodFactsFood",
+    response_model=Food,
+    status_code=201,
+    responses={
+        200: {"model": Food},
+        400: _PROBLEM,
+        401: _PROBLEM,
+        404: _PROBLEM,
+        422: _PROBLEM,
+        503: _PROBLEM,
+    },
+)
+def import_open_food_facts_food(
+    body: FoodImportRequest,
+    request: Request,
+    response: Response,
+    user: CurrentUser,
+    session: SessionDep,
+    flags: FlagsDep,
+    clock: ClockDep,
+) -> Food:
+    """Copy a product into `Food` (unique on its code): 201 when new, 200 when already there."""
+    food, created = food_import.import_product(
+        session, _off(request), enabled=flags.off_search_enabled, code=body.code, now=clock.now()
+    )
+    if not created:
+        response.status_code = 200
+    return food
 
 
 @meals_router.get(
