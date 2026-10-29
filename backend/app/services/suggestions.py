@@ -4,8 +4,9 @@
   engine for every performed exercise whose rule is not `manual` and stores one `pending`
   suggestion each, with the engine's `rule`, `inputs` and `reason` (F11.4). Re-running replaces
   the session's still-pending suggestions; decided ones are never touched.
-* The engine version comes from the `progression_engine` flag (F11.5). Only `v1` exists, so any
-  other value (including a stored unknown one) runs `v1`.
+* The engine version comes from the `progression_engine` flag (F11.5): `v1` (default) or `v2`,
+  the demo-only faulty engine of scenario S2 (it raises on bodyweight exercises). Any other value
+  (including a stored unknown one) runs `v1`.
 * Accepting stores the accepted (or edited) values as a new plan version (F8.2), so finished
   and in-progress sessions keep the targets they were performed against (rule 7, F8.1) and
   untouched sessions from today on use the new ones.
@@ -26,7 +27,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.engines import progression
+from app.engines import progression, progression_v2
 from app.engines.progression import LoggedSet, ProgressionInput
 from app.errors import ProblemError
 from app.models import (
@@ -47,14 +48,14 @@ from app.services.plans import NewPlannedExercise, NewTrainingDay, create_plan_v
 from app.telemetry.metrics import SuggestionRule
 
 Engine = Callable[[ProgressionInput], progression.Suggestion]
-ENGINES: dict[str, Engine] = {"v1": progression.suggest}
+ENGINES: dict[str, Engine] = {"v1": progression.suggest, "v2": progression_v2.suggest}
 DEFAULT_ENGINE = "v1"
 
 _TARGET_KEYS = ("target_weight_kg", "reps_min", "reps_max", "target_seconds")
 
 
 def engine_for(version: str) -> Engine:
-    """The engine for a `progression_engine` flag value; unknown or unbuilt versions run v1."""
+    """The engine for a `progression_engine` flag value; unknown versions run v1."""
     return ENGINES.get(version, ENGINES[DEFAULT_ENGINE])
 
 

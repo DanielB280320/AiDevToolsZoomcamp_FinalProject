@@ -157,6 +157,8 @@ FLAG_CACHE_TTL_SECONDS: Final = 5
 FEATURE_FLAGS: Final[Mapping[str, FlagSpec]] = MappingProxyType(
     {
         # F11.5: progression engine version; unknown stored values fall back to v1.
+        # v2 is the DEMO-ONLY faulty engine of §15.3 S2 (raises on bodyweight exercises): never
+        # set it outside the demo.
         "progression_engine": FlagSpec(default="v1", choices=("v1", "v2")),
         # F6: Open Food Facts search; off -> the search degrades to `available: false` (D44).
         "off_search_enabled": FlagSpec(default="true", choices=("true", "false")),

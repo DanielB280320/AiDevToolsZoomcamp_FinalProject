@@ -10,8 +10,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.engines import progression
 from app.main import create_app
-from app.models import FeatureFlag, PlannedExercise, SetLog, Suggestion, User
+from app.models import Exercise, FeatureFlag, PlannedExercise, SetLog, Suggestion, User
 from app.services import suggestions as svc
 from tests.conftest import Captured, captured_telemetry, make_settings
 from tests.contract import assert_matches_schema
@@ -393,7 +394,7 @@ def test_a_session_with_a_pending_suggestion_uses_current_targets_and_flags_it(
 # ───────────── F11.5 engine flag ─────────────
 
 
-@pytest.mark.parametrize("stored", ["v1", "v2", "v99", ""])
+@pytest.mark.parametrize("stored", ["v1", "v99", ""])
 def test_stored_engine_values_run_v1(athlete: Api, stored: str) -> None:
     with Session(athlete.app.state.engine) as session:
         session.add(
@@ -409,32 +410,87 @@ def test_stored_engine_values_run_v1(athlete: Api, stored: str) -> None:
 
 def test_engine_for_selects_by_version_and_falls_back_to_v1() -> None:
     assert svc.engine_for("v1") is svc.ENGINES["v1"]
-    assert svc.engine_for("v2") is svc.ENGINES["v1"]
+    assert svc.engine_for("v2") is svc.ENGINES["v2"]
+    assert svc.engine_for("v2") is not svc.ENGINES["v1"]
     assert svc.engine_for("garbage") is svc.ENGINES["v1"]
 
 
-def test_the_flag_selects_the_engine_version(athlete: Api, monkeypatch: pytest.MonkeyPatch) -> None:
-    """With a second engine registered, `progression_engine = v2` is the one that runs."""
-    from app.engines import progression
-
-    def v2(p: progression.ProgressionInput) -> progression.Suggestion:
-        base = progression.suggest(p)
-        return progression.Suggestion(
-            base.rule, "hold", p.target_weight_kg, base.reps, base.seconds, "v2 says hold",
-            base.consecutive_failures, base.inputs,
-        )  # fmt: skip
-
-    monkeypatch.setitem(svc.ENGINES, "v2", v2)
-    with Session(athlete.app.state.engine) as session:
-        session.add(
-            FeatureFlag(key="progression_engine", value="v2", updated_by="owner", updated_at=NOW)
+def _set_engine(api: Api, value: str) -> None:
+    with Session(api.app.state.engine) as session:
+        session.merge(
+            FeatureFlag(key="progression_engine", value=value, updated_by="owner", updated_at=NOW)
         )
         session.commit()
-    athlete.app.state.flags.invalidate()
+    api.app.state.flags.invalidate()
+
+
+def _make_bodyweight(api: Api) -> None:
+    with Session(api.app.state.engine) as session:
+        session.execute(
+            update(Exercise).where(Exercise.type == "strength").values(type="bodyweight")
+        )
+        session.commit()
+
+
+def _finish_thursday(api: Api, client: Any = None) -> Any:
+    sid, ex, planned, _ = _ids(_session(api, THU))
+    for n in (1, 2, 3):
+        response = _log(
+            api, sid, exercise_id=ex, planned_exercise_id=planned, set_no=n, reps=8,
+            weight_kg=50.0,
+        )  # fmt: skip
+        assert response.status_code in (200, 201), response.text
+    return sid, _finish(api, sid, client)
+
+
+def test_flag_v2_makes_the_finish_hook_use_v2(athlete: Api) -> None:
+    _set_engine(athlete, "v2")
     sid = _perform(athlete, THU)
     (suggestion,) = _pending_for(athlete, sid)
-    assert suggestion["reason"] == "v2 says hold"
     assert suggestion["inputs"]["engine_version"] == "v2"
+
+
+def test_v2_matches_v1_for_sessions_without_bodyweight(athlete: Api) -> None:
+    sid_v1 = _perform(athlete, THU)
+    (v1,) = _pending_for(athlete, sid_v1)
+    _set_engine(athlete, "v2")
+    sid_v2 = _perform(athlete, FRI)
+    (v2,) = _pending_for(athlete, sid_v2)
+    assert v2["inputs"].pop("engine_version") == "v2"
+    assert v1["inputs"].pop("engine_version") == "v1"
+    for key in ("rule", "reason", "inputs"):
+        assert v2[key] == v1[key]
+    assert v2["payload"]["proposed"] == v1["payload"]["proposed"]
+
+
+def test_v2_fails_the_finish_of_a_bodyweight_session_and_v1_succeeds(athlete: Api) -> None:
+    _make_bodyweight(athlete)
+    crashing = TestClient(athlete.app, raise_server_exceptions=False)
+    crashing.cookies.update(athlete.client.cookies)
+    _set_engine(athlete, "v2")
+    sid, response = _finish_thursday(athlete, crashing)
+    problem(response, 500, "internal_error")
+    assert "bodyweight" not in response.text
+
+    _set_engine(athlete, "v1")  # the S2 mitigation
+    assert _finish(athlete, sid).status_code == 200
+
+
+def test_the_v2_fault_leaks_no_health_data(athlete: Api) -> None:
+    from app.engines import progression_v2
+
+    _make_bodyweight(athlete)
+    _set_engine(athlete, "v2")
+    with Session(athlete.app.state.engine) as session:
+        ex = session.scalars(select(Exercise).where(Exercise.type == "bodyweight")).first()
+        assert ex is not None
+        name = ex.name
+    with pytest.raises(progression_v2.BodyweightNotSupported) as raised:
+        progression_v2.suggest(
+            progression.ProgressionInput("bodyweight", "double", "bodyweight", 3, [], reps_min=8)
+        )
+    assert name not in str(raised.value)
+    assert str(raised.value) == "progression engine v2 does not support bodyweight exercises"
 
 
 # ───────────── metrics ─────────────
