@@ -69,6 +69,14 @@ for e in "Internal Server Error (HTTP 500)" "Resource not accessible by integrat
   if [ "$rc" != 0 ] && [ ! -f "$S/created" ] && [ ! -f "$S/moved" ] && [ ! -f "$S/last_tree" ] && [[ "$msg" == *"$e"* ]]; then ok "read error '${e: -10}': fails, shows cause, no write"; else bad "read error '$e': rc=$rc msg=$msg"; fi
 done
 
+# 3c. The record names the run that wrote it (#122); without GITHUB_RUN_ID or with junk, no run line.
+rm -f "$S"/*; echo "$H" > "$S/ref"
+GITHUB_RUN_ID=123456 "$here/move-deploy-ref.sh" prod "$REL" "$B" "$F" >/dev/null 2>&1
+if grep -q 'frontend: ' "$S/last_msg" && grep -q 'run: 123456' "$S/last_msg"; then ok "record carries the run id"; else bad "run line missing"; fi
+rm -f "$S"/*; echo "$H" > "$S/ref"
+GITHUB_RUN_ID='1;rm' "$here/move-deploy-ref.sh" prod "$REL" "$B" "$F" >/dev/null 2>&1
+if ! grep -q 'run:' "$S/last_msg"; then ok "non-numeric run id is dropped"; else bad "junk run id kept"; fi
+
 # 4. Input validation.
 "$here/move-deploy-ref.sh" staging "$REL" "$B" "$F" >/dev/null 2>&1; if [ $? = 2 ]; then ok "rejects unknown env"; else bad "env"; fi
 "$here/move-deploy-ref.sh" prod abc "$B" "$F" >/dev/null 2>&1; if [ $? = 2 ]; then ok "rejects short sha"; else bad "sha"; fi

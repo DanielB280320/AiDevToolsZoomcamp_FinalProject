@@ -9,7 +9,8 @@
 # Migrations are skipped and nothing is down-migrated (D50). Uses `sudo -n` when not root.
 #
 # Exit status is passed through unchanged: 0 rolled back and healthy | 1 failed | 3 nothing to roll
-# back to (PREVIOUS_TAG empty; the current tag is kept) | 2 usage error (wrapper only).
+# back to (PREVIOUS_TAG empty or equal to the current tag; nothing changed) | 4 refused, the target is
+# the release that was already rolled back from | 2 usage error (wrapper only). 3 and 4 mean: escalate.
 # Test hook: FITWISE_BIN_DIR (default /opt/fitwise/bin).
 set -euo pipefail
 

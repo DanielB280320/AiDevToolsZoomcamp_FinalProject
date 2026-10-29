@@ -5,7 +5,8 @@
 # wrapper, WITHOUT the migration step (D50). No AWS credential, PAT or App: the built-in
 # GITHUB_TOKEN, `contents: write` on the `rollback` job only, which runs in the `production`
 # environment (same required reviewer as "Promote to production").
-#   plan           read-only; works out from -> to from the deploy/prod history, fails before any
+#   plan           read-only; works out from -> to from the deploy/prod history (only releases whose
+#                  promotion run succeeded count, #122), fails before any
 #                  approval is asked when there is no previous release
 #   rollback       waits for the reviewer, re-checks against what prod serves, moves deploy/prod
 #   verify-prod    waits until prod serves the previous SHA, then readyz and the e2e smoke
@@ -29,6 +30,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read # is a deploy/prod record's run green? (#122)
     outputs:
       current_sha: ${{ steps.plan.outputs.current_sha }}
       target_sha: ${{ steps.plan.outputs.target_sha }}
@@ -58,6 +60,7 @@ jobs:
     environment: production
     permissions:
       contents: write # moves the deploy/prod ref; this job only
+      actions: read # re-check of the plan reads the run conclusions (#122)
     outputs:
       base_url: ${{ vars.PROD_BASE_URL }}
       target_sha: ${{ steps.plan.outputs.target_sha }}
