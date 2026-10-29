@@ -29,40 +29,114 @@ from pathlib import Path
 from typing import Any
 
 MITIGATION_MARKER = "mitigation.json"
+MITIGATION_HEADS = frozenset(
+    {"oncall/ops/flag.sh", "oncall/ops/rollback.sh", "oncall/ops/restart.sh"}
+)
 BRANCH = re.compile(r"oncall/[A-Za-z0-9][A-Za-z0-9._-]{0,80}")
-FORBIDDEN_GIT_PREFIXES = (
-    "--output",
-    "--ext-diff",
-    "--no-index",
-    "--upload-pack",
-    "--receive-pack",
-    "--exec",
-    "--git-dir",
-    "--work-tree",
-    "--force",
-    "--delete",
-    "--mirror",
-    "--all",
-    "--tags",
-    "--no-verify",
-)
-GIT_SUBCOMMANDS = frozenset(
-    {
-        "status",
-        "diff",
-        "log",
-        "show",
-        "add",
-        "commit",
-        "checkout",
-        "switch",
-        "branch",
-        "fetch",
-        "rev-parse",
-        "ls-files",
-        "grep",
-    }
-)
+# Git: a per-subcommand ALLOW-list of options, matched as exact tokens. Git accepts abbreviated long
+# options (`--out` for `--output`) and `--opt=value` spellings, so nothing is matched by prefix: a
+# token starting with `-` must be listed here verbatim or the call is refused. Options that read
+# files outside the clone (-f, --no-index, --output, --exec-path) or start another program
+# (-O/--open-files-in-pager, --ext-diff, --upload-pack) are simply not listed.
+# Each entry: (flags without a value, options that take the next token as a value).
+# Value kinds: count (digits), branch (oncall/<name>), text (free), msgfile (commit-msg.txt).
+GIT_OPTIONS: dict[str, tuple[frozenset[str], dict[str, str]]] = {
+    "status": (frozenset({"-s", "--short", "-b", "--branch", "--porcelain", "--"}), {}),
+    "diff": (
+        frozenset(
+            {
+                "--stat",
+                "--name-only",
+                "--name-status",
+                "--no-color",
+                "-p",
+                "--patch",
+                "--cached",
+                "--staged",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--shortstat",
+                "--",
+            }
+        ),
+        {},
+    ),
+    "log": (
+        frozenset(
+            {
+                "--oneline",
+                "--graph",
+                "--decorate",
+                "--no-color",
+                "--stat",
+                "--name-only",
+                "-p",
+                "--patch",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--",
+            }
+        ),
+        {"-n": "count", "--max-count": "count"},
+    ),
+    "show": (
+        frozenset(
+            {
+                "--stat",
+                "--name-only",
+                "--name-status",
+                "--oneline",
+                "--no-color",
+                "-p",
+                "--patch",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--",
+            }
+        ),
+        {},
+    ),
+    "add": (frozenset({"-A", "--all", "-u", "--update", "-v", "--"}), {}),
+    "commit": (
+        frozenset({"-a", "--amend", "-s", "--no-edit"}),
+        {"-m": "text", "-F": "msgfile"},
+    ),
+    "checkout": (frozenset({"-q", "--"}), {"-b": "branch"}),
+    "switch": (frozenset({"-q", "--"}), {"-c": "branch"}),
+    "branch": (
+        frozenset({"-a", "-r", "-v", "-vv", "--list", "--show-current", "--"}),
+        {},
+    ),
+    "fetch": (frozenset(), {}),
+    "rev-parse": (frozenset({"--short", "--abbrev-ref", "--verify", "--"}), {}),
+    "ls-files": (frozenset({"-m", "-o", "-s", "-c", "--exclude-standard", "--"}), {}),
+    "grep": (
+        frozenset(
+            {
+                "-n",
+                "-i",
+                "-I",
+                "-l",
+                "-L",
+                "-w",
+                "-F",
+                "-E",
+                "-c",
+                "-h",
+                "-H",
+                "--cached",
+                "--and",
+                "--or",
+                "--not",
+                "--",
+            }
+        ),
+        {"-e": "text", "-A": "count", "-B": "count", "-C": "count"},
+    ),
+}
+GIT_NO_POSITIONALS = {"commit", "fetch"}
+_POSITIONAL = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9._/@~^:+-]{0,200}")
+_COUNT = re.compile(r"[0-9]{1,4}")
 WRITE_DENIED_PARTS = (".git", ".github", ".claude", "oncall", "deploy")
 SERVICE = re.compile(r"[a-z][a-z0-9_-]{0,40}")
 FLAG_ARG = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -172,7 +246,7 @@ def _compose(tokens: list[str]) -> None:
 
 
 def _mitigation(tokens: list[str]) -> bool:
-    """True if this is an allow-listed runtime mitigation (and its arguments are well-formed)."""
+    """True for a well-formed canonical mitigation call; anything else raises Blocked."""
     script = tokens[0]
     if script == "oncall/ops/flag.sh":
         if len(tokens) != 3 or not all(FLAG_ARG.fullmatch(t) for t in tokens[1:]):
@@ -184,7 +258,7 @@ def _mitigation(tokens: list[str]) -> bool:
         if len(tokens) != 2 or tokens[1] not in {"backend", "frontend"}:
             raise Blocked("usage: oncall/ops/restart.sh <backend|frontend>")
     else:
-        return False
+        raise Blocked(f"unknown script under oncall/ops/: {script}")
     return True
 
 
@@ -229,32 +303,64 @@ def _gh(tokens: list[str], ctx: Context) -> None:
         raise Blocked("the PR head must be a branch named oncall/<name>")
 
 
+def _positional_ok(token: str) -> bool:
+    """A revision or a path inside the clone: no absolute or home paths, no `..` path segment."""
+    return bool(_POSITIONAL.fullmatch(token)) and ".." not in token.split("/")
+
+
+def _git_args(sub: str, args: list[str], ctx: Context) -> None:
+    flags, valued = GIT_OPTIONS[sub]
+    i = 0
+    after_dashdash = False
+    while i < len(args):
+        tok = args[i]
+        if after_dashdash:
+            if not _positional_ok(tok):
+                raise Blocked(f"git {sub}: path not allowed: {tok}")
+            i += 1
+        elif tok == "--":
+            after_dashdash = True
+            i += 1
+        elif tok in flags:
+            i += 1
+        elif tok in valued:
+            if i + 1 >= len(args):
+                raise Blocked(f"git {sub}: {tok} needs a value")
+            value, kind = args[i + 1], valued[tok]
+            if kind == "count" and not _COUNT.fullmatch(value):
+                raise Blocked(f"git {sub}: {tok} needs a number")
+            if kind == "branch" and not BRANCH.fullmatch(value):
+                raise Blocked(f"git {sub}: new branches must be named oncall/<name>")
+            if kind == "msgfile" and value != f"{ctx.incident_dir}/commit-msg.txt":
+                raise Blocked("commit -F may only read commit-msg.txt of this incident")
+            i += 2
+        elif tok.startswith("-") and tok != "-":
+            if sub == "log" and re.fullmatch(r"-[0-9]{1,3}", tok):
+                i += 1
+                continue
+            raise Blocked(f"git {sub}: option not allowed: {tok}")
+        else:
+            if sub in GIT_NO_POSITIONALS or not _positional_ok(tok):
+                raise Blocked(f"git {sub}: argument not allowed: {tok}")
+            i += 1
+
+
 def _git(tokens: list[str], ctx: Context) -> None:
     if len(tokens) < 4 or tokens[1] != "-C" or tokens[2] != str(ctx.clone_dir):
         raise Blocked("git is only allowed as `git -C <the separate clone> ...`")
     sub, args = tokens[3], tokens[4:]
-    if any(a.startswith(FORBIDDEN_GIT_PREFIXES) for a in args):
-        raise Blocked("git option not allowed")
     if sub == "push":
         rest = args[1:] if args[:1] in (["-u"], ["--set-upstream"]) else args
         if len(rest) != 2 or rest[0] != "origin" or not BRANCH.fullmatch(rest[1]):
             raise Blocked("push is only allowed as `push [-u] origin oncall/<branch>`")
         return
-    if sub not in GIT_SUBCOMMANDS:
+    if sub not in GIT_OPTIONS:
         raise Blocked(f"git {sub} is not allowed")
-    if sub == "fetch" and args not in ([], ["origin"]):
-        raise Blocked("only `git fetch [origin]` is allowed")
-    if sub == "commit":
-        i = 0
-        while i < len(args):
-            if args[i] in {"-m", "-F"} and i + 1 < len(args):
-                if args[i] == "-F" and args[i + 1] != f"{ctx.incident_dir}/commit-msg.txt":
-                    raise Blocked("commit -F may only read commit-msg.txt of this incident")
-                i += 2
-            elif args[i] in {"-a", "--amend", "-s"}:
-                i += 1
-            else:
-                raise Blocked(f"git commit option not allowed: {args[i]}")
+    if sub == "fetch":
+        if args not in ([], ["origin"]):
+            raise Blocked("only `git fetch [origin]` is allowed")
+        return
+    _git_args(sub, args, ctx)
 
 
 def check_bash(command: str, ctx: Context) -> bool:
@@ -272,8 +378,12 @@ def check_bash(command: str, ctx: Context) -> bool:
     elif head == "sleep":
         if len(tokens) != 2 or not tokens[1].isdigit() or not 0 < int(tokens[1]) <= 120:
             raise Blocked("usage: sleep <1-120 seconds>")
-    elif head.startswith("oncall/ops/"):
+    elif head in MITIGATION_HEADS:
         return _mitigation(tokens)
+    elif head.endswith(".sh") or "oncall" in head or "ops/" in head:
+        # Any other spelling of a script path (./oncall/ops/flag.sh, absolute, `..`, bash x.sh) is
+        # refused, never run and never counted: only the canonical spelling takes the one slot.
+        raise Blocked(f"scripts must be called exactly as oncall/ops/<name>.sh, not {head}")
     else:
         raise Blocked(f"command not on the allow-list: {head}")
     return False
