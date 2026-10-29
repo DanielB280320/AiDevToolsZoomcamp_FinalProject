@@ -89,6 +89,10 @@ clean-obs: ## Stop both and DELETE the telemetry volumes (Prometheus, Loki, Temp
 check-obs: ## Smoke: one request reaches Prometheus (+exemplar), Tempo and Loki; no sensitive data (after up-obs)
 	COMPOSE="$(COMPOSE_OBS)" scripts/check-obs.sh
 
+.PHONY: test-alerts
+test-alerts: ## Alerts fire and resolve against the real rules with a stub webhook (#97; ~30 min, own stack)
+	observability/alert-test/run.sh
+
 .PHONY: check-log-privacy
 check-log-privacy: ## Smoke: no query/ids/IP/referrer/token in logs, valid JSON; backend up AND down
 	COMPOSE="$(COMPOSE)" scripts/check-log-privacy.sh
