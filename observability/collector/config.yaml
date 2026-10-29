@@ -146,11 +146,36 @@ processors:
     log_statements:
       - context: log
         statements:
+          # A sender that does not gate (map/array/bytes body) must not skip the scrubbing below.
+          - set(log.body, "") where not IsString(log.body)
           - keep_keys(log.attributes, ["service.name", "service.version", "env", "logger", "route", "method", "status", "duration_ms", "user_hash", "error_type", "check", "outcome", "kind", "rule", "decision", "engine", "count", "flag_key", "flag_old_value", "flag_new_value", "actor", "revision"])
           - replace_pattern(log.body, "[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+", "[email]")
           - replace_pattern(log.body, "(?i)\\bbearer\\s+\\S+", "Bearer [token]")
           - replace_pattern(log.body, "\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+", "[token]")
           - set(log.body, Concat([Substring(log.body, 0, 256), "..."], "")) where Len(log.body) > 256
+
+  # Resource and scope attributes: only what the backend sets (make_resource in
+  # backend/app/telemetry/setup.py). Anything else a sender attaches (host.name, process.*,
+  # telemetry.sdk.*, free-form attributes) is dropped, scope attributes entirely. Runs on every
+  # pipeline BEFORE resource/env, so `env` is still inserted when the sender had none.
+  transform/resource_allowlist:
+    error_mode: ignore
+    trace_statements: &resource_gate
+      - context: resource
+        statements:
+          - keep_keys(resource.attributes, ["service.name", "service.version", "deployment.environment.name", "env"])
+      - context: scope
+        statements:
+          - keep_keys(scope.attributes, [])
+    metric_statements: *resource_gate
+    log_statements: *resource_gate
+
+  # Forwarded logs left with no body and no allowed attribute carry nothing: drop them.
+  filter/empty_forwarded_logs:
+    error_mode: ignore
+    logs:
+      log_record:
+        - log.body == "" and Len(log.attributes) == 0
 
   batch:
     timeout: 2s
@@ -181,18 +206,18 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, transform/traces, resource/env, batch]
+      processors: [memory_limiter, transform/traces, transform/resource_allowlist, resource/env, batch]
       exporters: [otlp_grpc/tempo]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, transform/metrics, resource/env, batch]
+      processors: [memory_limiter, transform/metrics, transform/resource_allowlist, resource/env, batch]
       exporters: [otlp_http/prometheus]
     logs:
       receivers: [fluent_forward]
-      processors: [memory_limiter, transform/logs, filter/unparsed_logs, groupbyattrs/logs, resource/env, batch]
+      processors: [memory_limiter, transform/logs, filter/unparsed_logs, groupbyattrs/logs, transform/resource_allowlist, resource/env, batch]
       exporters: [otlp_http/loki]
     # Logs sent by the dev collector over OTLP (already gated there); see transform/forwarded_logs.
     logs/forwarded:
       receivers: [otlp]
-      processors: [memory_limiter, transform/forwarded_logs, resource/env, batch]
+      processors: [memory_limiter, transform/forwarded_logs, transform/resource_allowlist, filter/empty_forwarded_logs, resource/env, batch]
       exporters: [otlp_http/loki]

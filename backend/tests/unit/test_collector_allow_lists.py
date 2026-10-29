@@ -226,3 +226,53 @@ def test_forward_overlay_only_swaps_exporters() -> None:
         assert name in base["service"]["pipelines"]
     upstream = forward["exporters"]["otlp_grpc/upstream"]
     assert upstream["endpoint"] == "${env:OTLP_UPSTREAM_ENDPOINT}"
+
+
+# --- hardening against senders that do not gate (#130) ------------------------------------
+
+RESOURCE_KEYS = {"service.name", "service.version", "deployment.environment.name", "env"}
+
+
+def test_resource_attributes_are_allow_listed_on_every_pipeline(config: dict[str, Any]) -> None:
+    statements = _statements(config, "transform/resource_allowlist", "log_statements")
+    keep = next(s for s in statements if s.startswith("keep_keys(resource.attributes"))
+    assert _string_list(keep) == RESOURCE_KEYS
+    assert "keep_keys(scope.attributes, [])" in statements
+    assert _statements(config, "transform/resource_allowlist", "trace_statements") == statements
+    assert _statements(config, "transform/resource_allowlist", "metric_statements") == statements
+    pipelines = config["service"]["pipelines"]
+    for name, pipeline in pipelines.items():
+        processors = pipeline["processors"]
+        assert "transform/resource_allowlist" in processors, name
+        # Before `env` is inserted, so a sender without `env` still gets FITWISE_ENV.
+        assert processors.index("transform/resource_allowlist") < processors.index("resource/env")
+
+
+def test_resource_allow_list_matches_what_the_backend_sets() -> None:
+    from types import SimpleNamespace
+
+    from app.telemetry.setup import make_resource
+
+    settings = SimpleNamespace(app_env="dev", app_version="1")
+    resource = make_resource(settings)  # type: ignore[arg-type]
+    extras = set(resource.attributes) - RESOURCE_KEYS
+    assert set(resource.attributes) >= RESOURCE_KEYS
+    # What the SDK adds on its own (dropped by the collector, never needed downstream).
+    assert extras <= {"service.instance.id"} | {k for k in extras if k.startswith("telemetry.sdk.")}
+
+
+def test_forwarded_logs_blank_non_string_bodies_before_scrubbing(config: dict[str, Any]) -> None:
+    statements = _statements(config, "transform/forwarded_logs", "log_statements")
+    blank = 'set(log.body, "") where not IsString(log.body)'
+    assert blank in statements
+    first_scrub = next(i for i, s in enumerate(statements) if s.startswith("replace_pattern"))
+    assert statements.index(blank) < first_scrub
+
+
+def test_empty_forwarded_logs_are_dropped_after_gating(config: dict[str, Any]) -> None:
+    processors = config["service"]["pipelines"]["logs/forwarded"]["processors"]
+    assert processors.index("transform/forwarded_logs") < processors.index(
+        "filter/empty_forwarded_logs"
+    )
+    conditions = config["processors"]["filter/empty_forwarded_logs"]["logs"]["log_record"]
+    assert conditions == ['log.body == "" and Len(log.attributes) == 0']
