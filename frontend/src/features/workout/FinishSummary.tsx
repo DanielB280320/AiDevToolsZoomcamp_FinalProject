@@ -2,14 +2,26 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
 import type { FinishSessionResult } from "../../api/workout";
+import type { UnitSystem } from "../../lib/units";
 import { paths } from "../../paths";
+import { PendingSuggestions } from "../suggestions/PendingSuggestions";
 
 export const percent = (ratio: number | null) => (ratio === null ? "–" : `${Math.round(ratio * 100)}%`);
 
 /** Finish workout summary (F10): completion, estimated kcal, duration and the new suggestions. */
-export function FinishSummary({ result, onReview }: { result: FinishSessionResult; onReview: () => void }) {
+export function FinishSummary({
+  result,
+  athleteId,
+  units,
+  onReview,
+}: {
+  result: FinishSessionResult;
+  athleteId: string;
+  units: UnitSystem;
+  onReview: () => void;
+}) {
   const { t } = useTranslation();
-  const { session, suggestions } = result;
+  const { session } = result;
   const minutes =
     session.started_at && session.finished_at
       ? Math.max(1, Math.round((Date.parse(session.finished_at) - Date.parse(session.started_at)) / 60_000))
@@ -37,18 +49,12 @@ export function FinishSummary({ result, onReview }: { result: FinishSessionResul
       </dl>
       <p className="mt-2 text-step--1 text-slate">{t("workout.summary.estimated")}</p>
 
-      <h3 className="mt-6 font-display text-step-2 font-bold">{t("workout.summary.suggestions")}</h3>
-      {suggestions.length === 0 ? (
-        <p className="mt-1 text-slate">{t("workout.summary.noSuggestions")}</p>
-      ) : (
-        <ul className="mt-1">
-          {suggestions.map((suggestion) => (
-            <li key={suggestion.id} className="border-b border-line py-2">
-              {suggestion.reason}
-            </li>
-          ))}
-        </ul>
-      )}
+      <PendingSuggestions
+        athleteId={athleteId}
+        units={units}
+        className="mt-6"
+        emptyMessage={t("workout.summary.noSuggestions")}
+      />
 
       <div className="mt-6 flex flex-wrap gap-3">
         <Link

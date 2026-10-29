@@ -203,10 +203,41 @@
       "burned": "Burned (kcal)",
       "balance": "Balance (kcal)",
       "estimated": "All calorie numbers are estimates.",
-      "attention": "{{suggestions}} suggestions and {{notes}} coach notes are waiting for you.",
+      "attention": "{{notes}} coach notes are waiting for you.",
       "startWorkout": "Start workout",
       "continueWorkout": "Continue workout",
       "viewWorkout": "View workout"
+    }
+  },
+  "suggestions": {
+    "title": "Suggestions",
+    "loadFailed": "FitWise couldn't load your suggestions.",
+    "change": "Old targets to new targets",
+    "accept": "Accept",
+    "reject": "Reject",
+    "edit": "Edit",
+    "saveAccept": "Save and accept",
+    "cancel": "Cancel",
+    "reps": "{{count}} reps",
+    "repRange": "{{min}}-{{max}} reps",
+    "seconds": "{{count}} s",
+    "kcal": "{{count}} kcal",
+    "kind": {
+      "calories": "Daily calories",
+      "recalc": "Recalculated targets"
+    },
+    "field": {
+      "weight": "Weight ({{unit}})",
+      "repsMin": "Min reps",
+      "repsMax": "Max reps",
+      "seconds": "Seconds",
+      "kcal": "Calories"
+    },
+    "errors": {
+      "alreadyDecided": "This suggestion was already decided. The list has been refreshed.",
+      "invalidOverrides": "Those values aren't allowed for this suggestion.",
+      "invalidNumber": "Enter whole numbers (weight may have decimals).",
+      "generic": "Something went wrong. Try again."
     }
   },
   "onboarding": {
@@ -453,6 +484,7 @@
     "progress": "Completion so far: {{value}}",
     "statusDone": "Finished. You can still edit sets until the end of tomorrow.",
     "locked": "This workout can no longer be edited.",
+    "suggestionPending": "Using current targets, suggestion pending.",
     "setName": "Set {{number}}",
     "extra": "Extra",
     "target": "Target: {{value}}",

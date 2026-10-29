@@ -34,6 +34,7 @@ function invalidateAfterLogging(queryClient: QueryClient, sessionId: string) {
   void queryClient.invalidateQueries({ queryKey: sessionQueryKey(sessionId) });
   void queryClient.invalidateQueries({ queryKey: ["day"] });
   void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+  void queryClient.invalidateQueries({ queryKey: ["suggestions"] });
 }
 
 /** Idempotent per (session, exercise, set number): retrying the same input never duplicates a set. */

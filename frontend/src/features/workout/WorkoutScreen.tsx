@@ -108,9 +108,14 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
       )}
 
       {result ? (
-        <FinishSummary result={result} onReview={() => setResult(null)} />
+        <FinishSummary result={result} athleteId={me.id} units={me.units} onReview={() => setResult(null)} />
       ) : (
         <>
+          {data.exercises.some((e) => e.pending_suggestion_id !== null) && (
+            <p role="status" className="mt-3 border-l-4 border-plate pl-3">
+              {t("workout.suggestionPending")}
+            </p>
+          )}
           {logSet.isError && (
             <p role="alert" className="mt-3 border-l-4 border-alert pl-3 text-alert">
               {t(`workout.errors.${errorKey(logSet.error)}`)}
