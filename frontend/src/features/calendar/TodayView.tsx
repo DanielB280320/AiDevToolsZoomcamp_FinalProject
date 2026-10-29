@@ -7,6 +7,7 @@ import { QueryState } from "./QueryState";
 import { StatusBadge } from "./StatusBadge";
 import { badgeKind } from "./status";
 import { paths } from "../../paths";
+import { PendingSuggestions } from "../suggestions/PendingSuggestions";
 
 type SessionExercise = NonNullable<DayView["session"]>["exercises"][number];
 
@@ -124,12 +125,11 @@ export function TodayView({ me }: { me: Me }) {
         <p className="mt-2 text-step--1 text-slate">{t("calendar.today.estimated")}</p>
       </Section>
 
-      {(day.data.pending_suggestions.length > 0 || day.data.notes.length > 0) && (
+      <PendingSuggestions athleteId={me.id} units={me.units} className="mt-8 border-t-4 border-plate pt-3" />
+
+      {day.data.notes.length > 0 && (
         <p className="mt-8 border-t-4 border-plate pt-3">
-          {t("calendar.today.attention", {
-            suggestions: day.data.pending_suggestions.length,
-            notes: day.data.notes.length,
-          })}
+          {t("calendar.today.attention", { notes: day.data.notes.length })}
         </p>
       )}
     </>

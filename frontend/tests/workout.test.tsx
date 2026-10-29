@@ -374,8 +374,16 @@ describe("finish", () => {
     created_at: "2026-10-26T17:48:01Z",
     decided_by: null,
     decided_at: null,
-    payload: {},
-  } as unknown as Schemas["Suggestion"];
+    payload: {
+      exercise: SQUAT,
+      planned_exercise_id: PLANNED_SQUAT,
+      source_session_id: SESSION_ID,
+      current: { target_weight_kg: 40, reps_min: 8, reps_max: 12, target_seconds: null },
+      proposed: { target_weight_kg: 42.5, reps_min: 8, reps_max: 12, target_seconds: null },
+      hint: null,
+      applied: null,
+    },
+  } as Schemas["Suggestion"];
 
   const finishOk = (suggestions: Schemas["Suggestion"][]) =>
     http.post(apiUrl("/sessions/:id/finish"), () =>
@@ -396,7 +404,11 @@ describe("finish", () => {
     const { clock } = manualClock(NOW);
     const user = userEvent.setup();
     captureSets();
-    server.use(sessionOk(), finishOk([suggestion]));
+    server.use(
+      sessionOk(),
+      finishOk([suggestion]),
+      http.get(apiUrl("/athletes/:id/suggestions"), () => HttpResponse.json({ items: [suggestion], weigh_in_hint: null })),
+    );
     renderScreen(clock);
 
     await user.click((await screen.findAllByRole("button", { name: /Done as planned/ }))[0]!);

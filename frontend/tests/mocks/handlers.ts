@@ -13,4 +13,7 @@ export const handlers = [
   http.get(apiUrl("/healthz"), () => HttpResponse.json({ status: "ok", version: "test" } satisfies Schemas["Health"])),
   defaultDay(),
   defaultCalendar(),
+  http.get(apiUrl("/athletes/:athleteId/suggestions"), () =>
+    HttpResponse.json({ items: [], weigh_in_hint: null } satisfies Schemas["SuggestionList"]),
+  ),
 ];
