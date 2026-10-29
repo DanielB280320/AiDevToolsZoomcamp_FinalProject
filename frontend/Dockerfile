@@ -22,9 +22,10 @@ FROM nginxinc/nginx-unprivileged:${NGINX_VERSION}-alpine AS runtime
 ENV NGINX_ENVSUBST_FILTER="^(BACKEND_|NGINX_)" \
     BACKEND_UPSTREAM=backend:8000 \
     NGINX_RESOLVER=127.0.0.11
-# Pull in the brotli-libs security fix (CVE-2026-111497, fixed in 1.2.1-r0) until the base image ships it.
+# Pull in security fixes until the base image ships them: brotli-libs (CVE-2026-111497, fixed in
+# 1.2.1-r0) and curl/libcurl (CVE-2026-92392, HTTP/2 upload use-after-free, fixed in 8.23.0-r0).
 USER root
-RUN apk add --no-cache --upgrade 'brotli-libs>=1.2.1-r0'
+RUN apk add --no-cache --upgrade 'brotli-libs>=1.2.1-r0' 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0'
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 USER 101
