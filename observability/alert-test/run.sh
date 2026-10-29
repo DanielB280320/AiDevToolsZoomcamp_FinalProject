@@ -9,7 +9,7 @@
 # Takes about 30-40 minutes (waits for the real alert windows). Evidence goes to
 # observability/alert-test/out/ (git-ignored; ALERT_TEST_OUT changes it). ALERT_TEST_ONLY=errors|latency
 # runs one alert only. ALERT_TEST_NO_BUILD=1 reuses existing images. `--down` removes the stack afterwards.
-# Never run against a real prod host: it stops the database of the stack it started.
+# Never run against a real prod host: it breaks the database login of the stack it started.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."

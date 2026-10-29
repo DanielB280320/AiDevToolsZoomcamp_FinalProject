@@ -144,11 +144,11 @@ its own stack (project `fitwise-alerttest`, ports 18088 app, 13030 Grafana, 1431
 18099 stub; override with `ALERT_TEST_*` variables) with `APP_ENV=prod`, so the `env="prod"` rules
 match, and Grafana's contact point pointed at the stub on the Docker host (basic auth checked like the
 on-call responder). It never touches another compose project, and must not be pointed at a real host:
-it stops the database of the stack it started.
+it breaks the database login of the stack it started.
 
 | Alert | Fault | Removed by |
 |---|---|---|
-| KeyJourneyErrors (> 5 % 5xx of >= 20 requests / 5 min) | `docker compose stop db` while traffic hits `POST /sessions/{id}/sets` and `/finish` (they answer 500) | `docker compose up -d --wait db` |
+| KeyJourneyErrors (> 5 % 5xx of >= 20 requests / 5 min) | database role password changed and its connections cut (`ALTER ROLE`) while traffic hits `POST /sessions/{id}/sets` and `/finish` (they answer 500 at once; a stopped DB is slow and also trips the latency alert) | role password restored |
 | KeyJourneyLatency (p95 > 1 s / 10 min) | `oncall/ops/flag.sh fault_injection_latency_ms 1500` (#15) | `oncall/ops/flag.sh fault_injection_latency_ms 0` |
 
 Per alert the driver (`alert-test/driver.py`) sends healthy traffic for 90 s, injects the fault,

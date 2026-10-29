@@ -3,8 +3,8 @@
 Stdlib only. Steps, for each of KeyJourneyErrors and KeyJourneyLatency:
 
 1. Healthy traffic on the logging routes (POST /sessions/{id}/sets and /finish; an unknown
-   session id answers 404, which is a normal client error and not a failure).
-2. Inject the fault (errors: stop the database; latency: oncall/ops/flag.sh
+   session id answers 403, which is a normal client error and not a failure).
+2. Inject the fault (errors: break the database login; latency: oncall/ops/flag.sh
    fault_injection_latency_ms 1500) while traffic continues, and wait until the stub webhook
    receiver has captured a `firing` payload for the alert.
 3. Remove the fault (start the database; flag back to 0), keep sending healthy traffic and wait
