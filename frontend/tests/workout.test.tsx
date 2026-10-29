@@ -330,6 +330,27 @@ describe("editing sets", () => {
     expect(bodies[0]).toEqual({ exercise_id: PLANK.id, planned_exercise_id: null, set_no: 1, as_planned: false, skipped: false, seconds: 40 });
   });
 
+  it("removes an added exercise on Cancel when no set was logged, without an API write", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    const bodies = captureSets();
+    server.use(
+      sessionOk(),
+      http.get(apiUrl("/exercises"), () => HttpResponse.json({ items: [PLANK], next_cursor: null })),
+    );
+    renderScreen(clock);
+
+    await user.click(await screen.findByRole("button", { name: "Add exercise" }));
+    await user.type(screen.getByLabelText("Search exercises by name"), "pla");
+    await user.click(await screen.findByRole("button", { name: "Plank" }));
+    expect(await screen.findByLabelText("Duration (s)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("heading", { name: "Plank" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Duration (s)")).not.toBeInTheDocument();
+    expect(bodies).toHaveLength(0);
+  });
+
   it("shows the server's reason when a set is refused", async () => {
     const { clock } = manualClock(NOW);
     const user = userEvent.setup();
