@@ -99,6 +99,28 @@ class Settings(ProcessSettings):
         description="Add `Secure` to the session cookie; turn on once HTTPS exists (spec §6.4).",
     )
 
+    off_base_url: str = Field(
+        default="https://world.openfoodfacts.org",
+        description="Open Food Facts base URL (env OFF_BASE_URL); tests point it at a fake server.",
+    )
+    off_contact: str = Field(
+        default="https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject",
+        min_length=1,
+        max_length=200,
+        description="Contact in the Open Food Facts User-Agent `FitWise/<version> (<contact>)`.",
+    )
+    off_timeout_seconds: float = Field(
+        default=3.0,
+        gt=0,
+        le=10,
+        description="Total timeout of one Open Food Facts request (spec F6: 3 s).",
+    )
+
+    @field_validator("off_base_url")
+    @classmethod
+    def _strip_off_base_url(cls, value: str) -> str:
+        return value.strip().rstrip("/")
+
     @property
     def serves_api_docs(self) -> bool:
         """Swagger UI and `/openapi.json` are served everywhere except prod."""

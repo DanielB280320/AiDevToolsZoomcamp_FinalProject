@@ -111,3 +111,25 @@ class Meal(ResponseModel):
 class MealPage(ResponseModel):
     items: list[Meal]
     next_cursor: str | None
+
+
+class OffProduct(ResponseModel):
+    code: str
+    name: str
+    brand: str | None
+    kcal_per_100g: float
+    protein_g_per_100g: float
+    carbs_g_per_100g: float
+    fat_g_per_100g: float
+    imported_food_id: uuid.UUID | None
+
+
+class OffSearchResult(ResponseModel):
+    available: bool
+    unavailable_reason: Literal["disabled", "timeout", "upstream_error"] | None
+    message: str | None
+    items: list[OffProduct]
+
+
+class FoodImportRequest(RequestModel):
+    code: Annotated[str, StringConstraints(pattern=r"^[0-9]{4,14}$")]

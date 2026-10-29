@@ -24,12 +24,14 @@ from app.routers import (
 )
 from app.services.clock import SystemClock
 from app.services.flags import FlagReader
+from app.services.off import OffClient
 from app.telemetry import (
     SERVICE_NAME,
     Telemetry,
     build_telemetry,
     configure_logging,
     install_telemetry,
+    instrument_http_client,
 )
 
 API_PREFIX = "/api/v1"
@@ -52,6 +54,7 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
         engine.dispose()
+        app.state.off.close()
         telemetry.shutdown()
 
     app = FastAPI(
@@ -71,6 +74,9 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     app.state.clock = SystemClock()
     # Reads the clock through app.state so a test's FakeClock also drives the flag cache TTL.
     app.state.flags = FlagReader(app.state.session_factory, now=lambda: app.state.clock.now())
+
+    app.state.off = OffClient(settings)  # Open Food Facts client + 24 h caches (F6)
+    instrument_http_client(app.state.off.http_client, telemetry)
 
     # Innermost middleware: the injected delay is inside the error handler and the telemetry
     # middleware, so it is measured like real latency (spec §15.3 S3).

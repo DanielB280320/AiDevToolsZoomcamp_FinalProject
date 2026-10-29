@@ -37,6 +37,9 @@ def make_settings(database_url: str, **overrides: Any) -> Settings:
         "database_connect_timeout_seconds": 1,
         "app_env": "test",
         "jwt_secret": TEST_JWT_SECRET,
+        # Nothing listens here: a test that forgets the fake Open Food Facts server cannot reach
+        # the real one (spec F6.4).
+        "off_base_url": "http://127.0.0.1:9",
         **overrides,
     }
     return Settings(**values, _env_file=None)
@@ -146,3 +149,7 @@ def json_logs() -> Iterator[JsonLogs]:
     finally:
         root.removeHandler(handler)
         app_logger.setLevel(previous_level)
+
+
+# Fake Open Food Facts server fixture (spec F6.4).
+from tests.fake_off import fake_off  # noqa: E402, F401
