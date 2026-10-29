@@ -6,6 +6,7 @@ from typing import Literal
 
 from app.schemas.base import ResponseModel
 from app.schemas.exercises import ExerciseEquipment, ExerciseType, MuscleGroup
+from app.schemas.foods import Macros, MealItem, MealSlot
 from app.schemas.users import UserRef
 
 PlanSource = Literal["generated", "custom"]
@@ -48,8 +49,29 @@ class TrainingDay(ResponseModel):
     edited_by: UserRef | None
 
 
+class MealSummary(ResponseModel):
+    id: uuid.UUID
+    name: str
+    slots: list[MealSlot]
+
+
+class PlannedMeal(ResponseModel):
+    id: uuid.UUID
+    slot: MealSlot
+    order: int
+    meal: MealSummary
+    portion_factor: float
+    items: list[MealItem]
+    totals: Macros
+
+
 class MealDay(ResponseModel):
-    """Placeholder until M3 (#34/#36): `meal_days` is always empty."""
+    id: uuid.UUID
+    weekday: Weekday
+    meals: list[PlannedMeal]
+    totals: Macros
+    warning: str | None
+    edited_by: UserRef | None
 
 
 class Plan(ResponseModel):

@@ -1,8 +1,8 @@
-"""Onboarding, profile and targets (spec F2, F3; D41, D43, D46, D55).
+"""Onboarding, profile and targets (spec F2, F3, F7; D41, D43, D46, D55).
 
-`onboard` is one transaction: profile, first `BodyMetric`, `Targets` and plan version 1 are
-committed together or not at all. The pure engines (targets, training plan, exercise kcal) do
-the maths; this module gathers their inputs and stores their results.
+`onboard` is one transaction: profile, first `BodyMetric`, `Targets` and plan version 1 (training
+and meal plan) are committed together or not at all. The pure engines (targets, training plan,
+meal plan, exercise kcal) do the maths; this module gathers their inputs and stores their results.
 
 Nothing here logs and no span carries values: profile data, weights and measurements are health
 data (spec section 6.5). Only the `engine.targets` span marks the engine call.
@@ -26,8 +26,16 @@ from app.models import AthleteProfile, BodyMetric, Exercise, Plan, Targets, Trai
 from app.schemas import athlete as out
 from app.schemas.athlete import AthleteProfileInput, OnboardingBodyMetric, OnboardingRequest
 from app.schemas.problem import FieldError
+from app.services import meal_plans
 from app.services.clock import age_on, local_today
-from app.services.plans import NewPlannedExercise, NewTrainingDay, create_plan_version, plan_view
+from app.services.plans import (
+    NewMealDay,
+    NewPlannedExercise,
+    NewPlannedMeal,
+    NewTrainingDay,
+    create_plan_version,
+    plan_view,
+)
 from app.telemetry import Telemetry
 
 BODY_FAT_MIN_PCT = 3.0  # F2.3 / F2.6: plausible range, also applied to Navy results (D55)
@@ -368,7 +376,7 @@ def onboard(
     now: dt.datetime,
     telemetry: Telemetry,
 ) -> out.OnboardingResult:
-    """Complete the wizard in one transaction (F2.1, F2.2 training half, F2.6, D55)."""
+    """Complete the wizard in one transaction (F2.1, F2.2 training and meal plan, F7, F2.6, D55)."""
     require_athlete(user)
     profile_in, metric_in = request.profile, request.body_metric
     # Serialises concurrent onboarding calls of the same athlete.
@@ -494,6 +502,17 @@ def onboard(
         )
         for day, day_kcal in zip(generated.days, weekly.days, strict=True)
     ]
+    # F7: the meal plan is generated with the training plan, from the targets just stored.
+    generated_meals = meal_plans.generate(
+        session,
+        athlete_id=user.id,
+        today=today,
+        kcal=targets_row.kcal,
+        protein_g=targets_row.protein_g,
+        meals_per_day=profile_in.meals_per_day,
+        diet=profile_in.diet,
+        allergies=profile_in.allergies,
+    )
     plan = create_plan_version(
         session,
         athlete_id=user.id,
@@ -501,6 +520,17 @@ def onboard(
         source="generated",
         days=new_days,
         now=now,
+        meal_days=[
+            NewMealDay(
+                weekday=day.weekday,
+                warning=day.warning,
+                meals=[
+                    NewPlannedMeal(m.slot, uuid.UUID(m.meal_id), m.portion_factor)
+                    for m in day.meals
+                ],
+            )
+            for day in generated_meals.days
+        ],
     )
     try:
         session.commit()

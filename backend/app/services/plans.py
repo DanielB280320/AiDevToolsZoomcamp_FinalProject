@@ -18,10 +18,20 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.engines.exercise_kcal import duration_minutes, set_based_minutes
 from app.errors import ProblemError
-from app.models import Exercise, Plan, PlanChange, PlannedExercise, TrainingDay, User
+from app.models import (
+    Exercise,
+    MealDay,
+    Plan,
+    PlanChange,
+    PlannedExercise,
+    PlannedMeal,
+    TrainingDay,
+    User,
+)
 from app.models.plan import WEEKDAYS
 from app.schemas import plans as out
 from app.schemas.users import UserRef
+from app.services.meal_plans import meal_day_views
 
 WARM_UP_MINUTES = 5  # D54: estimated session duration includes a 5 minute warm-up
 CALIBRATION_HINT = "Choose a weight you can do for the target reps with 2 reps left"  # F5.4
@@ -50,6 +60,20 @@ class NewTrainingDay:
     planned_kcal: int = 0
 
 
+@dataclass(frozen=True)
+class NewPlannedMeal:
+    slot: str
+    meal_id: uuid.UUID
+    portion_factor: float
+
+
+@dataclass(frozen=True)
+class NewMealDay:
+    weekday: str
+    meals: Sequence[NewPlannedMeal] = field(default_factory=tuple)
+    warning: str | None = None
+
+
 def create_plan_version(
     session: Session,
     *,
@@ -58,6 +82,7 @@ def create_plan_version(
     source: str,
     days: Sequence[NewTrainingDay],
     now: dt.datetime,
+    meal_days: Sequence[NewMealDay] = (),
 ) -> Plan:
     """Store `days` as the athlete's next plan version and make it the active one.
 
@@ -104,6 +129,23 @@ def create_plan_version(
                 )
             )
         plan.training_days.append(training_day)
+    for day_order, meal_day in enumerate(meal_days):
+        plan.meal_days.append(
+            MealDay(
+                weekday=meal_day.weekday,
+                position=day_order,
+                warning=meal_day.warning,
+                meals=[
+                    PlannedMeal(
+                        slot=m.slot,
+                        position=order,
+                        meal_id=m.meal_id,
+                        portion_factor=m.portion_factor,
+                    )
+                    for order, m in enumerate(meal_day.meals)
+                ],
+            )
+        )
     session.add(plan)
     session.flush()
     session.add(
@@ -155,7 +197,10 @@ def get_active_plan(session: Session, athlete_id: uuid.UUID) -> out.Plan:
     plan = session.scalar(
         select(Plan)
         .where(Plan.athlete_id == athlete_id, Plan.active.is_(True))
-        .options(selectinload(Plan.training_days).selectinload(TrainingDay.exercises))
+        .options(
+            selectinload(Plan.training_days).selectinload(TrainingDay.exercises),
+            selectinload(Plan.meal_days).selectinload(MealDay.meals),
+        )
     )
     if plan is None:
         raise ProblemError(
@@ -169,7 +214,11 @@ def plan_view(session: Session, plan: Plan, warnings: Sequence[str] = ()) -> out
     exercises = {
         e.id: e for e in session.scalars(select(Exercise).where(Exercise.id.in_(exercise_ids)))
     }
-    user_ids = {plan.created_by} | {d.edited_by for d in plan.training_days if d.edited_by}
+    user_ids = (
+        {plan.created_by}
+        | {d.edited_by for d in plan.training_days if d.edited_by}
+        | {d.edited_by for d in plan.meal_days if d.edited_by}
+    )
     users = {u.id: u for u in session.scalars(select(User).where(User.id.in_(user_ids)))}
     order = {w: i for i, w in enumerate(WEEKDAYS)}
     days = sorted(plan.training_days, key=lambda d: (order[d.weekday], d.position))
@@ -201,7 +250,11 @@ def plan_view(session: Session, plan: Plan, warnings: Sequence[str] = ()) -> out
                 }
                 for day in days
             ],
-            "meal_days": [],
+            "meal_days": meal_day_views(
+                session,
+                sorted(plan.meal_days, key=lambda d: (order[d.weekday], d.position)),
+                users,
+            ),
             "warnings": list(warnings),
         }
     )

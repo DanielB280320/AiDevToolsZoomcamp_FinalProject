@@ -173,3 +173,41 @@ PLAN_TIMED_TARGET_SECONDS = 30
 PLAN_MIN_EXERCISES_PER_SESSION = 1
 # F5.4 hint shown while a strength target has no weight.
 CALIBRATION_HINT = "Choose a weight you can do for the target reps with 2 reps left."
+
+# ============================================================================================
+# F7 Meal plan generator (#36) — used by app/engines/meal_plan.py.
+# ============================================================================================
+
+# F7 slot calorie split per meals/day, in slot order (spec F7 table); each tuple sums to 1.
+MEAL_SLOT_SPLIT: dict[int, tuple[tuple[str, float], ...]] = {
+    3: (("breakfast", 0.25), ("lunch", 0.35), ("dinner", 0.40)),
+    4: (("breakfast", 0.25), ("lunch", 0.30), ("snack", 0.15), ("dinner", 0.30)),
+    5: (
+        ("breakfast", 0.20),
+        ("snack", 0.10),
+        ("lunch", 0.30),
+        ("snack", 0.10),
+        ("dinner", 0.30),
+    ),
+}
+# F7 portion scaling bounds applied to every planned meal.
+MEAL_PORTION_MIN = 0.75
+MEAL_PORTION_MAX = 1.5
+# F7 a day is "on target" within this fraction of the kcal target and at or above this fraction
+# of the protein target.
+MEAL_KCAL_TOLERANCE = 0.05
+MEAL_PROTEIN_MIN_FRACTION = 0.90
+# F7 a meal appears at most this many times in a generated week.
+MEAL_MAX_USES_PER_WEEK = 2
+# F7 (D68) random combinations tried per day before the best attempt is kept.
+MEAL_DAY_ATTEMPTS = 60
+# F7 (D68) portion factors are stored with this many decimals.
+MEAL_PORTION_DECIMALS = 2
+# F7 (D68) passes of proportional rescaling that bring the day total onto the target.
+MEAL_SCALE_PASSES = 6
+# F7 warnings shown with a day (the protein one is the spec wording).
+MEAL_WARNING_PROTEIN = (
+    "Couldn't hit your protein target with the current library — add custom meals"
+)
+MEAL_WARNING_KCAL = "Couldn't hit your calorie target with the current library — add custom meals"
+MEAL_WARNING_SLOT = "Not enough different meals for the {slot} slot — add custom meals"
