@@ -31,6 +31,10 @@ def ctx(tmp_path: Path) -> Context:
     )
 
 
+def fill(command: str, ctx: Context) -> str:
+    return command.replace("{clone}", str(ctx.clone_dir)).replace("{inc}", str(ctx.incident_dir))
+
+
 def bash(command: str) -> dict[str, object]:
     return {"tool_name": "Bash", "tool_input": {"command": command}}
 
@@ -116,7 +120,6 @@ def git(ctx: Context, *args: str) -> str:
         ("grep", "-C", "3", "-e", "raise", "origin/main"),
         ("checkout", "-b", "oncall/20261024T100000Z-abc", "origin/main"),
         ("checkout", "oncall/fix"),
-        ("checkout", "--", "backend/app/x.py"),
         ("switch", "-c", "oncall/fix"),
         ("branch", "--list", "-a"),
         ("branch", "--show-current"),
@@ -237,3 +240,203 @@ def test_git_option_table_has_no_prefix_matching():
     for sub, (flags, valued) in GIT_OPTIONS.items():
         for opt in (*flags, *valued):
             assert not opt.endswith("="), (sub, opt)
+
+
+# --- QA round 2 cases (copied from the QA scratch file) ---------------------------------------
+
+
+def test_commit_msgfile_is_the_exact_incident_file(ctx: Context):
+    clone, inc = ctx.clone_dir, ctx.incident_dir
+    check_bash(f"git -C {clone} commit -F {inc}/commit-msg.txt", ctx)
+    for value in (
+        f"{inc}/../inc/commit-msg.txt",
+        f"{inc}//commit-msg.txt",
+        f"{inc}/./commit-msg.txt",
+        f"{inc}/issue.md",
+        "commit-msg.txt",
+        f"{clone}/commit-msg.txt",
+    ):
+        with pytest.raises(Blocked):
+            check_bash(f"git -C {clone} commit -F {value}", ctx)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        "grep -e x -- backend/../../etc",
+        "log -- ../x",
+        "show HEAD -- a/../../b",
+        "diff -- ~/x",
+        "grep -e x *",
+        "add backend/*",
+        "log -5 -- $HOME",
+    ],
+)
+def test_git_positionals_stay_inside_the_clone(args: str, ctx: Context):
+    with pytest.raises(Blocked):
+        check_bash(f"git -C {ctx.clone_dir} {args}", ctx)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git -C {clone} commit -m $GH_TOKEN",
+        'git -C {clone} commit -m "fix $ANTHROPIC_API_KEY"',
+        "gh issue create --repo owner/repo --label incident --title $GH_TOKEN "
+        "--body-file {inc}/issue.md",
+        "gh pr create --repo owner/repo --head oncall/x --base main --title $GH_TOKEN "
+        "--body-file {inc}/pr.md",
+        "curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode query=$GH_TOKEN",
+    ],
+)
+def test_free_text_values_cannot_expand_environment_variables(command: str, ctx: Context):
+    with pytest.raises(Blocked):
+        check_bash(fill(command, ctx), ctx)
+
+
+# --- F4: nothing the shell would expand, nothing that prints the environment -------------------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "sleep $X",
+        "sleep 1$X",
+        "docker compose logs $SERVICE",
+        "docker compose ps --format '$GH_TOKEN'",
+        "docker compose ps --format '${GH_TOKEN}'",
+        "git -C {clone} commit -m $'x'",
+        "git -C {clone} commit -m 'a $B'",
+        "gh issue create --repo owner/repo --label incident --title '$GH_TOKEN' --body-file {inc}/issue.md",
+        "git -C {clone} commit -m `id`",
+        'git -C {clone} commit -m "$(id)"',
+        'git -C {clone} commit -m "a\\nb"',
+        'git -C {clone} commit -m "wow!"',
+        "git -C {clone} log -n 3 !!",
+        "git -C {clone} add ~",
+        "git -C {clone} add ~root/x",
+        "git -C {clone} add *.py",
+        "git -C {clone} add file?.py",
+        "git -C {clone} add [a]b",
+        "git -C {clone} add {a,b}",
+        "git -C {clone} commit -m x # note",
+        "docker compose ps <(id)",
+        "docker compose ps >/tmp/x",
+        "docker compose ps | cat",
+        "docker compose ps; id",
+        "docker compose ps & id",
+        "docker compose ps && id",
+        "sleep 1\nid",
+    ],
+)
+def test_no_shell_expansion_is_possible(command: str, ctx: Context):
+    with pytest.raises(Blocked):
+        check_bash(fill(command, ctx), ctx)
+
+
+def test_quoted_free_text_without_expansion_is_still_fine(ctx: Context):
+    check_bash(f"git -C {ctx.clone_dir} commit -m 'Fix: finish raised KeyError (see #12)'", ctx)
+    check_bash(f'git -C {ctx.clone_dir} commit -m "Fix: finish raised KeyError"', ctx)
+    check_bash(
+        "curl -sG http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "
+        '\'query={service_name="fitwise-backend"} | detected_level=~"error"\'',
+        ctx,
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "env",
+        "printenv",
+        "printenv GH_TOKEN",
+        "set",
+        "export",
+        "export -p",
+        "declare -x",
+        "cat /proc/self/environ",
+        "cat /proc/1/environ",
+        "strings /proc/self/environ",
+        "gh auth token",
+        "gh auth status -t",
+        "gh auth status --show-token",
+        "gh config get oauth_token",
+        "gh api user",
+        "gh secret list",
+        "gh issue view 1",
+        "gh pr create --repo owner/repo --head oncall/x --base main --title t --body-file /proc/self/environ",
+        "git -C {clone} config --list",
+        "git -C {clone} config credential.helper",
+        "git -C {clone} config --get-all credential.helper",
+        "git -C {clone} credential fill",
+        "git -C {clone} remote -v",
+        "git -C {clone} remote get-url origin",
+        "git -C {clone} var -l",
+        "git -C {clone} show-ref",
+        "git -C {clone} for-each-ref",
+        "git -C {clone} help",
+        "docker compose config",
+        "docker compose exec backend env",
+        "docker compose run backend env",
+        "docker compose convert",
+        "docker inspect fitwise-backend-1",
+        "docker compose logs --follow",
+        "docker compose logs -e",
+        "bash -c env",
+        "sh -c 'cat /proc/self/environ'",
+        "python3 -c 'import os'",
+        "cat {inc}/guard.json",
+        "echo x",
+        "xargs env",
+        "curl file:///proc/self/environ",
+        "curl -sG http://127.0.0.1:9090/api/v1/query --config /proc/self/environ",
+    ],
+)
+def test_nothing_that_prints_the_environment_or_credentials_is_allowed(command: str, ctx: Context):
+    with pytest.raises(Blocked):
+        check_bash(fill(command, ctx), ctx)
+
+
+def test_reading_environ_through_the_file_tools_is_blocked(ctx: Context):
+    for path in ("/proc/self/environ", "/proc/1/environ", "/etc/fitwise-oncall.env"):
+        with pytest.raises(Blocked):
+            decide({"tool_name": "Read", "tool_input": {"file_path": path}}, ctx)
+    link = ctx.clone_dir / "env-link"
+    link.symlink_to("/proc/self/environ")
+    with pytest.raises(Blocked):
+        decide({"tool_name": "Read", "tool_input": {"file_path": str(link)}}, ctx)
+
+
+# --- QA notes: editor-less commit, no path restore through checkout -----------------------------
+
+
+def test_commit_without_a_message_is_refused(ctx: Context):
+    for args in (("commit",), ("commit", "-a"), ("commit", "--amend"), ("commit", "-s")):
+        with pytest.raises(Blocked, match="needs -m or -F"):
+            check_bash(git(ctx, *args), ctx)
+    check_bash(git(ctx, "commit", "--amend", "--no-edit"), ctx)
+    check_bash(git(ctx, "commit", "-m", "x"), ctx)
+
+
+def test_checkout_cannot_restore_paths(ctx: Context):
+    (ctx.clone_dir / "deploy").mkdir()
+    (ctx.clone_dir / "deploy" / "poll.sh").write_text("x")
+    for args in (
+        ("checkout", "origin/main", "deploy/poll.sh"),
+        ("checkout", "origin/main", "--", "deploy/poll.sh"),
+        ("checkout", "--", "deploy/poll.sh"),
+        ("checkout", "deploy/poll.sh"),
+        ("checkout", "deploy"),
+        ("checkout", "-b", "oncall/x", "origin/main", "deploy/poll.sh"),
+        ("checkout", "-b", "oncall/x", "deploy/poll.sh"),
+        ("checkout", "-b", "oncall/x", "a", "b"),
+        ("checkout", "-b"),
+        ("checkout",),
+        ("checkout", "a", "b"),
+    ):
+        with pytest.raises(Blocked):
+            check_bash(git(ctx, *args), ctx)
+    check_bash(git(ctx, "checkout", "oncall/fix"), ctx)
+    check_bash(git(ctx, "checkout", "origin/main"), ctx)
+    check_bash(git(ctx, "checkout", "-b", "oncall/x"), ctx)
+    check_bash(git(ctx, "checkout", "-b", "oncall/x", "origin/main"), ctx)

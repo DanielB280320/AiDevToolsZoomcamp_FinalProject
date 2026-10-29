@@ -224,6 +224,7 @@ Folder {inc}/ holds alert.json, prometheus.json, loki.json, tempo.json and captu
 - After a mitigation, check the alert condition (error ratio under 5 percent / p95 under 1 s) with the runbook's queries every minute (`sleep 60` between checks) for 5 consecutive minutes before you say it recovered. If it does not recover within 15 minutes, say so.
 - You have 20 minutes in total. Be brief.
 - Never write emails, names, passwords, tokens, body metrics, food names or notes anywhere. Users are identified only by user_hash.
+- In titles and commit messages (double-quoted) never use $, !, backslashes or backticks: the guard refuses them. Put detail in the body file instead.
 - Never push to main. Never touch deploy, workflows or this on-call code.
 
 ## Deliverables

@@ -169,10 +169,39 @@ class Context:
         )
 
 
+def _scan_expansions(command: str) -> None:
+    """Refuse everything the shell would expand or interpret, before any parsing.
+
+    The tokens that come out of shlex have lost their quotes, so quoting is tracked here:
+
+    * anywhere (even in single quotes, to stay simple): `$` (variables, `$(..)`, `${..}`, `$'..'`),
+      backticks, newlines, NUL. A bare `$GH_TOKEN` in a title or commit message would be expanded by
+      bash and could put a secret into a public issue, PR or commit.
+    * outside single quotes: backslashes, and `!` (history expansion).
+    * outside any quotes: glob and brace characters `* ? [ ] { }`, `~`, `#` (comment) and the
+      operators `< > ( ) | & ;`.
+    """
+    if any(c in command for c in "$`\n\r\0"):
+        raise Blocked("variables, command substitution and multi-line commands are not allowed")
+    quote = ""
+    for ch in command:
+        if quote == "'":
+            quote = "" if ch == "'" else quote
+            continue
+        if ch == "\\" or ch == "!":
+            raise Blocked("backslashes and history expansion are not allowed")
+        if quote == '"':
+            quote = "" if ch == '"' else quote
+            continue
+        if ch in "'\"":
+            quote = ch
+        elif ch in "*?[]{}~#<>()|&;":
+            raise Blocked(f"unquoted shell syntax is not allowed: {ch}")
+
+
 def tokenize(command: str) -> list[str]:
-    """Split one simple command; refuse anything that chains, redirects or substitutes."""
-    if "\n" in command or "\r" in command or "`" in command or "$(" in command or "${" in command:
-        raise Blocked("shell substitution and multi-line commands are not allowed")
+    """Split one simple command; refuse anything that chains, redirects, expands or substitutes."""
+    _scan_expansions(command)
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     try:
@@ -310,6 +339,17 @@ def _positional_ok(token: str) -> bool:
 
 def _git_args(sub: str, args: list[str], ctx: Context) -> None:
     flags, valued = GIT_OPTIONS[sub]
+    if sub == "commit" and not ({"-m", "-F", "--no-edit"} & set(args)):
+        raise Blocked("git commit needs -m or -F (no editor available)")
+    if sub == "checkout":
+        # `git checkout <rev> <path>` restores files, also protected ones. Only two forms exist:
+        # `checkout [-q] <branch or revision>` and `checkout [-q] -b oncall/<name> [<start>]`.
+        rest = [a for a in args if a != "-q"]
+        revs = rest[2:] if rest[:1] == ["-b"] else rest
+        if (rest[:1] == ["-b"] and len(rest) not in (2, 3)) or len(revs) > 1 or not rest:
+            raise Blocked("git checkout: only `checkout [-b oncall/<name>] <branch or revision>`")
+        if any(r.startswith("-") or (ctx.clone_dir / r).exists() for r in revs):
+            raise Blocked("git checkout: path restore is not allowed")
     i = 0
     after_dashdash = False
     while i < len(args):

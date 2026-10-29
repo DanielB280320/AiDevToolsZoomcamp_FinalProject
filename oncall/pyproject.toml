@@ -31,6 +31,7 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "C4", "RUF", "S", "N", "T20"]
 known-first-party = ["responder", "tests"]
 
 [tool.ruff.lint.per-file-ignores]
+"tests/test_guard.py" = ["E501"]  # long command strings
 "responder/agent.py" = ["E501"]  # the agent prompt is prose
 "tests/**" = ["S101", "S105", "S106", "S108", "S603", "S604"]
 
