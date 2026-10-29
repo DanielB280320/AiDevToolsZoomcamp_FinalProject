@@ -330,6 +330,94 @@ describe("editing sets", () => {
     expect(bodies[0]).toEqual({ exercise_id: PLANK.id, planned_exercise_id: null, set_no: 1, as_planned: false, skipped: false, seconds: 40 });
   });
 
+  it("removes an added exercise on Cancel when no set was logged, without an API write", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    const bodies = captureSets();
+    server.use(
+      sessionOk(),
+      http.get(apiUrl("/exercises"), () => HttpResponse.json({ items: [PLANK], next_cursor: null })),
+    );
+    renderScreen(clock);
+
+    await user.click(await screen.findByRole("button", { name: "Add exercise" }));
+    await user.type(screen.getByLabelText("Search exercises by name"), "pla");
+    await user.click(await screen.findByRole("button", { name: "Plank" }));
+    expect(await screen.findByLabelText("Duration (s)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("heading", { name: "Plank" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Duration (s)")).not.toBeInTheDocument();
+    expect(bodies).toHaveLength(0);
+  });
+
+  it("keeps a planned exercise when Cancel is pressed on its Add set editor", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    const bodies = captureSets();
+    server.use(sessionOk());
+    renderScreen(clock);
+
+    await user.click(await screen.findByRole("button", { name: /^Add set/ }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("heading", { name: "Back squat" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Add set/ })).toBeInTheDocument();
+    expect(bodies).toHaveLength(0);
+  });
+
+  it("keeps an extra exercise that already has logged sets when Cancel is pressed", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    const bodies = captureSets();
+    const extraPlank = squatExercise({
+      planned_exercise_id: null,
+      exercise: PLANK,
+      is_extra: true,
+      sets: [
+        {
+          set_no: 1,
+          is_extra: true,
+          target_reps: null,
+          target_weight_kg: null,
+          target_seconds: null,
+          log: setLog(1, { planned_exercise_id: null, exercise_id: PLANK.id, reps: null, weight_kg: null, seconds: 40 }),
+        },
+      ],
+    });
+    server.use(sessionOk({ exercises: [squatExercise(), extraPlank] }));
+    renderScreen(clock);
+
+    const card = (await screen.findByRole("heading", { name: "Plank" })).closest("section")!;
+    await user.click(within(card).getByRole("button", { name: /^Add set/ }));
+    await user.click(within(card).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("heading", { name: "Plank" })).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: /^Add set/ })).toBeInTheDocument();
+    expect(bodies).toHaveLength(0);
+  });
+
+  it("lets a cancelled extra exercise be added again from search, reopening the editor", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    server.use(
+      sessionOk(),
+      http.get(apiUrl("/exercises"), () => HttpResponse.json({ items: [PLANK], next_cursor: null })),
+    );
+    renderScreen(clock);
+
+    for (let round = 0; round < 2; round++) {
+      await user.click(await screen.findByRole("button", { name: "Add exercise" }));
+      await user.clear(screen.getByLabelText("Search exercises by name"));
+      await user.type(screen.getByLabelText("Search exercises by name"), "pla");
+      await user.click(await screen.findByRole("button", { name: "Plank" }));
+      expect(await screen.findByLabelText("Duration (s)")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Plank" })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("heading", { name: "Plank" })).not.toBeInTheDocument();
+    }
+  });
+
   it("shows the server's reason when a set is refused", async () => {
     const { clock } = manualClock(NOW);
     const user = userEvent.setup();

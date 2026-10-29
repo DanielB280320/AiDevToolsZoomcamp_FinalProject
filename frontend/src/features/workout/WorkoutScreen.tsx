@@ -129,6 +129,7 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
               locked={locked}
               pending={logSet.isPending}
               save={save}
+              onDiscard={(gone) => setAdded(added.filter((e) => e.id !== gone.exercise.id))}
               onLogged={(done) => timer.start(done.rest_seconds, done.exercise.name)}
             />
           ))}

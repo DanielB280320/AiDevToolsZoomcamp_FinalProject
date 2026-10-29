@@ -19,6 +19,8 @@ interface Props {
   save: SetSaver;
   /** Called after a set was logged (not skipped), to start the rest timer. */
   onLogged: (exercise: SessionExercise) => void;
+  /** Called when an added extra exercise with no logged sets is cancelled, so it can be dropped. */
+  onDiscard?: (exercise: SessionExercise) => void;
 }
 
 function SetRow({
@@ -158,7 +160,10 @@ export function ExerciseCard(props: Props) {
               onLogged(exercise);
             });
           }}
-          onCancel={() => setAdding(false)}
+          onCancel={() => {
+            setAdding(false);
+            if (exercise.is_extra && exercise.sets.length === 0) props.onDiscard?.(exercise);
+          }}
         />
       )}
       {!locked && !showEditor && (
