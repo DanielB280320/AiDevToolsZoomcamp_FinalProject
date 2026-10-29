@@ -139,7 +139,7 @@ def test_migration_b4d7f1c9e203_round_trip_with_existing_data(athlete: Api) -> N
         before = [c.execute(text(q)).scalar() for q in COUNTS]
     engine.dispose()
 
-    command.downgrade(alembic_config(url), "-1")
+    command.downgrade(alembic_config(url), "a8c4e2f6b913")  # not "-1": later revisions sit on top
     with engine.connect() as c:
         assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "a8c4e2f6b913"
         assert c.execute(text("SELECT to_regclass('meal_day')")).scalar() is None
@@ -147,7 +147,7 @@ def test_migration_b4d7f1c9e203_round_trip_with_existing_data(athlete: Api) -> N
         assert [c.execute(text(q)).scalar() for q in COUNTS] == before
     engine.dispose()
 
-    command.upgrade(alembic_config(url), "head")
+    command.upgrade(alembic_config(url), "b4d7f1c9e203")
     with engine.connect() as c:
         assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "b4d7f1c9e203"
         assert c.execute(text("SELECT count(*) FROM meal_day")).scalar() == 0
