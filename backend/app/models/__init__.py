@@ -5,7 +5,14 @@ from app.models.base import Base
 from app.models.exercise import Exercise
 from app.models.feature_flag import FeatureFlag
 from app.models.food import Food, Meal, MealItem
-from app.models.plan import Plan, PlanChange, PlannedExercise, TrainingDay
+from app.models.plan import (
+    MealDay,
+    Plan,
+    PlanChange,
+    PlannedExercise,
+    PlannedMeal,
+    TrainingDay,
+)
 from app.models.session import ExtraActivity, SetLog, TrainingSession
 from app.models.suggestion import Suggestion
 from app.models.user import SignInFailure, User
@@ -19,10 +26,12 @@ __all__ = [
     "FeatureFlag",
     "Food",
     "Meal",
+    "MealDay",
     "MealItem",
     "Plan",
     "PlanChange",
     "PlannedExercise",
+    "PlannedMeal",
     "SetLog",
     "SignInFailure",
     "Suggestion",
