@@ -506,6 +506,19 @@ def test_run_agent_passes_an_api_key_when_it_is_the_only_credential(
     assert env["ANTHROPIC_API_KEY"] == SECRET_KEY and "CLAUDE_CODE_OAUTH_TOKEN" not in env
 
 
+def test_run_agent_passes_the_api_key_when_the_oauth_token_is_empty(
+    agent_settings: Settings, incident: Incident, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    record = tmp_path / "record.json"
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", SECRET_KEY)
+    s = replace(agent_settings, claude_bin=str(_fake_claude(tmp_path, RECORD)))
+    assert run_agent(incident, s) == 0
+    env = json.loads(record.read_text())["env"]
+    assert env["ANTHROPIC_API_KEY"] == SECRET_KEY
+    assert not env.get("CLAUDE_CODE_OAUTH_TOKEN")
+
+
 def test_run_agent_times_out_and_kills_the_process_group(
     agent_settings: Settings, incident: Incident, tmp_path: Path
 ):
@@ -567,6 +580,9 @@ def test_agent_requires_its_own_secrets_and_a_sane_budget():
         Settings.from_env({**base, "CLAUDE_CODE_OAUTH_TOKEN": "o"})
     with pytest.raises(ConfigError, match="GH_TOKEN"):
         Settings.from_env({**base, "ANTHROPIC_API_KEY": "k"})
+    for cred in ({"CLAUDE_CODE_OAUTH_TOKEN": "o"}, {"ANTHROPIC_API_KEY": "k"}):
+        with pytest.raises(ConfigError, match="GH_TOKEN"):
+            Settings.from_env({**base, **cred, "GH_TOKEN": ""})  # empty GH_TOKEN fails closed
     ok = Settings.from_env({**base, "ANTHROPIC_API_KEY": "k", "GH_TOKEN": "t"})
     assert ok.agent_enabled
     only_oauth = Settings.from_env({**base, "CLAUDE_CODE_OAUTH_TOKEN": "o", "GH_TOKEN": "t"})

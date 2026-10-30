@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted, partly superseded by D72 (authentication) |
 | **Date** | 2026-10-21 |
 | **Deciders** | Owner |
 | **Spec** | [spec §15.2 On-call responder](../spec.md#152-on-call-responder), [§15.3 Demo scenarios](../spec.md#153-demo-scenarios-documented-in-docsrunbooks), [§19](../spec.md#19-decisions-log) D33, [process.md §10](../process.md#10-incidents) |
@@ -20,6 +20,8 @@ We will run a small **Python webhook receiver** (systemd on the prod host) that 
 - `gh issue create` for the incident report, and `git` + `gh pr create` on a separate clone for the fix (branch push only).
 
 It has no database writes, no secrets beyond its own env file, no arbitrary shell, a 20-minute timeout and an API key with a spend limit.
+
+> **Partly superseded by D72 ([spec §19](../spec.md#19-decisions-log)).** The agent authenticates with the owner's Claude subscription token (`CLAUDE_CODE_OAUTH_TOKEN`), not an API key with a Console spend limit. Spend is bounded by the subscription's usage limits, the 20-minute timeout and the per-run `--max-budget-usd` cap. The allow-list and the rest of this decision are unchanged.
 
 ## Alternatives considered
 
