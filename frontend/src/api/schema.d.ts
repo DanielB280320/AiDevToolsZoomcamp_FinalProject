@@ -1853,7 +1853,8 @@ export interface components {
             active: boolean;
             /** @description Optimistic-concurrency counter; send it back with plan updates. */
             revision: number;
-            created_by: components["schemas"]["UserRef"];
+            /** @description Null once the author (a linked coach) has deleted their account. */
+            created_by: components["schemas"]["UserRef"] | null;
             created_at: components["schemas"]["Timestamp"];
             updated_at: components["schemas"]["Timestamp"];
             /** @description Ordered Monday → Sunday; weekdays not listed are rest days. */
@@ -1881,7 +1882,8 @@ export interface components {
             version: number;
             source: components["schemas"]["PlanSource"];
             active: boolean;
-            created_by: components["schemas"]["UserRef"];
+            /** @description Null once the author (a linked coach) has deleted their account. */
+            created_by: components["schemas"]["UserRef"] | null;
             created_at: components["schemas"]["Timestamp"];
         };
         PlanVersionList: {

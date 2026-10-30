@@ -3729,7 +3729,10 @@ components:
           minimum: 0
           description: Optimistic-concurrency counter; send it back with plan updates.
         created_by:
-          $ref: '#/components/schemas/UserRef'
+          description: Null once the author (a linked coach) has deleted their account.
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
         created_at:
           $ref: '#/components/schemas/Timestamp'
         updated_at:
@@ -3795,7 +3798,10 @@ components:
         active:
           type: boolean
         created_by:
-          $ref: '#/components/schemas/UserRef'
+          description: Null once the author (a linked coach) has deleted their account.
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
         created_at:
           $ref: '#/components/schemas/Timestamp'
     PlanVersionList:
