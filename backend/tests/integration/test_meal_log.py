@@ -9,11 +9,11 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.main import create_app
-from app.models import Exercise, Food, Meal, MealLog, MealLogItem, User
+from app.models import Exercise, Food, Meal, MealDay, MealLog, MealLogItem, Plan, User
 from app.seed import run_seed
 from app.services.plans import (
     NewMealDay,
@@ -310,12 +310,19 @@ def test_delete_undoes_a_checkoff_and_lets_it_be_checked_off_again(athlete: Api)
 # ───────────── history snapshots ─────────────
 
 
-def test_a_log_keeps_its_grams_when_the_plan_is_replaced(athlete: Api) -> None:
-    planned = _day(athlete.client)["meals"][0]["planned_meal"]
-    log = _post(athlete.client, planned_meal_id=planned["id"], status="eaten").json()["meal_log"]
-    with Session(athlete.app.state.engine) as session:
+def _new_version(api: Api, *, copy_meals: bool, now: dt.datetime = NOW) -> None:
+    """A new plan version, as a plan edit or an accepted suggestion creates one: new ids for
+    everything. With `copy_meals=False` the meal days are not carried over (#158)."""
+    with Session(api.app.state.engine) as session:
         uid = session.scalars(select(User.id)).one()
         exercise = session.scalars(select(Exercise)).first()
+        old = session.scalars(select(Plan).where(Plan.active.is_(True))).one()
+        meal_days = [
+            NewMealDay(
+                d.weekday, [NewPlannedMeal(m.slot, m.meal_id, m.portion_factor) for m in d.meals]
+            )
+            for d in session.scalars(select(MealDay).where(MealDay.plan_id == old.id))
+        ]
         assert exercise is not None
         create_plan_version(
             session,
@@ -329,12 +336,71 @@ def test_a_log_keeps_its_grams_when_the_plan_is_replaced(athlete: Api) -> None:
                     [NewPlannedExercise(exercise.id, 3, 90, "linear", 2.5, reps_min=8, reps_max=8)],
                 )
             ],
-            now=NOW,
+            meal_days=meal_days if copy_meals else [],
+            now=now,
         )
         session.commit()
+
+
+@pytest.mark.parametrize("copy_meals", [True, False])
+def test_a_logged_day_survives_a_new_plan_version(athlete: Api, copy_meals: bool) -> None:
+    before = _day(athlete.client)
+    planned = before["meals"][0]["planned_meal"]
+    log = _post(athlete.client, planned_meal_id=planned["id"], status="eaten").json()["meal_log"]
+    _new_version(athlete, copy_meals=copy_meals)
     day = _day(athlete.client)
-    assert day["meals"] == []
+    assert len(day["meals"]) == 3
+    assert day["meals"][0]["log"]["id"] == log["id"]
+    assert day["meals"][0]["log"]["planned_meal_id"] == day["meals"][0]["planned_meal"]["id"]
+    assert day["meals"][1]["log"] is None
+    assert day["nutrition_completion"] == pytest.approx(0.3333)
     assert day["energy"]["eaten"]["kcal"] == log["totals"]["kcal"]
+    assert day["extra_meal_logs"] == []
+
+
+@pytest.mark.parametrize("copy_meals", [True, False])
+def test_checkoff_is_idempotent_across_plan_versions(athlete: Api, copy_meals: bool) -> None:
+    first = _post(
+        athlete.client,
+        planned_meal_id=_day(athlete.client)["meals"][0]["planned_meal"]["id"],
+        status="eaten",
+    )
+    _new_version(athlete, copy_meals=copy_meals)
+    new_id = _day(athlete.client)["meals"][0]["planned_meal"]["id"]
+    again = _post(athlete.client, planned_meal_id=new_id, status="eaten")
+    assert again.status_code == 200
+    assert again.json()["meal_log"]["id"] == first.json()["meal_log"]["id"]
+    assert _count(athlete, MealLog) == 1
+    assert (
+        _day(athlete.client)["energy"]["eaten"]["kcal"]
+        == first.json()["meal_log"]["totals"]["kcal"]
+    )
+
+
+def test_a_later_plan_version_does_not_change_an_earlier_day(athlete: Api) -> None:
+    wed = "2026-10-21"
+    before = _day(athlete.client, wed)["meals"]
+    _new_version(athlete, copy_meals=True, now=NOW)
+    # A version created after that day (today is Thursday) is not the plan of Wednesday... but a
+    # version created on Wednesday itself or earlier is: same meals, new ids.
+    after = _day(athlete.client, wed)["meals"]
+    assert [m["planned_meal"]["meal"]["id"] for m in after] == [
+        m["planned_meal"]["meal"]["id"] for m in before
+    ]
+
+
+def test_a_log_matching_no_planned_meal_stays_visible_and_undoable(athlete: Api) -> None:
+    planned = _day(athlete.client)["meals"][0]["planned_meal"]["id"]
+    log = _post(athlete.client, planned_meal_id=planned, status="eaten").json()["meal_log"]
+    with Session(athlete.app.state.engine) as session:
+        session.execute(text("UPDATE meal_log SET slot_index = 7"))
+        session.commit()
+    day = _day(athlete.client)
+    assert day["energy"]["eaten"]["kcal"] == log["totals"]["kcal"]
+    assert [e["id"] for e in day["extra_meal_logs"]] == [log["id"]]
+    assert day["nutrition_completion"] == 0
+    deleted = athlete.client.delete(f"{ME}/meal-logs/{log['id']}")
+    assert deleted.json()["energy"]["eaten"]["kcal"] == 0
 
 
 # ───────────── validation ─────────────

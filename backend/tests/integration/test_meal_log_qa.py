@@ -275,10 +275,6 @@ def _plan_version_with_same_meals(api: Api) -> None:
         session.commit()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="QA #37: logs are keyed by planned_meal_id, which changes with every plan version",
-)
 def test_a_new_plan_version_does_not_rewrite_a_logged_day(captured: tuple[Api, Captured]) -> None:
     api, _ = captured
     before = _day(api.client)
@@ -292,10 +288,6 @@ def test_a_new_plan_version_does_not_rewrite_a_logged_day(captured: tuple[Api, C
     assert any(m["log"] is not None for m in after["meals"])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="QA #37: after a plan version the same meal can be checked off again (double eaten)",
-)
 def test_the_same_meal_cannot_be_eaten_twice_across_plan_versions(
     captured: tuple[Api, Captured],
 ) -> None:
@@ -322,10 +314,6 @@ def test_a_logged_planned_meal_is_visible_on_its_day(captured: tuple[Api, Captur
     assert log["id"] in _shown(_day(api.client))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="QA #37: after the plan is replaced, a planned-meal log counts in eaten but is hidden",
-)
 def test_a_log_that_counts_in_eaten_stays_visible_after_the_plan_is_replaced(
     captured: tuple[Api, Captured],
 ) -> None:
@@ -406,19 +394,22 @@ def test_partial_unique_index_allows_many_extras_but_one_log_per_planned_meal(
             _meal_log(conn, athlete, food, planned=False)
             _meal_log(conn, athlete, food, planned=False)
             planned = _meal_log(conn, athlete, food, planned=True)
-            pid = conn.execute(
-                text("SELECT planned_meal_id FROM meal_log WHERE id = :i"), {"i": planned}
-            ).scalar_one()
+            # The identity of a planned meal is (date, slot, slot index), not its per-version id.
+            conn.execute(
+                text("UPDATE meal_log SET slot = 'lunch', slot_index = 0 WHERE id = :i"),
+                {"i": planned},
+            )
         with (
-            pytest.raises(IntegrityError, match="uq_meal_log_athlete_id_date_planned_meal_id"),
+            pytest.raises(IntegrityError, match="uq_meal_log_athlete_id_date_slot_slot_index"),
             engine.begin() as conn,
         ):
             conn.execute(
                 text(
                     "INSERT INTO meal_log (id, athlete_id, date, planned_meal_id, status,"
-                    " logged_at) VALUES (:id, :a, '2026-10-22', :p, 'skipped', now())"
+                    " slot, slot_index, logged_at)"
+                    " VALUES (:id, :a, '2026-10-22', :p, 'skipped', 'lunch', 0, now())"
                 ),
-                {"id": uuid.uuid4(), "a": athlete, "p": pid},
+                {"id": uuid.uuid4(), "a": athlete, "p": uuid.uuid4()},
             )
     finally:
         engine.dispose()
@@ -492,10 +483,6 @@ def test_today_is_the_users_local_day_for_the_future_check(migrated_database_url
         assert future.status_code == 422 and future.json()["code"] == "date_in_future"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="QA #37: accepting a suggestion (D65) hides the day's meal logs, resets completion",
-)
 def test_accepting_a_suggestion_keeps_the_days_meal_logs(api: Api) -> None:
     """Reachable today: check off a meal, finish the workout, accept the suggestion (D65)."""
     from tests.integration.test_suggestions import MONDAY, _perform

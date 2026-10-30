@@ -1,7 +1,9 @@
 """Meal logs (spec §8, F12): what an athlete ate on a day.
 
-A planned meal is checked off at most once per (athlete, date): the partial unique index is what
-makes the check-off idempotent under concurrent requests (F12.3). `planned_meal_id` is a plain id,
+A planned meal is checked off at most once per (athlete, date, slot, slot index): the partial
+unique index is what makes the check-off idempotent under concurrent requests (F12.3), and
+because every plan version gives its planned meals new ids, (slot, slot index) rather than
+`planned_meal_id` is what identifies the meal across versions. `planned_meal_id` is a plain id,
 not a foreign key, so replacing the plan never rewrites history (CLAUDE.md rule 7); `eaten` logs
 store the grams that were planned at the time. Quantities are grams, stored metric.
 """
@@ -39,10 +41,11 @@ class MealLog(Base):
             "(status = 'extra') = (planned_meal_id IS NULL)", name="extra_has_no_planned_meal"
         ),
         Index(
-            "uq_meal_log_athlete_id_date_planned_meal_id",
+            "uq_meal_log_athlete_id_date_slot_slot_index",
             "athlete_id",
             "date",
-            "planned_meal_id",
+            "slot",
+            "slot_index",
             unique=True,
             postgresql_where=text("planned_meal_id IS NOT NULL"),
         ),
@@ -56,6 +59,9 @@ class MealLog(Base):
     planned_meal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     status: Mapped[str] = mapped_column(String(8))
     slot: Mapped[str | None] = mapped_column(String(9))
+    # Which meal of that slot in the day's meal plan (0 = first). With `slot` this is the stable
+    # identity of a planned meal: it survives new plan versions, whose planned_meal ids change.
+    slot_index: Mapped[int | None] = mapped_column(Integer)
     logged_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
 
 

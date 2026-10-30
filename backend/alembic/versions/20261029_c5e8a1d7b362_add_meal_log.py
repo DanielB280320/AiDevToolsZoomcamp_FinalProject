@@ -2,8 +2,8 @@
 
 Meal check-offs and extra food (spec F12, #37). Expand-only: two new tables; nothing existing
 changes and the previous release ignores them. `planned_meal_id` is deliberately not a foreign
-key (history must survive plan changes). The partial unique index on (athlete, date, planned
-meal) makes check-off idempotent.
+key (history must survive plan changes). The partial unique index on (athlete, date, slot,
+slot index) makes check-off idempotent across plan versions.
 
 Revision ID: c5e8a1d7b362
 Revises: f3b8d1a5c602
@@ -30,6 +30,7 @@ def upgrade() -> None:
         sa.Column("planned_meal_id", sa.Uuid(), nullable=True),
         sa.Column("status", sa.String(length=8), nullable=False),
         sa.Column("slot", sa.String(length=9), nullable=True),
+        sa.Column("slot_index", sa.Integer(), nullable=True),
         sa.Column("logged_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "status IN ('eaten', 'adjusted', 'skipped', 'extra')",
@@ -52,9 +53,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name=op.f("pk_meal_log")),
     )
     op.create_index(
-        "uq_meal_log_athlete_id_date_planned_meal_id",
+        "uq_meal_log_athlete_id_date_slot_slot_index",
         "meal_log",
-        ["athlete_id", "date", "planned_meal_id"],
+        ["athlete_id", "date", "slot", "slot_index"],
         unique=True,
         postgresql_where=sa.text("planned_meal_id IS NOT NULL"),
     )
