@@ -245,7 +245,7 @@ jobs:
               backend/alembic backend/alembic.ini backend/Dockerfile backend/pyproject.toml \
               backend/uv.lock backend/app/migrate.py backend/app/migrations.py backend/app/seed.py \
               backend/app/config.py backend/app/main.py 'compose*.yaml' \
-              scripts/rollback-compat.sh .github/workflows/ci.yml; then
+              scripts/rollback-compat.sh scripts/rollback-compat-writes.py .github/workflows/ci.yml; then
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "No migration, image or compose change: rollback guard not needed."
           else

@@ -130,6 +130,16 @@ Same as [CLAUDE.md — Definition of done](../CLAUDE.md#definition-of-done): all
 | Promote to **prod** | `Promote to production` workflow with a SHA already running on dev; requires approval in the `production` environment | Owner approves; DevOps prepares |
 | **Rollback** | Automatic on the host when its post-deploy health check fails (pull-based deploy, ADR 0010); manual `Rollback production` workflow (moves the `deploy/prod` ref back); or the on-call agent's `rollback.sh` on the host | Automatic / owner / on-call agent |
 
+### Rollback-compat CI job
+
+The job "Rollback compatibility (previous image on the new schema)" runs `scripts/rollback-compat.sh` (`make rollback-compat`) whenever a PR touches migrations, the backend image, the start path or compose files. It builds the PR's image (N) and the previous release's image (N-1, `HEAD^1`), migrates with N, then rolls back the way the hosts do (N-1 on N's schema, no migration step). It checks:
+
+- N migrates, N-1 starts and `readyz` is 200 with migrations ok; `alembic_version` is not changed by a rollback; N starts and restarts on a newer schema.
+- **Core writes by N-1 on N's schema** (`scripts/rollback-compat-writes.py`, run inside the N-1 container): sign up and log in, onboarding (profile, targets, plan), log a set, check off a planned meal, log an extra meal. Any 5xx, or any status other than the documented success, fails the job, so a NOT NULL column or a dropped column that the old code still writes is caught.
+- Privacy (rule 6): the data is a random `example.com` account; the script prints only step names and status codes, and the job fails if that address shows up in the backend logs.
+
+When you add a core write journey (a new table or endpoint that users write to daily), add one write for it to `rollback-compat-writes.py` in the same PR. Writes the job does not cover still need a rollback test of their own (see D73 for an example).
+
 Details: [spec §12–13](spec.md#12-deployment-aws).
 
 ## 10. Incidents
