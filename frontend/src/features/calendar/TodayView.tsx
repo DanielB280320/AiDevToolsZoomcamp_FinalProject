@@ -7,6 +7,7 @@ import { QueryState } from "./QueryState";
 import { StatusBadge } from "./StatusBadge";
 import { badgeKind } from "./status";
 import { paths } from "../../paths";
+import { MealsSection } from "../meals/MealsSection";
 import { PendingSuggestions } from "../suggestions/PendingSuggestions";
 
 type SessionExercise = NonNullable<DayView["session"]>["exercises"][number];
@@ -59,7 +60,7 @@ export function TodayView({ me }: { me: Me }) {
     return <QueryState isPending={day.isPending} isError={day.isError} onRetry={() => void day.refetch()} />;
   }
 
-  const { session, meals, energy } = day.data;
+  const { session, energy } = day.data;
   const kind = badgeKind(day.data.training_status, day.data.training_completion);
   return (
     <>
@@ -86,25 +87,7 @@ export function TodayView({ me }: { me: Me }) {
       </Section>
 
       <Section id="today-meals" title={t("calendar.today.meals")}>
-        {meals.length === 0 ? (
-          <p className="mt-2 text-slate">{t("calendar.noMeals")}</p>
-        ) : (
-          <ul className="mt-2">
-            {meals.map(({ planned_meal: planned, log }) => (
-              <li key={planned.id} className="flex items-baseline justify-between gap-3 border-b border-line py-2">
-                <span>
-                  <span className="text-step--1 font-semibold uppercase text-slate">
-                    {t(`calendar.today.slot.${planned.slot}`)}
-                  </span>{" "}
-                  {planned.meal.name}
-                </span>
-                <span className="text-step--1 text-slate">
-                  {log ? t("calendar.today.mealEaten") : t("calendar.today.kcal", { count: planned.totals.kcal })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <MealsSection athleteId={me.id} day={day.data} />
       </Section>
 
       <Section id="today-energy" title={t("calendar.today.energy")}>

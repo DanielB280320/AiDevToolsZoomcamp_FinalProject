@@ -491,7 +491,10 @@
     "noTarget": "No target",
     "logged": "Logged: {{value}}",
     "skipped": "Skipped",
-    "glyph": { "logged": "✓ ", "skipped": "– " },
+    "glyph": {
+      "logged": "✓ ",
+      "skipped": "– "
+    },
     "asPlanned": "Done as planned",
     "forSet": "{{exercise}}, set {{number}}",
     "edit": "Edit",
@@ -545,5 +548,48 @@
       "invalid_set": "Those values don't fit this exercise. Check them and try again.",
       "generic": "That didn't save. Try again."
     }
+  },
+  "meals": {
+    "eatenAsPlanned": "Eaten as planned",
+    "adjust": "Adjust",
+    "skip": "Skip",
+    "undo": "Undo",
+    "remove": "Remove",
+    "cancel": "Cancel",
+    "saveAdjusted": "Save grams",
+    "failed": "The meal couldn't be saved. Try again.",
+    "gramsOf": "Grams of {{name}}",
+    "loggedKcal": "{{count}} kcal eaten (estimated)",
+    "extraTitle": "Extra food",
+    "status": {
+      "eaten": "Eaten as planned",
+      "adjusted": "Eaten, adjusted",
+      "skipped": "Skipped"
+    },
+    "add": {
+      "open": "Add food",
+      "close": "Close",
+      "search": "Search the food library",
+      "searchOnline": "Search online",
+      "custom": "New custom food",
+      "per100": "{{count}} kcal per 100 g",
+      "offUnavailable": "Online food search is unavailable. Use the library or create a custom food.",
+      "onlineResults": "Online results",
+      "grams": "Grams",
+      "slot": "Meal",
+      "submit": "Add to today",
+      "customName": "Food name",
+      "kcal100": "kcal per 100 g",
+      "protein100": "Protein (g) per 100 g",
+      "carbs100": "Carbs (g) per 100 g",
+      "fat100": "Fat (g) per 100 g",
+      "createFood": "Save food"
+    },
+    "unitG": "g",
+    "eatenAsPlannedFor": "Eaten as planned: {{name}}",
+    "adjustFor": "Adjust: {{name}}",
+    "skipFor": "Skip: {{name}}",
+    "undoFor": "Undo: {{name}}",
+    "removeFor": "Remove: {{name}}"
   }
 }

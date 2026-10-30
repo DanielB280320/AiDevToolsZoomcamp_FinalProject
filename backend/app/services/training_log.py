@@ -39,6 +39,7 @@ from app.models import (
 from app.schemas import calendar as cal
 from app.schemas import logging as out
 from app.schemas.plans import ExerciseSummary
+from app.services import meal_log
 from app.services.calendar import owned_session, utc_midnight_after
 
 
@@ -343,11 +344,17 @@ def day_activities(db: Session, user: User, day: dt.date) -> list[out.Activity]:
     return [_activity_view(a, e) for a, e in rows]
 
 
-def day_energy(db: Session, user: User, day: dt.date) -> cal.EnergyBalance:
-    """Burned kcal logged for `day` (F13.1): finished-session kcal plus extra activities.
+def day_energy(
+    db: Session,
+    user: User,
+    day: dt.date,
+    nutrition: "meal_log.DayNutrition | None" = None,
+) -> cal.EnergyBalance:
+    """Eaten (F12.1, logged quantities only), planned and burned kcal (F13.1) for `day`.
 
-    The baseline (BMR x lifestyle) and the eaten side arrive with the energy-balance issue, so
-    `total_kcal` is the exercise part only until then."""
+    The baseline (BMR x lifestyle) and the targets arrive with the energy-balance issue, so
+    burned `total_kcal` is the exercise part only until then."""
+    nutrition = nutrition or meal_log.day_nutrition(db, user, day)
     training = db.scalar(
         select(func.coalesce(func.sum(TrainingSession.kcal), 0)).where(
             TrainingSession.athlete_id == user.id,
@@ -364,7 +371,13 @@ def day_energy(db: Session, user: User, day: dt.date) -> cal.EnergyBalance:
     burned = cal.Burned(
         total_kcal=training + activities, training_kcal=training, activities_kcal=activities
     )
-    return cal.EnergyBalance(date=day, burned=burned, balance_kcal=-burned.total_kcal)
+    return cal.EnergyBalance(
+        date=day,
+        eaten=nutrition.eaten,
+        planned=nutrition.planned_totals,
+        burned=burned,
+        balance_kcal=nutrition.eaten.kcal - burned.total_kcal,
+    )
 
 
 def log_activity(
