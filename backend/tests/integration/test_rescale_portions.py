@@ -281,3 +281,34 @@ def test_coach_cannot_edit_the_profile(athlete: Api) -> None:
     created = coach.post("/api/v1/auth/signup", json=signup_body(email="c@x.test", role="coach"))
     assert created.status_code == 201
     problem(coach.put(PROFILE, json=profile_body(goal="muscle_gain")), 403, "wrong_role")
+
+
+def test_calories_accept_is_forbidden_for_strangers_and_coaches_and_changes_nothing(
+    athlete: Api,
+) -> None:
+    """QA #178: only the suggestion's owner reaches the rescale (same rule as every accept)."""
+    with Session(athlete.app.state.engine) as db:
+        uid = db.scalars(select(User.id)).one()
+        row = Suggestion(
+            athlete_id=uid,
+            kind="calories",
+            status="pending",
+            rule="adaptive_calories",
+            reason="test",
+            inputs={},
+            payload={"current_kcal": 2000, "proposed_kcal": 2200, "applied_kcal": None},
+            created_at=NOW,
+        )
+        db.add(row)
+        db.commit()
+        sid = row.id
+    versions, kcal = _versions(athlete), _target_kcal(athlete)
+    for email, role in (("bo@x.test", "athlete"), ("coach@x.test", "coach")):
+        other = athlete.new_client()
+        r = other.post("/api/v1/auth/signup", json=signup_body(email=email, role=role))
+        assert r.status_code == 201
+        problem(other.post(f"/api/v1/suggestions/{sid}/accept"), 403, "not_linked")
+    assert _versions(athlete) == versions
+    assert _target_kcal(athlete) == kcal
+    with Session(athlete.app.state.engine) as db:
+        assert db.scalars(select(Suggestion.status)).one() == "pending"
