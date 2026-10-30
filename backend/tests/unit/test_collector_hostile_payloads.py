@@ -1,8 +1,8 @@
 """QA: more hostile OTLP payloads against the prod collector (#130, rule 6).
 
 Extends test_collector_hardening_runtime.py (same fixture: real collector image, file exporters,
-ephemeral port). `xfail(strict=True)` cases are known gaps tracked in #151; they start passing,
-and must then lose the marker, when #151 lands.
+ephemeral port). The gaps tracked in #151 (scope name, severity/event name, non-string
+values, resource values) are closed and covered here.
 """
 
 import base64
@@ -132,7 +132,6 @@ def test_scope_and_disallowed_resource_attributes_dropped_on_every_signal(
             assert leak not in text, (signal, leak)
 
 
-@pytest.mark.xfail(strict=True, reason="#151: scope name is not gated")
 def test_scope_name_does_not_carry_pii(collector: Collector) -> None:
     url, out = collector
     scope = {"name": f"qa-scope-{EMAIL}"}
@@ -140,7 +139,6 @@ def test_scope_name_does_not_carry_pii(collector: Collector) -> None:
     assert EMAIL not in _read(out, "logs", "qa-scope-name")
 
 
-@pytest.mark.xfail(strict=True, reason="#151: severity_text / event_name are not gated")
 def test_severity_text_and_event_name_do_not_carry_pii(collector: Collector) -> None:
     url, out = collector
     rec = {"body": {"stringValue": "qa-sev"}, "severityText": f"SEV {EMAIL}", "eventName": EMAIL}
@@ -148,7 +146,6 @@ def test_severity_text_and_event_name_do_not_carry_pii(collector: Collector) -> 
     assert EMAIL not in _read(out, "logs", "qa-sev")
 
 
-@pytest.mark.xfail(strict=True, reason="#151: keep_keys keeps non-string values of allowed keys")
 def test_allowed_attribute_with_map_value_does_not_carry_pii(collector: Collector) -> None:
     url, out = collector
     route = {"kvlistValue": {"values": [{"key": "x", "value": {"stringValue": EMAIL}}]}}
@@ -157,9 +154,36 @@ def test_allowed_attribute_with_map_value_does_not_carry_pii(collector: Collecto
     assert EMAIL not in _read(out, "logs", "qa-attrmap")
 
 
-@pytest.mark.xfail(strict=True, reason="#151: allowed resource keys keep any value")
 def test_allowed_resource_key_with_pii_value_is_not_exported(collector: Collector) -> None:
     url, out = collector
     resource = {"attributes": _attrs(**{"service.name": EMAIL})}
     _post(url, "/v1/logs", _logs(resource, [{"body": {"stringValue": "qa-svc"}}]))
     assert EMAIL not in _read(out, "logs", "qa-svc")
+
+
+def test_legitimate_resource_severity_and_scalar_attributes_still_flow(
+    collector: Collector,
+) -> None:
+    url, out = collector
+    resource = {"attributes": _attrs(**{"service.name": "fitwise-backend", "env": "dev"})}
+    rec = {
+        "body": {"stringValue": "qa-legit"},
+        "severityText": "info",
+        "attributes": [
+            {"key": "route", "value": {"stringValue": "/api/today"}},
+            {"key": "status", "value": {"intValue": "200"}},
+        ],
+    }
+    _post(url, "/v1/logs", _logs(resource, [rec]))
+    text = _read(out, "logs", "qa-legit")
+    for kept in ("fitwise-backend", '"dev"', '"info"', "/api/today", "200"):
+        assert kept in text, kept
+
+
+def test_out_of_set_env_is_replaced_by_the_collectors_own(collector: Collector) -> None:
+    url, out = collector
+    resource = {"attributes": _attrs(env=f"x-{EMAIL}", **{"service.name": "fitwise-backend"})}
+    _post(url, "/v1/logs", _logs(resource, [{"body": {"stringValue": "qa-env-bad"}}]))
+    text = _read(out, "logs", "qa-env-bad")
+    assert EMAIL not in text
+    assert '"prod"' in text
