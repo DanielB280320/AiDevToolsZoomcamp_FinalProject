@@ -43,7 +43,7 @@ from app.models import (
 from app.models import Suggestion as Row
 from app.schemas import suggestions as out
 from app.schemas.users import UserRef
-from app.services import athlete, body, portion_rescale
+from app.services import adaptive_calories, athlete, body, portion_rescale
 from app.services.clock import local_today
 from app.services.plans import NewPlannedExercise, NewTrainingDay, create_plan_version
 from app.telemetry.metrics import SuggestionRule
@@ -304,13 +304,19 @@ def refresh_for_session(
 
 
 def list_suggestions(
-    db: Session, athlete_id: uuid.UUID, status: str, kind: str | None
+    db: Session,
+    athlete_id: uuid.UUID,
+    status: str,
+    kind: str | None,
+    now: dt.datetime,
 ) -> out.SuggestionList:
     query = select(Row).where(Row.athlete_id == athlete_id, Row.status == status)
     if kind is not None:
         query = query.where(Row.kind == kind)
     rows = db.scalars(query.order_by(Row.created_at.desc(), Row.id.desc()))
-    return out.SuggestionList(items=[view(db, r) for r in rows])
+    owner = db.get(User, athlete_id)
+    weigh_in_hint = adaptive_calories.hint(db, owner, now) if owner is not None else None
+    return out.SuggestionList(items=[view(db, r) for r in rows], weigh_in_hint=weigh_in_hint)
 
 
 # ───────────── decide ─────────────

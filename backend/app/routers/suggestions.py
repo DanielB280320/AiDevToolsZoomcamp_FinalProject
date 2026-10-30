@@ -33,12 +33,13 @@ def list_suggestions(
     athlete_id: str,
     user: CurrentUser,
     db: SessionDep,
+    clock: ClockDep,
     status: Annotated[SuggestionStatus, Query()] = "pending",
     kind: Annotated[SuggestionKind | None, Query()] = None,
 ) -> SuggestionList:
     """Newest first; `status` defaults to `pending`."""
     owner = calendar.athlete_scope(user, athlete_id)
-    return suggestions.list_suggestions(db, owner, status, kind)
+    return suggestions.list_suggestions(db, owner, status, kind, clock.now())
 
 
 @router.post(
