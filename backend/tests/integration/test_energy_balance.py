@@ -185,3 +185,22 @@ def test_week_energy_matches_day_view_with_meals_logged(api: Api) -> None:
         assert day["energy"] == _day(api, day["date"])["energy"]
     assert next(d for d in days if d["date"] == THU)["energy"]["eaten"]["kcal"] > 0
     assert next(d for d in days if d["date"] == THU)["energy"]["planned"]["kcal"] > 0
+
+
+def test_range_matches_day_view_across_a_targets_change_and_before_first_row(athlete: Api) -> None:
+    """QA: a Targets row starting mid-range (and days before the first row) match the day view."""
+    _activity(athlete, WED, 30)
+    _add_targets(athlete, dt.date(2026, 10, 22), baseline=2600, kcal=2400, balance=-100)
+    response = athlete.client.get(
+        f"{BASE}/athletes/me/calendar", params={"from": "2026-09-28", "to": "2026-11-08"}
+    )
+    assert response.status_code == 200, response.text
+    days = response.json()["days"]
+    assert len(days) == 42
+    for day in days:
+        assert day["energy"] == _day(athlete, day["date"])["energy"], day["date"]
+    by_date = {d["date"]: d["energy"] for d in days}
+    assert by_date["2026-09-30"]["burned"]["baseline_kcal"] == 2200  # before the first row
+    assert by_date["2026-10-21"]["burned"]["baseline_kcal"] == 2200
+    assert by_date["2026-10-22"]["burned"]["baseline_kcal"] == 2600
+    assert by_date["2026-10-22"]["target_balance_kcal"] == -100
