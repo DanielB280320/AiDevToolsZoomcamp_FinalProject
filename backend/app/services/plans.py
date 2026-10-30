@@ -82,15 +82,38 @@ def create_plan_version(
     source: str,
     days: Sequence[NewTrainingDay],
     now: dt.datetime,
-    meal_days: Sequence[NewMealDay] = (),
+    meal_days: Sequence[NewMealDay] | None = None,
 ) -> Plan:
     """Store `days` as the athlete's next plan version and make it the active one.
 
     `version = n + 1`; the previous active version is deactivated first so the partial unique
     index (one active plan per athlete) holds at every point. The athlete row is locked so two
     concurrent creations cannot pick the same version. Does not commit.
+
+    `meal_days=None` carries the previous active version's meal days and planned meals forward
+    (F8.1, D70: a change that does not edit meals must not drop the meal plan); pass a sequence
+    (even an empty one) to set them explicitly.
     """
     session.execute(select(User.id).where(User.id == athlete_id).with_for_update()).one()
+    if meal_days is None:
+        previous = session.scalar(
+            select(Plan).where(Plan.athlete_id == athlete_id, Plan.active.is_(True))
+        )
+        meal_days = (
+            []
+            if previous is None
+            else [
+                NewMealDay(
+                    weekday=d.weekday,
+                    warning=d.warning,
+                    meals=[
+                        NewPlannedMeal(m.slot, m.meal_id, m.portion_factor)
+                        for m in sorted(d.meals, key=lambda m: m.position)
+                    ],
+                )
+                for d in sorted(previous.meal_days, key=lambda d: d.position)
+            ]
+        )
     latest = session.scalar(select(func.max(Plan.version)).where(Plan.athlete_id == athlete_id))
     session.execute(
         update(Plan)
