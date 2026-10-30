@@ -15,9 +15,10 @@ from app.schemas.logging import (
     FinishSessionResult,
     SetLogInput,
 )
+from app.schemas.meal_log import MealLogInput, MealLogResult
 from app.schemas.problem import Problem
 from app.schemas.setlog import SetLog
-from app.services import calendar, suggestions, training_log
+from app.services import calendar, meal_log, suggestions, training_log
 from app.services.clock import ClockDep, local_today
 from app.services.flags import FlagsDep
 from app.telemetry import Telemetry
@@ -152,3 +153,51 @@ def delete_activity(
 ) -> DayEnergyUpdate:
     calendar.athlete_scope(user, athlete_id)
     return training_log.delete_activity(db, user, activity_id)
+
+
+@router.post(
+    "/athletes/{athlete_id}/meal-logs",
+    operation_id="logMeal",
+    response_model=MealLogResult,
+    status_code=201,
+    responses={
+        **_COMMON,
+        200: {
+            "model": MealLogResult,
+            "description": "Existing log for this planned meal replaced.",
+        },
+        404: _PROBLEM,
+        422: _PROBLEM,
+    },
+)
+def log_meal(
+    athlete_id: str,
+    body: MealLogInput,
+    response: Response,
+    user: CurrentUser,
+    db: SessionDep,
+    clock: ClockDep,
+    telemetry: TelemetryDep,
+) -> MealLogResult:
+    """Check off, adjust or skip a planned meal, or add extra food (F12). Idempotent per
+    (date, planned meal): a repeat returns 200 and does not count as a new check-off (F12.3)."""
+    calendar.athlete_scope(user, athlete_id)
+    result, new_checkoff = meal_log.log_meal(db, user, body, clock.now())
+    if new_checkoff:
+        telemetry.metrics.meal_checked_off()
+    if result.meal_log.planned_meal_id is not None and not new_checkoff:
+        response.status_code = 200
+    return result
+
+
+@router.delete(
+    "/athletes/{athlete_id}/meal-logs/{meal_log_id}",
+    operation_id="deleteMealLog",
+    response_model=DayEnergyUpdate,
+    responses={**_COMMON, 404: _PROBLEM},
+)
+def delete_meal_log(
+    athlete_id: str, meal_log_id: uuid.UUID, user: CurrentUser, db: SessionDep
+) -> DayEnergyUpdate:
+    calendar.athlete_scope(user, athlete_id)
+    return meal_log.delete_meal_log(db, user, meal_log_id)

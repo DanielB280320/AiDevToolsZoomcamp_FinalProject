@@ -149,7 +149,7 @@ def _materialise(
 
 
 def get_day(db: Session, user: User, date_text: str, now: dt.datetime) -> out.DayView:
-    from app.services import training_log
+    from app.services import meal_log, training_log
 
     day = resolve_date(date_text, user, now)
     today = local_today(now, user.timezone)
@@ -157,20 +157,23 @@ def get_day(db: Session, user: User, date_text: str, now: dt.datetime) -> out.Da
     row = _materialise(db, user, tpl, day, now)
     view = session_view(db, user, row, today) if row else None
     status = "rest" if view is None else view.status
+    nutrition = meal_log.day_nutrition(db, user, day)
+    meal_day, _ = meal_log.planned_meals(db, user, day)
     return out.DayView(
         date=day,
         weekday=weekday_of(day),  # type: ignore[arg-type]
         is_today=day == today,
         training_status=status,
         session=view,
-        meals=[],
-        extra_meal_logs=[],
+        meals=[{"planned_meal": planned, "log": log} for planned, log in nutrition.meals],
+        extra_meal_logs=nutrition.extra_logs,
         activities=training_log.day_activities(db, user, day),
-        energy=training_log.day_energy(db, user, day),
+        energy=training_log.day_energy(db, user, day, nutrition),
         training_completion=view.completion if view else None,
-        nutrition_completion=None,
+        nutrition_completion=nutrition.completion,
         pending_suggestions=[],
         notes=[],
+        meal_warning=meal_day.warning if meal_day else None,
     )
 
 

@@ -154,7 +154,8 @@ def test_migration_downgrades_and_upgrades_again_with_existing_data(
             gone = _user(conn, "coach")
             _plan(conn, other_athlete, gone, gone)
             conn.execute(text("DELETE FROM users WHERE id = :g"), {"g": gone})
-        down = _alembic(migrated_database_url, "downgrade", "-1")
+        # Not "-1": later revisions sit on top of the one under test.
+        down = _alembic(migrated_database_url, "downgrade", "e1a6c3b8d724")
         assert down.returncode == 0, down.stderr
         with engine.connect() as conn:
             assert _count(conn, "SELECT count(*) FROM plan WHERE created_by IS NULL") == 0
