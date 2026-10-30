@@ -15,6 +15,7 @@ from app.routers import (
     auth,
     body,
     calendar,
+    charts,
     exercises,
     foods,
     health,
@@ -98,5 +99,6 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     api.include_router(suggestions.router)
     api.include_router(athletes.router)
     api.include_router(body.router)
+    api.include_router(charts.router)
     app.include_router(api)
     return app

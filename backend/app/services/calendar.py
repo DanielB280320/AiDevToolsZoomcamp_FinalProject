@@ -183,18 +183,23 @@ def get_day(db: Session, user: User, date_text: str, now: dt.datetime) -> out.Da
 # ───────────── range ─────────────
 
 
-def get_calendar(
-    db: Session, user: User, start: dt.date, end: dt.date, now: dt.datetime
-) -> out.CalendarRange:
-    if start > end:
-        raise ProblemError(400, "invalid_range", "`from` must not be after `to`.")
-    if (end - start).days + 1 > MAX_RANGE_DAYS:
-        raise ProblemError(
-            400, "range_too_large", f"The range may cover at most {MAX_RANGE_DAYS} days."
-        )
-    from app.services import training_log
+@dataclass(frozen=True)
+class TrainingDayInfo:
+    """One local day of the training calendar: derived status and the session's stored values."""
 
-    today = local_today(now, user.timezone)
+    date: dt.date
+    status: str
+    session_id: uuid.UUID | None
+    name: str | None
+    completion: float | None
+    moved: bool
+
+
+def training_days(
+    db: Session, user: User, start: dt.date, end: dt.date, today: dt.date
+) -> list[TrainingDayInfo]:
+    """Status of every day in `start..end` from the stored sessions and the weekly template, in
+    a fixed number of queries and without writing (planned days stay virtual)."""
     tpl = _template(db, user)
     rows = db.execute(
         select(TrainingSession, TrainingDay.name)
@@ -211,8 +216,7 @@ def get_calendar(
     left_behind = {
         r.original_date for r, _ in rows if r.original_date and r.original_date != r.date
     }
-    energy = training_log.range_energy(db, user, start, end)
-    days: list[out.CalendarDay] = []
+    result: list[TrainingDayInfo] = []
     for offset in range((end - start).days + 1):
         day = start + dt.timedelta(days=offset)
         session_id: uuid.UUID | None = None
@@ -232,19 +236,38 @@ def get_calendar(
         ):
             name = template_day.name
             status = "missed" if day < today else "planned"
-        days.append(
-            out.CalendarDay(
-                date=day,
-                weekday=weekday_of(day),  # type: ignore[arg-type]
-                is_today=day == today,
-                training_status=status,  # type: ignore[arg-type]
-                session_id=session_id,
-                training_day_name=name,
-                moved=moved,
-                training_completion=completion,
-                energy=energy[day],
-            )
+        result.append(TrainingDayInfo(day, status, session_id, name, completion, moved))
+    return result
+
+
+def get_calendar(
+    db: Session, user: User, start: dt.date, end: dt.date, now: dt.datetime
+) -> out.CalendarRange:
+    if start > end:
+        raise ProblemError(400, "invalid_range", "`from` must not be after `to`.")
+    if (end - start).days + 1 > MAX_RANGE_DAYS:
+        raise ProblemError(
+            400, "range_too_large", f"The range may cover at most {MAX_RANGE_DAYS} days."
         )
+    from app.services import training_log
+
+    today = local_today(now, user.timezone)
+    plan_days = training_days(db, user, start, end, today)
+    energy = training_log.range_energy(db, user, start, end)
+    days: list[out.CalendarDay] = [
+        out.CalendarDay(
+            date=info.date,
+            weekday=weekday_of(info.date),  # type: ignore[arg-type]
+            is_today=info.date == today,
+            training_status=info.status,  # type: ignore[arg-type]
+            session_id=info.session_id,
+            training_day_name=info.name,
+            moved=info.moved,
+            training_completion=info.completion,
+            energy=energy[info.date],
+        )
+        for info in plan_days
+    ]
     return out.CalendarRange(from_=start, to=end, timezone=user.timezone, days=days)
 
 
