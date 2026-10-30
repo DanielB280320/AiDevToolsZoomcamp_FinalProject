@@ -2,6 +2,7 @@
 mapping, cache, flag, degraded mode, import uniqueness, metrics, privacy and authorization."""
 
 import threading
+import time
 from typing import Any
 
 import pytest
@@ -356,6 +357,40 @@ def test_search_metric_counts_each_outcome(migrated_database_url: str, fake_off:
         api.clock.advance(minutes=1)
         _search(client)  # disabled
     assert _outcomes(captured) == {"ok": 2, "error": 1, "timeout": 1, "disabled": 1}
+
+
+def test_trickled_response_ends_at_the_total_deadline_and_counts_as_timeout(
+    migrated_database_url: str, fake_off: FakeOff
+) -> None:
+    # Every chunk arrives well inside the 0.4 s per-phase limit, but the body takes 4 s in total.
+    captured = _captured_app(migrated_database_url, fake_off)
+    fake_off.products = [YOGURT]
+    fake_off.mode = "trickle"
+    fake_off.delay = 4.0
+    with TestClient(captured.app) as client:
+        api = Api(app=captured.app, client=client, clock=captured.app.state.clock)
+        assert api.signup().status_code == 201
+        started = time.monotonic()
+        response = _search(client)
+        elapsed = time.monotonic() - started
+    assert response.status_code == 200
+    assert response.json() == {
+        "available": False,
+        "unavailable_reason": "timeout",
+        "message": UNAVAILABLE,
+        "items": [],
+    }
+    assert 0.3 <= elapsed < 1.5
+    assert _outcomes(captured) == {"timeout": 1}
+
+
+def test_trickled_import_lookup_is_also_bounded(off_api: Api, fake_off: FakeOff) -> None:
+    fake_off.mode = "trickle"
+    fake_off.delay = 4.0
+    started = time.monotonic()
+    response = off_api.client.post(IMPORT, json={"code": YOGURT["code"]})
+    assert time.monotonic() - started < 1.5
+    problem(response, 503, "off_unavailable")
 
 
 def test_all_outcome_series_exist_from_the_start(captured: Captured) -> None:

@@ -113,7 +113,10 @@ class Settings(ProcessSettings):
         default=3.0,
         gt=0,
         le=10,
-        description="Total timeout of one Open Food Facts request (spec F6: 3 s).",
+        description=(
+            "Total deadline in seconds for one Open Food Facts request, connect to last body "
+            "byte (spec F6: 3 s); a slower upstream counts as a timeout."
+        ),
     )
 
     @field_validator("off_base_url")
