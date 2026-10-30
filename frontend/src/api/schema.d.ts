@@ -250,7 +250,9 @@ export interface paths {
          *     When neck/waist (and hip for female/unspecified) are given without `body_fat_pct`, body fat
          *     is estimated with the Navy method (F3.3). `date` cannot be in the future. When the weight
          *     differs by ≥ 2 % from the weight used for current targets, a pending `recalc` suggestion is
-         *     created and returned (F14). Coaches cannot log weigh-ins (403).
+         *     created and returned (F14); only a weigh-in that is the athlete's latest can create one, and
+         *     it replaces any older pending `recalc` suggestion. `404 not_onboarded` before onboarding.
+         *     Coaches cannot log weigh-ins (403).
          */
         post: operations["logBodyMetric"];
         delete?: never;
@@ -838,8 +840,9 @@ export interface paths {
         /**
          * Accept (optionally edit-then-accept) a suggestion
          * @description Accepted values become the targets for the next sessions of that exercise (progression) or
-         *     the new daily targets from today, rescaling future meal-day portions only (calories, recalc;
-         *     F14.4). Optional `overrides` implement edit-then-accept; overrides must match the suggestion
+         *     the new daily targets from today, rescaling future meal-day portions only (calories; F14.4),
+         *     or the recomputed targets shown in the suggestion, from today on (recalc; earlier days keep
+         *     theirs, `overrides` are not allowed for recalc). Optional `overrides` implement edit-then-accept; overrides must match the suggestion
          *     kind (`422 invalid_overrides`) and calorie overrides are never below the floor (F3.6).
          *     Progression targets are stored as a new plan version, so past sessions keep their targets
          *     (F8.1). Already decided →
@@ -3074,6 +3077,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
         };
     };

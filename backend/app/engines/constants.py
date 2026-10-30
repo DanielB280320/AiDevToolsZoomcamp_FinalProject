@@ -211,3 +211,13 @@ MEAL_WARNING_PROTEIN = (
 )
 MEAL_WARNING_KCAL = "Couldn't hit your calorie target with the current library — add custom meals"
 MEAL_WARNING_SLOT = "Not enough different meals for the {slot} slot — add custom meals"
+
+# ============================================================================================
+# F14 Body tracking (#41) - used by app/engines/body_tracking.py.
+# ============================================================================================
+
+# F14.1 the trend is the average of the weigh-ins in this many days, ending on the day itself.
+WEIGHT_AVERAGE_WINDOW_DAYS = 7
+# F14 a weight this far (percent, inclusive) from the weight used for the current targets
+# prompts a recalculation.
+RECALC_THRESHOLD_PCT = 2.0
