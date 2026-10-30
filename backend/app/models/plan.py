@@ -137,7 +137,8 @@ class PlannedExercise(Base):
 
 
 class PlanChange(Base):
-    """Audit trail of a plan: who changed it and when (F8.3). `change` holds a small summary."""
+    """Audit trail of a plan: who changed it (id and role) and when (F8.3). `change` holds a small
+    summary (kind and counts, never plan content)."""
 
     __tablename__ = "plan_change"
 
@@ -148,6 +149,9 @@ class PlanChange(Base):
     author_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL")
     )
+    # Role of the author when the change was made (`athlete` / `coach`); kept after the author's
+    # account is deleted. Null only for rows written before F8.3 landed and not backfilled.
+    author_role: Mapped[str | None] = mapped_column(String(7))
     change: Mapped[dict[str, Any]] = mapped_column(JSON().with_variant(JSONB(), "postgresql"))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
 

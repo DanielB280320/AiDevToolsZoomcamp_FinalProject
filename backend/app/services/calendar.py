@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -77,7 +77,10 @@ def _template(db: Session, user: User) -> _Template:
     by_weekday: dict[str, TrainingDay] = {}
     for day in plan.training_days:  # ordered by position: the first day of a weekday wins
         by_weekday.setdefault(day.weekday, day)
-    start = plan.created_at.astimezone(ZoneInfo(user.timezone)).date()
+    # The template applies from the athlete's first plan: later versions (edits, regeneration)
+    # change what is planned, not the day the calendar starts (D75).
+    first = db.scalar(select(func.min(Plan.created_at)).where(Plan.athlete_id == user.id))
+    start = (first or plan.created_at).astimezone(ZoneInfo(user.timezone)).date()
     return _Template(plan, start, by_weekday)
 
 
