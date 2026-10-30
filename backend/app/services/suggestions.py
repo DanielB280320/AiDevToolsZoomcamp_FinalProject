@@ -43,7 +43,7 @@ from app.models import (
 from app.models import Suggestion as Row
 from app.schemas import suggestions as out
 from app.schemas.users import UserRef
-from app.services import body
+from app.services import athlete, body, portion_rescale
 from app.services.clock import local_today
 from app.services.plans import NewPlannedExercise, NewTrainingDay, create_plan_version
 from app.telemetry.metrics import SuggestionRule
@@ -364,6 +364,35 @@ def _applied(row: Row, overrides: out.SuggestionOverrides | None) -> dict[str, A
     return applied
 
 
+def _accept_calories(
+    db: Session,
+    user: User,
+    row: Row,
+    overrides: out.SuggestionOverrides | None,
+    now: dt.datetime,
+) -> int:
+    """Store the accepted kcal (proposed, or the edit-then-accept override) as the targets from
+    today and rescale meal portions from today on (F14.4, D74). Returns the applied kcal."""
+    given = set() if overrides is None else overrides.model_fields_set
+    if given - {"kcal"}:
+        raise _invalid("These overrides do not match the kind of this suggestion.")
+    today = local_today(now, user.timezone)
+    current = athlete.targets_on(db, user.id, today)
+    if current is None:
+        raise ProblemError(404, "not_onboarded", "There is no plan yet. Complete onboarding.")
+    kcal = int(overrides.kcal) if overrides is not None and overrides.kcal is not None else None
+    if kcal is not None and kcal < current.floor_kcal:
+        raise _invalid(f"kcal must not be below the calorie floor of {current.floor_kcal}.")
+    applied = (
+        kcal if kcal is not None else max(int(row.payload["proposed_kcal"]), current.floor_kcal)
+    )
+    athlete.store_kcal(db, user.id, today, applied, now)
+    portion_rescale.rescale_future_meals(
+        db, athlete=user, author=user, new_kcal=applied, now=now, reason="calories"
+    )
+    return applied
+
+
 def _active_plan(db: Session, athlete_id: uuid.UUID) -> Plan | None:
     return db.scalar(select(Plan).where(Plan.athlete_id == athlete_id, Plan.active.is_(True)))
 
@@ -495,6 +524,16 @@ def accept(
         if overrides is not None:
             raise _invalid("These overrides do not match the kind of this suggestion.")
         body.accept_recalc(db, user, row, now)
+        row.status = "accepted"
+        row.decided_by = user.id
+        row.decided_at = now
+        db.commit()
+        return row
+    if row.kind == "calories":
+        row.payload = {
+            **row.payload,
+            "applied_kcal": _accept_calories(db, user, row, overrides, now),
+        }
         row.status = "accepted"
         row.decided_by = user.id
         row.decided_at = now

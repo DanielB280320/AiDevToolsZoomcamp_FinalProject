@@ -400,7 +400,11 @@ paths:
       description: |
         Replaces the profile (same validation as onboarding). If a target-relevant field changed
         (sex, height, lifestyle, goal, training volume), targets are recomputed with
-        `valid_from` = today and future meal-day portions are rescaled; past days never change.
+        `valid_from` = today and meal portions are rescaled from today on (D74): the rescale is a
+        new plan version that keeps every meal and its key and changes only `portion_factor`
+        (clamped to 0.25-3), so each day's planned kcal follow the new target. Logged meals keep
+        their logged grams, past days never change, and a plan without meal days gets no new
+        version (also for custom plans: portions only).
         The training plan is **not** regenerated automatically — call
         `POST /athletes/{athlete_id}/plan/regenerate`. Coaches can view but not edit the profile.
         `404 not_onboarded` if onboarding was not completed (create the profile with
@@ -1457,10 +1461,14 @@ paths:
       operationId: acceptSuggestion
       summary: Accept (optionally edit-then-accept) a suggestion
       description: |
-        Accepted values become the targets for the next sessions of that exercise (progression) or
-        the new daily targets from today, rescaling future meal-day portions only (calories; F14.4),
-        or the recomputed targets shown in the suggestion, from today on (recalc; earlier days keep
-        theirs, `overrides` are not allowed for recalc). Optional `overrides` implement edit-then-accept; overrides must match the suggestion
+        Accepted values become the targets for the next sessions of that exercise (progression), or
+        the new daily targets from today (calories, F14.4; `payload.applied_kcal` records the
+        value), or the recomputed targets shown in the suggestion, from today on (recalc;
+        `overrides` are not allowed for recalc). For `calories` and `recalc` the new daily kcal
+        also rescales meal portions from today on (D74): a new plan version keeps every meal and
+        its key and changes only `portion_factor` (clamped to 0.25-3), logged meals keep their
+        logged grams, earlier days keep their targets and portions, and a plan without meal days
+        gets no new version. Optional `overrides` implement edit-then-accept; overrides must match the suggestion
         kind (`422 invalid_overrides`) and calorie overrides are never below the floor (F3.6).
         Progression targets are stored as a new plan version, so past sessions keep their targets
         (F8.1). Already decided →

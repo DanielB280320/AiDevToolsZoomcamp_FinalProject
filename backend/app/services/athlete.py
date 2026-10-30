@@ -364,6 +364,43 @@ def _store_targets(
     return row
 
 
+def store_kcal(
+    session: Session, user_id: uuid.UUID, valid_from: dt.date, kcal: int, now: dt.datetime
+) -> Targets:
+    """Targets from `valid_from` with a new daily kcal (adaptive calories, F14): protein and fat
+    stay, carbs take the difference (never below 0), the balance follows the kcal."""
+    current = targets_on(session, user_id, valid_from)
+    if current is None:
+        raise _not_onboarded()
+    remaining = kcal - 4 * float(current.protein_g) - 9 * float(current.fat_g)
+    carbs_clamped = remaining < 0
+    row = session.scalar(
+        select(Targets).where(Targets.user_id == user_id, Targets.valid_from == valid_from)
+    )
+    if row is None:
+        row = Targets(user_id=user_id, valid_from=valid_from)
+        session.add(row)
+    fields = {
+        col.key: getattr(current, col.key)
+        for col in Targets.__table__.columns
+        if col.key not in ("id", "user_id", "valid_from")
+    }
+    for key, value in fields.items():
+        setattr(row, key, value)
+    row.kcal = kcal
+    row.carbs_g = 0.0 if carbs_clamped else round(remaining / 4, 1)
+    row.carbs_clamped = carbs_clamped
+    row.target_balance_kcal = kcal - (row.baseline_kcal + row.planned_exercise_kcal_per_day)
+    row.floor_applied = kcal <= row.floor_kcal
+    row.explanation = (
+        f"{current.explanation} Adjusted to {kcal} kcal by an accepted adaptive calorie "
+        "suggestion; protein and fat are unchanged and carbs take the difference."
+    )
+    row.created_at = now
+    session.flush()
+    return row
+
+
 # ───────────── views ─────────────
 
 
@@ -659,7 +696,8 @@ def update_profile(
     telemetry: Telemetry,
 ) -> out.ProfileUpdateResult:
     """Replace the profile; recompute targets from today when a target-relevant field changed
-    and keep the earlier `Targets` rows (D46). The plan is not regenerated."""
+    and keep the earlier `Targets` rows (D46). The training plan is not regenerated; meal portions
+    are rescaled to the new kcal from today on (D74)."""
     require_athlete(user)
     session.execute(select(User.id).where(User.id == user.id).with_for_update()).one()
     row = session.get(AthleteProfile, user.id)
@@ -703,6 +741,16 @@ def update_profile(
             note=None,
         )
         targets_row = _store_targets(session, user.id, today, result, now)
+        from app.services import portion_rescale  # late: plan_edit imports this module
+
+        portion_rescale.rescale_future_meals(
+            session,
+            athlete=user,
+            author=user,
+            new_kcal=targets_row.kcal,
+            now=now,
+            reason="profile",
+        )
     else:
         found = targets_on(session, user.id, today)
         if found is None:
