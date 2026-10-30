@@ -127,6 +127,13 @@ TAG=$prev_tag dc up -d --no-deps --wait --wait-timeout 300 backend ||
 [[ "$(db_versions)" == "$new_heads" ]] || fail "rollback changed alembic_version (down-migration?)"
 echo "   alembic_version: $(db_versions) (unchanged)"
 expect_ready "rollback"
+echo "   core writes by image N-1 on N's schema (any 5xx fails):"
+dc exec -T backend python -I - <scripts/rollback-compat-writes.py ||
+  fail "rollback: the previous image cannot perform its core writes on N's schema"
+# Rule 6: the synthetic account's address must not appear in the backend logs.
+if dc logs --no-color backend 2>&1 | grep -q 'rollback-[0-9a-f]*@example\.com'; then
+  fail "rollback: the synthetic account's email reached the backend logs"
+fi
 
 step "C. Image N on a newer schema ($fake_newer), the rollback way, then a restart"
 psql_db "UPDATE alembic_version SET version_num = '$fake_newer'" >/dev/null
