@@ -1,4 +1,4 @@
-"""D70 / #154: deleting a user must not be blocked by `planned_meal.meal_id` (F18.2, F18.6), while
+"""D71 / #154: deleting a user must not be blocked by `planned_meal.meal_id` (F18.2, F18.6), while
 deleting a single meal that a plan still uses keeps failing as in #34. Rows are inserted directly
 (the delete endpoint, links and notifications are other issues)."""
 

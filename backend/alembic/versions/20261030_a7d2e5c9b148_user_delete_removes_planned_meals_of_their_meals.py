@@ -1,6 +1,6 @@
 """user deletion removes planned meals that use the user's meals
 
-D70 (#154). `planned_meal.meal_id` is `ON DELETE RESTRICT`, which is checked immediately, so
+D71 (#154). `planned_meal.meal_id` is `ON DELETE RESTRICT`, which is checked immediately, so
 `DELETE FROM users` failed when a planned meal (in the user's own plan or a linked user's plan)
 pointed at one of the user's meals: the cascade users -> meal reaches the RESTRICT before the
 cascade users -> plan -> meal_day -> planned_meal has removed the row. Deleting a single meal that

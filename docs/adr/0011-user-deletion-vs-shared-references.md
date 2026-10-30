@@ -5,7 +5,7 @@
 | **Status** | Accepted |
 | **Date** | 2026-10-30 |
 | **Deciders** | Owner (D66), Engineer |
-| **Spec** | [F18](../spec.md#f18-data-ownership--must), [§19](../spec.md#19-decisions-log) D66, D69, D70; issues #131, #148, #154 |
+| **Spec** | [F18](../spec.md#f18-data-ownership--must), [§19](../spec.md#19-decisions-log) D66, D69, D71; issues #131, #148, #154 |
 
 ## Context
 
@@ -14,7 +14,7 @@ A user's rows can be referenced by other users' rows: a coach edits a linked ath
 ## Decision
 
 - References to a user as author or editor (`created_by`, `author_id`, `edited_by`, `decided_by`) become `ON DELETE SET NULL` (D69): the other user's data stays, only the reference is cleared.
-- References from a linked user's rows to the deleted user's own food or meal keep `RESTRICT`. A `BEFORE DELETE` trigger on `users` removes the referencing `meal_item` (D66) or `planned_meal` (D70) rows first. The linked user's meal, meal day and other rows stay, and the linked user is notified once per deleted account.
+- References from a linked user's rows to the deleted user's own food or meal keep `RESTRICT`. A `BEFORE DELETE` trigger on `users` removes the referencing `meal_item` (D66) or `planned_meal` (D71) rows first. The linked user's meal, meal day and other rows stay, and the linked user is notified once per deleted account.
 - Migrations are expand-only (rule 8): a function and a trigger are added, no column or constraint changes.
 
 ## Alternatives considered

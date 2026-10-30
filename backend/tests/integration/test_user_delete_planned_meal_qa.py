@@ -1,4 +1,4 @@
-"""QA #154 / D66 + D70: the two BEFORE DELETE triggers on `users` (meal items of the user's foods,
+"""QA #154 / D66 + D71: the two BEFORE DELETE triggers on `users` (meal items of the user's foods,
 planned meals of the user's meals) work together in one user deletion, alongside the D69 SET NULL
 author references, and neither weakens the RESTRICT guards on single food / meal deletion (#34)."""
 
