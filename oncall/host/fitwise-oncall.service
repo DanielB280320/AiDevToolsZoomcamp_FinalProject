@@ -8,7 +8,7 @@ Wants=network-online.target
 User=fitwise-oncall
 Group=fitwise-oncall
 # Root-only (0600 root:root), read by systemd before it drops privileges. Holds only the responder's
-# own secrets: ONCALL_WEBHOOK_PASSWORD, ANTHROPIC_API_KEY, GH_TOKEN, plus plain settings.
+# own secrets: ONCALL_WEBHOOK_PASSWORD, CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY), GH_TOKEN, plus plain settings.
 EnvironmentFile=/etc/fitwise-oncall.env
 # The agent's PATH: the docker shim first (compose ps/logs through the root helper), no docker group.
 Environment=PATH=/opt/fitwise-oncall/shim:/usr/local/bin:/usr/bin:/bin

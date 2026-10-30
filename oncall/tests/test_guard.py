@@ -282,6 +282,7 @@ def test_git_positionals_stay_inside_the_clone(args: str, ctx: Context):
     [
         "git -C {clone} commit -m $GH_TOKEN",
         'git -C {clone} commit -m "fix $ANTHROPIC_API_KEY"',
+        "git -C {clone} commit -m $CLAUDE_CODE_OAUTH_TOKEN",
         "gh issue create --repo owner/repo --label incident --title $GH_TOKEN "
         "--body-file {inc}/issue.md",
         "gh pr create --repo owner/repo --head oncall/x --base main --title $GH_TOKEN "
