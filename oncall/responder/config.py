@@ -48,10 +48,15 @@ class Settings:
             raise ConfigError("ONCALL_WEBHOOK_PASSWORD must be set")
         enabled = e.get("ONCALL_AGENT_ENABLED", "") == "1"
         if enabled:
-            # Fail closed: an agent without its own credentials or spend cap must not start.
-            for name in ("ANTHROPIC_API_KEY", "GH_TOKEN"):
-                if not e.get(name):
-                    raise ConfigError(f"{name} must be set when ONCALL_AGENT_ENABLED=1")
+            # Fail closed: an agent without its own credentials must not start. Claude auth is a
+            # subscription token (CLAUDE_CODE_OAUTH_TOKEN, preferred, D72) or an API key.
+            if not e.get("GH_TOKEN"):
+                raise ConfigError("GH_TOKEN must be set when ONCALL_AGENT_ENABLED=1")
+            if not (e.get("CLAUDE_CODE_OAUTH_TOKEN") or e.get("ANTHROPIC_API_KEY")):
+                raise ConfigError(
+                    "CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY) must be set "
+                    "when ONCALL_AGENT_ENABLED=1"
+                )
         budget = e.get("ONCALL_AGENT_MAX_BUDGET_USD", "5")
         if not re.fullmatch(r"[0-9]+(\.[0-9]+)?", budget) or float(budget) <= 0:
             raise ConfigError("ONCALL_AGENT_MAX_BUDGET_USD must be a positive number")

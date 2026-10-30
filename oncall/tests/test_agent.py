@@ -28,6 +28,7 @@ RESTART = ROOT / "oncall" / "ops" / "restart.sh"
 GUARD = ROOT / "oncall" / "responder" / "guard.py"
 SECRET_KEY = "sk-ant-test-secret-value"
 SECRET_GH = "ghp_testsecretvalue"
+SECRET_OAUTH = "sk-ant-oat-test-oauth-value"
 
 
 @pytest.fixture
@@ -451,6 +452,7 @@ def test_run_agent_builds_the_claude_command(
 ):
     record = tmp_path / "record.json"
     monkeypatch.setenv("ANTHROPIC_API_KEY", SECRET_KEY)
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", SECRET_OAUTH)
     monkeypatch.setenv("GH_TOKEN", SECRET_GH)
     monkeypatch.setenv("ONCALL_WEBHOOK_PASSWORD", "webhook-secret")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-secret")
@@ -475,7 +477,8 @@ def test_run_agent_builds_the_claude_command(
     assert "AT MOST ONE runtime mitigation" in prompt
     # least privilege: own secrets yes, the webhook password and cloud credentials no
     env = rec["env"]
-    assert env["ANTHROPIC_API_KEY"] == SECRET_KEY and env["GH_TOKEN"] == SECRET_GH
+    assert env["CLAUDE_CODE_OAUTH_TOKEN"] == SECRET_OAUTH and env["GH_TOKEN"] == SECRET_GH
+    assert "ANTHROPIC_API_KEY" not in env  # the subscription token wins; one credential only
     assert "ONCALL_WEBHOOK_PASSWORD" not in env and "AWS_SECRET_ACCESS_KEY" not in env
     assert env["ONCALL_GUARD_CONFIG"].endswith("guard.json")
     assert rec["cwd"] == str(ROOT)
@@ -488,6 +491,19 @@ def test_run_agent_builds_the_claude_command(
     for f in incident.path.iterdir():
         text = f.read_text()
         assert SECRET_KEY not in text and SECRET_GH not in text and "webhook-secret" not in text
+        assert SECRET_OAUTH not in text
+
+
+def test_run_agent_passes_an_api_key_when_it_is_the_only_credential(
+    agent_settings: Settings, incident: Incident, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    record = tmp_path / "record.json"
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", SECRET_KEY)
+    s = replace(agent_settings, claude_bin=str(_fake_claude(tmp_path, RECORD)))
+    assert run_agent(incident, s) == 0
+    env = json.loads(record.read_text())["env"]
+    assert env["ANTHROPIC_API_KEY"] == SECRET_KEY and "CLAUDE_CODE_OAUTH_TOKEN" not in env
 
 
 def test_run_agent_times_out_and_kills_the_process_group(
@@ -543,12 +559,18 @@ def test_default_timeout_and_budget_are_the_documented_ones():
 
 def test_agent_requires_its_own_secrets_and_a_sane_budget():
     base = {"ONCALL_WEBHOOK_PASSWORD": "x", "ONCALL_AGENT_ENABLED": "1"}
-    with pytest.raises(ConfigError, match="ANTHROPIC_API_KEY"):
-        Settings.from_env(base)
+    with pytest.raises(ConfigError, match="CLAUDE_CODE_OAUTH_TOKEN"):
+        Settings.from_env({**base, "GH_TOKEN": "t"})  # neither credential: fail closed
+    with pytest.raises(ConfigError, match="CLAUDE_CODE_OAUTH_TOKEN"):
+        Settings.from_env({**base, "GH_TOKEN": "t", "CLAUDE_CODE_OAUTH_TOKEN": ""})
+    with pytest.raises(ConfigError, match="GH_TOKEN"):
+        Settings.from_env({**base, "CLAUDE_CODE_OAUTH_TOKEN": "o"})
     with pytest.raises(ConfigError, match="GH_TOKEN"):
         Settings.from_env({**base, "ANTHROPIC_API_KEY": "k"})
     ok = Settings.from_env({**base, "ANTHROPIC_API_KEY": "k", "GH_TOKEN": "t"})
     assert ok.agent_enabled
+    only_oauth = Settings.from_env({**base, "CLAUDE_CODE_OAUTH_TOKEN": "o", "GH_TOKEN": "t"})
+    assert only_oauth.agent_enabled
     with pytest.raises(ConfigError, match="BUDGET"):
         Settings.from_env({"ONCALL_WEBHOOK_PASSWORD": "x", "ONCALL_AGENT_MAX_BUDGET_USD": "0"})
     with pytest.raises(ConfigError, match="BUDGET"):

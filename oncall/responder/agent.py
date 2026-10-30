@@ -37,6 +37,7 @@ _INCIDENT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,80}")
 ENV_PASSTHROUGH = (
     "PATH",
     "LANG",
+    "CLAUDE_CODE_OAUTH_TOKEN",
     "ANTHROPIC_API_KEY",
     "GH_TOKEN",
     "DOCKER_HOST",
@@ -239,7 +240,11 @@ Folder {inc}/ holds alert.json, prometheus.json, loki.json, tempo.json and captu
 
 
 def _env(settings: Settings, incident: Incident) -> dict[str, str]:
-    env = {k: os.environ[k] for k in ENV_PASSTHROUGH if k in os.environ}
+    env = {k: os.environ[k] for k in ENV_PASSTHROUGH if os.environ.get(k)}
+    if env.get("CLAUDE_CODE_OAUTH_TOKEN"):
+        # Exactly one Claude credential: the subscription token wins, so a leftover API key can
+        # never switch the run to pay-per-token billing.
+        env.pop("ANTHROPIC_API_KEY", None)
     env.update(
         {
             "HOME": str(settings.agent_home),

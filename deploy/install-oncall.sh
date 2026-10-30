@@ -10,7 +10,7 @@
 # and oncall-compose.sh only), the systemd unit and /etc/fitwise-oncall.env (0600 root:root).
 #
 # Prerequisites it checks but does not install: python3.12, git, gh and the claude CLI (Claude
-# Code) on PATH. SECRETS ARE NEVER PASSED TO THIS SCRIPT: the owner puts ANTHROPIC_API_KEY and
+# Code) on PATH. SECRETS ARE NEVER PASSED TO THIS SCRIPT: the owner puts CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY) and
 # GH_TOKEN into /etc/fitwise-oncall.env by hand and sets ONCALL_AGENT_ENABLED=1; until then the
 # service only receives, deduplicates and captures alerts (agent disabled).
 set -euo pipefail
@@ -80,7 +80,10 @@ if [ ! -e "$ENV_FILE" ]; then
     echo "ONCALL_AGENT_ENABLED=0"
     echo "ONCALL_AGENT_MAX_BUDGET_USD=5"
     echo "COMPOSE=sudo -n /opt/fitwise/bin/oncall-compose.sh"
-    echo "ANTHROPIC_API_KEY="
+    echo "# Claude auth: subscription token from 'claude setup-token' run locally by the owner (D72)."
+    echo "CLAUDE_CODE_OAUTH_TOKEN="
+    echo "# Alternative (pay-per-token API key); set only one of the two:"
+    echo "# ANTHROPIC_API_KEY="
     echo "GH_TOKEN="
   } > "$ENV_FILE"
 fi
@@ -90,4 +93,4 @@ install -m 644 "$APP/app/oncall/host/fitwise-oncall.service" /etc/systemd/system
 systemctl daemon-reload
 systemctl enable --now fitwise-oncall.service >/dev/null
 systemctl restart fitwise-oncall.service
-echo "fitwise-oncall installed; edit $ENV_FILE (ANTHROPIC_API_KEY, GH_TOKEN, ONCALL_AGENT_ENABLED=1) then: systemctl restart fitwise-oncall"
+echo "fitwise-oncall installed; edit $ENV_FILE (CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN, ONCALL_AGENT_ENABLED=1) then: systemctl restart fitwise-oncall"
