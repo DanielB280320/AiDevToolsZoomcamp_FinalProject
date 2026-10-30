@@ -155,7 +155,8 @@
       "label": "Calendar views",
       "today": "Today",
       "week": "Week",
-      "month": "Month"
+      "month": "Month",
+      "body": "Body"
     },
     "status": {
       "done": "Done",
@@ -604,5 +605,55 @@
     "skipFor": "Skip: {{name}}",
     "undoFor": "Undo: {{name}}",
     "removeFor": "Remove: {{name}}"
+  },
+  "body": {
+    "title": "Body",
+    "formTitle": "Log a weigh-in",
+    "date": "Date",
+    "weight": "Weight",
+    "bodyFat": "Body fat (%)",
+    "bodyFatHint": "Optional. Leave empty and add neck and waist to have FitWise estimate it.",
+    "neck": "Neck",
+    "waist": "Waist",
+    "hip": "Hip",
+    "save": "Save weigh-in",
+    "saving": "Saving…",
+    "created": "Weigh-in saved.",
+    "replaced": "Replaced the earlier weigh-in for {{date}}.",
+    "listTitle": "Recent weigh-ins",
+    "empty": "No weigh-ins yet.",
+    "bodyFatValue": "{{value}} % body fat",
+    "loadFailed": "FitWise couldn't load your weigh-ins.",
+    "coachNotice": "Only the athlete can log weigh-ins. Coaches review them from the athlete's view.",
+    "errors": {
+      "futureDate": "The date can't be in the future.",
+      "invalidDate": "Enter a valid date.",
+      "invalidNumber": "Enter a number, for example 72.5.",
+      "nothing": "Enter at least a weight, a body fat % or a measurement.",
+      "form": "FitWise couldn't save that weigh-in. Check the highlighted fields.",
+      "notOnboarded": "Finish setting up your plan before logging weigh-ins.",
+      "generic": "The weigh-in didn't save. Try again."
+    },
+    "recalc": {
+      "title": "Recalculate your targets?",
+      "intro": "Your weight changed by {{pct}} % since your targets were set ({{from}} to {{to}}).",
+      "old": "Current targets",
+      "new": "New targets",
+      "kcal": "Calories",
+      "protein": "Protein",
+      "carbs": "Carbs",
+      "fat": "Fat",
+      "kcalValue": "{{count}} kcal",
+      "grams": "{{count}} g",
+      "future": "Accepting changes today and future days only. Past days keep their targets.",
+      "accept": "Accept",
+      "reject": "Reject",
+      "rejected": "Targets left unchanged.",
+      "accepted": "Targets updated from today.",
+      "errors": {
+        "alreadyDecided": "This was already decided. Nothing more to do.",
+        "generic": "Something went wrong. Try again."
+      }
+    }
   }
 }

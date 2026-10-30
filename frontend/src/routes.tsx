@@ -2,6 +2,7 @@ import type { RouteObject } from "react-router";
 
 import { AppShell } from "./components/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
+import { BodyPage } from "./pages/BodyPage";
 import { HomePage } from "./pages/HomePage";
 import { MonthPage } from "./pages/MonthPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -28,6 +29,7 @@ export const routes: RouteObject[] = [
           { path: paths.today, element: <TodayPage /> },
           { path: paths.week, element: <WeekPage /> },
           { path: paths.month, element: <MonthPage /> },
+          { path: paths.body, element: <BodyPage /> },
           { path: paths.workoutPattern, element: <WorkoutPage /> },
           { path: paths.onboarding, element: <OnboardingPage /> },
         ],

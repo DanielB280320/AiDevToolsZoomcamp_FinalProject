@@ -394,6 +394,7 @@ Behaviour details (D70): a check-off stays matched to its meal across plan versi
 ### F14. Body tracking and adaptive calories — *Must*
 
 - Log weight on any day (one entry per day; re-logging replaces it). Optionally log body fat % or measurements (Navy method recalculates body fat).
+- UI (`/body`, athlete only; coaches see no form): the weigh-in form takes weight, optional body fat % and neck/waist/hip in the user's units (converted to kg/cm before sending), rejects a future date inline, and shows API `422` messages next to their field. Re-logging a date shows a "replaced" confirmation and the list keeps one row per date. When the response carries a `recalc_suggestion` (or one is still pending on load) a prompt shows old vs. new kcal and macros with Accept and Reject; nothing changes until Accept.
 - Chart: daily weight + **7-day moving average** trend.
 - When weight changes by ≥ 2 % from the weight used for current targets, prompt the athlete to recalculate targets (shows old vs. new; accept/reject).
 - **Weekly adaptive calorie suggestion** (every Monday, for the previous two complete weeks):
