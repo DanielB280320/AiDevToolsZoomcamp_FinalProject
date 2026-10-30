@@ -416,6 +416,9 @@ def test_partial_unique_index_allows_many_extras_but_one_log_per_planned_meal(
             pytest.raises(IntegrityError, match="ck_meal_log_planned_has_meal_key"),
             engine.begin() as conn,
         ):
+            # The trigger fills a missing key for the previous release; with it off, the CHECK
+            # is the backstop.
+            conn.execute(text("ALTER TABLE meal_log DISABLE TRIGGER meal_log_fill_meal_key"))
             conn.execute(insert, {"id": uuid.uuid4(), "a": athlete, "p": uuid.uuid4(), "k": None})
     finally:
         engine.dispose()

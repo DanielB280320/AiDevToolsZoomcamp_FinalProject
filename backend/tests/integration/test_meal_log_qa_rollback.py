@@ -2,15 +2,13 @@
 
 A rollback runs the previous image on the new schema (spec §13, `make rollback-compat`). That
 release writes planned-meal logs with (slot, slot_index) and no `meal_key`, writes planned meals
-without `meal_key`, and matches logs by (slot, slot_index). The xfail tests record what the new
-schema and code must tolerate for that to keep working; they flip to XPASS (strict) once fixed.
+without `meal_key`, and matches logs by (slot, slot_index). These tests guard that the new
+schema and code tolerate that (triggers fill the key, slot_index is still written).
 """
 
 import uuid
 
-import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tests.integration.auth_helpers import Api
@@ -23,11 +21,6 @@ def _lunch(api: Api) -> dict[str, object]:
     return next(m for m in day["meals"] if m["planned_meal"]["slot"] == "lunch")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=IntegrityError,
-    reason="#159 QA: ck_meal_log_planned_has_meal_key rejects the previous release's check-off",
-)
 def test_previous_release_planned_checkoff_insert_is_accepted_on_the_new_schema(
     api: Api,
 ) -> None:
@@ -48,10 +41,6 @@ def test_previous_release_planned_checkoff_insert_is_accepted_on_the_new_schema(
         session.commit()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#159 QA: slot_index is no longer written, so the previous release cannot match the log",
-)
 def test_a_new_log_still_records_its_slot_index_for_the_previous_release(api: Api) -> None:
     _seed_athlete(api)
     planned = _lunch(api)["planned_meal"]
@@ -68,10 +57,6 @@ def test_a_new_log_still_records_its_slot_index_for_the_previous_release(api: Ap
     assert slot_index == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#159 QA: a planned meal without meal_key (written by the previous release) is a 404",
-)
 def test_a_planned_meal_written_without_a_key_can_still_be_checked_off(api: Api) -> None:
     _seed_athlete(api)
     planned = _lunch(api)["planned_meal"]
@@ -126,3 +111,38 @@ def test_migration_downgrade_succeeds_with_logs_written_by_the_new_release(
             assert keys == 2  # the upgrade re-keys the rows the downgrade stripped
     finally:
         engine.dispose()
+
+
+def test_a_log_and_meals_written_by_the_previous_release_match_after_roll_forward(
+    api: Api,
+) -> None:
+    _seed_athlete(api)
+    lunch = _lunch(api)["planned_meal"]
+    assert isinstance(lunch, dict)
+    with Session(api.app.state.engine) as session:
+        athlete = session.execute(text("SELECT id FROM users")).scalar_one()
+        # Meals as the previous release writes them (no key; the trigger fills it), then its
+        # check-off with (slot, slot_index) and no key.
+        session.execute(text("UPDATE planned_meal SET meal_key = NULL"))
+        session.execute(
+            text(
+                "INSERT INTO meal_log (id, athlete_id, date, planned_meal_id, status, slot,"
+                " slot_index, logged_at) VALUES (:id, :a, :d, :p, 'eaten', 'lunch', 0, now())"
+            ),
+            {"id": uuid.uuid4(), "a": athlete, "d": THU, "p": lunch["id"]},
+        )
+        session.commit()
+        assert (
+            session.execute(
+                text("SELECT count(*) FROM planned_meal WHERE meal_key IS NULL")
+            ).scalar_one()
+            == 0
+        )
+    day = _day(api.client)
+    matched = next(m for m in day["meals"] if m["planned_meal"]["slot"] == "lunch")
+    assert matched["log"] is not None and matched["log"]["status"] == "eaten"
+    assert day["extra_meal_logs"] == []
+    again = api.client.post(
+        f"{ME}/meal-logs", json={"date": THU, "planned_meal_id": lunch["id"], "status": "eaten"}
+    )
+    assert again.status_code == 200

@@ -63,7 +63,8 @@ class MealLog(Base):
     slot: Mapped[str | None] = mapped_column(String(9))
     # `planned_meal.meal_key` of the meal this log was made for; null for extra food (D73).
     meal_key: Mapped[uuid.UUID | None] = mapped_column(Uuid)
-    # Deprecated by D73 (position among the slot's meals, D70); no longer written or read.
+    # Deprecated by D73 (position among the slot's meals, D70): written for the previous release
+    # (rollback), never read; a later contract migration drops it.
     slot_index: Mapped[int | None] = mapped_column(Integer)
     logged_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
 

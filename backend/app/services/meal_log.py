@@ -294,9 +294,13 @@ def log_meal(
         raise ProblemError(422, "date_in_future", "Meals cannot be logged for a future day.")
     planned: plan_out.PlannedMeal | None = None
     key: uuid.UUID | None = None
+    slot_index: int | None = None
     if body.planned_meal_id is not None:
         meal_day, meals = planned_meals(db, user, body.date)
         planned = next((p for p in meals if p.id == body.planned_meal_id), None)
+        if planned is not None:
+            # Position among the slot's meals, still written for the previous release (D73).
+            slot_index = sum(1 for p in meals[: meals.index(planned)] if p.slot == planned.slot)
         key = meal_keys(meal_day).get(body.planned_meal_id)
         if planned is None or key is None:
             raise ProblemError(404, "planned_meal_not_found", "That meal is not planned that day.")
@@ -313,6 +317,7 @@ def log_meal(
             status=body.status,
             slot=slot,
             meal_key=key,
+            slot_index=slot_index,
             logged_at=now,
         )
         try:
