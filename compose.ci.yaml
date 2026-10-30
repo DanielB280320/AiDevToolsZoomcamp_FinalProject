@@ -1,0 +1,32 @@
+# CI / contract-smoke overlay (#153): the stack never reaches the real Open Food Facts.
+# The backend's OFF_BASE_URL points at `off-fake`, the same fake server the integration tests use
+# (backend/tests/off_server.py), run from the backend image with the file bind-mounted.
+#
+#   COMPOSE_FILE=compose.yaml:compose.ci.yaml make up   (or: docker compose -f compose.yaml -f compose.ci.yaml up ...)
+#
+# Never layered on a deploy host: dev and prod use the real service.
+
+services:
+  off-fake:
+    image: ${IMAGE_PREFIX:-fitwise}-backend:${TAG:-local}
+    command: ["python", "/fake/off_server.py", "8080"]
+    volumes:
+      - ./backend/tests/off_server.py:/fake/off_server.py:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/cgi/search.pl?search_terms=x', timeout=3)"]
+      interval: 3s
+      timeout: 4s
+      retries: 10
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  backend:
+    environment:
+      OFF_BASE_URL: http://off-fake:8080
+    depends_on:
+      off-fake:
+        condition: service_healthy
