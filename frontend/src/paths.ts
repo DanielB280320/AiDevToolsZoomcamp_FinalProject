@@ -6,6 +6,7 @@ export const paths = {
   today: "/today",
   week: "/week",
   month: "/month",
+  body: "/body",
   workout: (sessionId: string) => `/workout/${sessionId}`,
   workoutPattern: "/workout/:sessionId",
   onboarding: "/onboarding",
