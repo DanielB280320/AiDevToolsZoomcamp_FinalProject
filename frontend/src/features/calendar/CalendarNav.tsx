@@ -8,6 +8,7 @@ const TABS = [
   { to: paths.week, key: "week" },
   { to: paths.month, key: "month" },
   { to: paths.body, key: "body" },
+  { to: paths.progress, key: "progress" },
 ] as const;
 
 /** Today / Week / Month switcher, shown at the top of each calendar page (thumb-sized on mobile). */
@@ -21,7 +22,7 @@ export function CalendarNav() {
             <NavLink
               to={to}
               className={({ isActive }) =>
-                `flex min-h-12 items-center justify-center px-5 font-display text-step-1 font-bold no-underline sm:min-w-28 ${
+                `flex min-h-12 items-center justify-center px-2 font-display text-step-1 font-bold no-underline sm:min-w-28 sm:px-5 ${
                   isActive ? "bg-iron text-chalk" : "text-iron hover:bg-line"
                 }`
               }

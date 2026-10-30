@@ -63,6 +63,12 @@ export function FinishSummary({
         >
           {t("workout.summary.backToToday")}
         </Link>
+        <Link
+          to={paths.sessionChart(session.id)}
+          className="inline-flex min-h-12 items-center rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
+        >
+          {t("charts.session.viewChart")}
+        </Link>
         <button
           type="button"
           onClick={onReview}

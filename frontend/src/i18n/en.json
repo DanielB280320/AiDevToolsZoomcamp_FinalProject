@@ -156,7 +156,8 @@
       "today": "Today",
       "week": "Week",
       "month": "Month",
-      "body": "Body"
+      "body": "Body",
+      "progress": "Progress"
     },
     "status": {
       "done": "Done",
@@ -654,6 +655,115 @@
         "alreadyDecided": "This was already decided. Nothing more to do.",
         "generic": "Something went wrong. Try again."
       }
+    }
+  },
+  "charts": {
+    "title": "Progress",
+    "percent": "{{value}}%",
+    "kcal": "{{value}} kcal",
+    "none": "—",
+    "estimated": "estimated",
+    "coachNotice": "Charts for your linked athletes arrive with the coach dashboard.",
+    "forbidden": {
+      "title": "You don't have access to this data.",
+      "detail": "Charts are only available to the athlete who owns them."
+    },
+    "range": {
+      "label": "Time range",
+      "weeks_one": "{{count}} week",
+      "weeks_other": "{{count}} weeks"
+    },
+    "sections": {
+      "weekly": "This week",
+      "adherence": "Adherence",
+      "exercise": "Exercise over time",
+      "body": "Body"
+    },
+    "session": {
+      "title": "Session",
+      "back": "Back to Progress",
+      "viewChart": "View session chart",
+      "empty": "No sets were logged in this session.",
+      "chartLabel": "Target versus actual per set for {{name}}",
+      "target": "Target",
+      "actual": "Actual",
+      "set": "Set {{n}}",
+      "setShort": "S{{n}}",
+      "extra": "extra exercise",
+      "completion": "completion {{value}}%",
+      "kcal": "about {{value}} kcal (estimated)",
+      "repsOf": "{{actual}} of {{target}} reps",
+      "secondsOf": "{{actual}} of {{target}} s",
+      "weightOf": "{{actual}} of {{target}} {{unit}}",
+      "status": {
+        "met": "Met",
+        "partial": "Partial",
+        "missed": "Missed",
+        "skipped": "Skipped",
+        "extra": "Extra"
+      }
+    },
+    "exercise": {
+      "search": "Search an exercise",
+      "pick": "Type at least two letters and choose an exercise to see its trend.",
+      "empty": "No finished sessions with this exercise in this range.",
+      "noWeights": "This exercise has no weights to chart.",
+      "weightLabel": "Target and top-set weight for {{name}} in {{unit}}",
+      "target": "Target",
+      "topSet": "Top set",
+      "prs": "Personal records: {{dates}}",
+      "volume": "Volume ({{unit}})",
+      "volumeLabel": "Volume per session for {{name}} in {{unit}}",
+      "volumeName": "Volume"
+    },
+    "adherence": {
+      "prev": "Previous month",
+      "next": "Next month",
+      "prevGlyph": "‹",
+      "nextGlyph": "›",
+      "metric": "Metric",
+      "training": "Training",
+      "nutrition": "Nutrition",
+      "heatLabel": "Daily completion this month",
+      "legend": "Dashed days have no value (rest day, not yet due, or no plan). A missed session counts as 0%.",
+      "weekly": "Weekly completion",
+      "weeklyLabel": "Weekly completion in percent",
+      "empty": "No data for this month yet.",
+      "cellValue": "{{date}}: {{value}}%",
+      "cellNeutral": "{{date}}: no value ({{status}})",
+      "trainingStatus": {
+        "rest": "rest day",
+        "planned": "planned",
+        "in_progress": "in progress",
+        "done": "done",
+        "missed": "missed"
+      }
+    },
+    "weekly": {
+      "prev": "Previous week",
+      "next": "Next week",
+      "range": "{{from}} to {{to}}",
+      "sessions": "Sessions",
+      "sessionsValue": "{{done}} of {{planned}}",
+      "missed_one": "{{count}} missed",
+      "missed_other": "{{count}} missed",
+      "completion": "Average completion",
+      "completionTrend": "Daily training completion",
+      "balance": "Avg daily balance",
+      "targetBalance": "Target balance {{value}}",
+      "balanceTrend": "Daily energy balance",
+      "weight": "Weight (7-day average)",
+      "weightRange": "{{start}} to {{end}} {{unit}}",
+      "weightTrend": "7-day average weight in {{unit}}",
+      "noTrend": "No trend yet."
+    },
+    "body": {
+      "weightLabel": "Weight and 7-day average in {{unit}}",
+      "weight": "Weigh-in",
+      "avg": "7-day average",
+      "fat": "Body fat (%)",
+      "fatLabel": "Body fat percent",
+      "empty": "No weigh-ins in this range yet."
     }
   }
 }
