@@ -1,8 +1,9 @@
 """Open Food Facts client: search, product lookup, 24 h cache and result mapping (spec F6, D44).
 
 * Requests carry `User-Agent: FitWise/<version> (<contact>)` and are abandoned after the
-  configured timeout (3 s). Failures never raise: they become an `OffUnavailable` result with a
-  reason (`timeout` or `upstream_error`) so the API can answer `available: false` (F6.3).
+  configured total deadline (3 s for the whole request, not per phase). Failures never raise:
+  they become an `OffUnavailable` result with a reason (`timeout` or `upstream_error`) so the
+  API can answer `available: false` (F6.3).
 * Successful searches are cached for 24 h per normalised query; every product seen is cached by
   code for the same time so `POST /foods/import` does not need a second upstream call.
 * Nothing here logs the query, product names or brands: they are user content (spec section 6.5).
@@ -151,6 +152,7 @@ class OffClient:
 
     def __init__(self, settings: Settings) -> None:
         self._base_url = settings.off_base_url
+        self._timeout = settings.off_timeout_seconds
         self._client = httpx.Client(
             timeout=settings.off_timeout_seconds,
             headers={
@@ -230,9 +232,38 @@ class OffClient:
             self._products[code] = (now + CACHE_TTL, product)
         return product
 
+    def _fetch(self, url: str, params: dict[str, Any], box: dict[str, Any]) -> None:
+        """Worker: runs one request, streaming the body; stores `response` or `error` in `box`."""
+        try:
+            with self._client.stream("GET", url, params=params) as streamed:
+                box["stream"] = streamed
+                body = b"".join(streamed.iter_bytes())
+                box["response"] = httpx.Response(
+                    streamed.status_code, headers=streamed.headers, content=body
+                )
+        except Exception as error:  # re-raised on the caller's thread
+            box["error"] = error
+
+    def _request(self, url: str, params: dict[str, Any]) -> httpx.Response:
+        """One request under a total deadline of `off_timeout_seconds` (httpx limits each phase
+        separately, so a response trickling in slowly would otherwise outlive the setting)."""
+        box: dict[str, Any] = {}
+        worker = threading.Thread(target=self._fetch, args=(url, params, box), daemon=True)
+        worker.start()
+        worker.join(self._timeout)
+        if worker.is_alive():
+            stream = box.get("stream")
+            if stream is not None:
+                stream.close()  # unblocks the worker's read
+            raise httpx.ReadTimeout("total deadline exceeded")
+        if "error" in box:
+            raise box["error"]
+        response: httpx.Response = box["response"]
+        return response
+
     def _get(self, path: str, params: dict[str, Any]) -> Any:
         try:
-            response = self._client.get(f"{self._base_url}{path}", params=params)
+            response = self._request(f"{self._base_url}{path}", params)
         except httpx.TimeoutException as error:
             log.warning(
                 "open food facts request failed",
