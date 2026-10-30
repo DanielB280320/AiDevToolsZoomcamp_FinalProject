@@ -427,7 +427,7 @@ def _apply_to_plan(
                     planned_kcal=p.planned_kcal,
                 )
             )
-        days.append(NewTrainingDay(day.weekday, day.name, items, day.planned_kcal))
+        days.append(NewTrainingDay(day.weekday, day.name, items, day.planned_kcal, day.edited_by))
     old_days = list(old.training_days)
     # created_at is kept so the template still applies from the same first day (calendar).
     new = create_plan_version(
@@ -437,12 +437,14 @@ def _apply_to_plan(
         source=old.source,
         days=days,
         now=old.created_at,
+        revision=old.revision + 1,
     )
     new.updated_at = now
     db.add(
         PlanChange(
             plan_id=new.id,
             author_id=user.id,
+            author_role=user.role,
             change={"kind": "suggestion_accepted", "suggestion_id": str(row.id)},
             created_at=now,
         )

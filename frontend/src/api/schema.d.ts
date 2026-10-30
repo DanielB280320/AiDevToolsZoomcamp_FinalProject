@@ -420,6 +420,16 @@ export interface paths {
          *     `PlanChange` with author and timestamp (F8.3) and affects only today-and-future sessions;
          *     past sessions and logs never change (F8.1). Coach edits are labelled with the coach in
          *     `edited_by` and notify the athlete. At most one training day per weekday.
+         *
+         *     Every edit stores a **new plan version** (D75): the response is the new active version with
+         *     `revision` + 1, the previous version stays readable, and sessions that were started or
+         *     finished keep the version they were performed against. Untouched planned sessions from
+         *     today on follow the new version. Targets must fit the exercise: strength and bodyweight
+         *     need `reps_min` (linear progression: `reps_max` equal or omitted), timed need
+         *     `target_seconds` and no reps or weight; otherwise `422 invalid_plan` with `errors[]`.
+         *     Unknown or duplicate ids, unknown exercises and a second day on a weekday are also
+         *     `422 invalid_plan`. Only the athlete or a coach with an active link may edit; anyone else
+         *     gets `403 not_linked`.
          */
         put: operations["updateTrainingPlan"];
         post?: never;
@@ -443,9 +453,13 @@ export interface paths {
         /**
          * Replace the meal template (custom mode)
          * @description Replaces the planned meals of each weekday (add/remove/replace meals per slot, change
-         *     portion or grams). Same `revision`, `source`, history and authorization rules as
-         *     `updateTrainingPlan`. Gram overrides in `items` are stored as a private copy of the meal
-         *     owned by the athlete, so the shared library meal is never changed.
+         *     portion or grams). Same `revision`, `source`, history, versioning and authorization rules
+         *     as `updateTrainingPlan`; weekdays missing from `meal_days` end up with no meals. A planned
+         *     meal sent with its `id` keeps its identity (`meal_key`, D73) whatever changes (position,
+         *     slot, meal, portion, grams), so a log already made for it keeps showing; a meal without
+         *     `id` is new and starts without logs. Gram overrides in `items` are the final amounts (the
+         *     portion factor is then 1) and are stored as a private copy of the meal owned by the
+         *     athlete, so the shared library meal is never changed.
          */
         put: operations["updateMealPlan"];
         post?: never;
@@ -471,7 +485,8 @@ export interface paths {
          * Regenerate the suggested plan from the current profile
          * @description Creates a new plan version (source `generated`) from the current profile and targets and
          *     makes it active. Previous versions stay readable (F8.2). `scope` limits regeneration to the
-         *     training or meal part; the other part is copied from the current version.
+         *     training or meal part; the other part is copied from the current version. Regenerated meals
+         *     are new meals: logs of the meals they replace stay visible as extra meal logs (D73).
          */
         post: operations["regeneratePlan"];
         delete?: never;

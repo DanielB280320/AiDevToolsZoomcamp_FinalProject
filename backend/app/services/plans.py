@@ -12,6 +12,7 @@ import datetime as dt
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
@@ -58,6 +59,7 @@ class NewTrainingDay:
     name: str
     exercises: Sequence[NewPlannedExercise] = field(default_factory=tuple)
     planned_kcal: int = 0
+    edited_by: uuid.UUID | None = None  # last hand editor (F8)
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,7 @@ class NewMealDay:
     weekday: str
     meals: Sequence[NewPlannedMeal] = field(default_factory=tuple)
     warning: str | None = None
+    edited_by: uuid.UUID | None = None  # last hand editor (F8)
 
 
 def create_plan_version(
@@ -85,6 +88,8 @@ def create_plan_version(
     days: Sequence[NewTrainingDay],
     now: dt.datetime,
     meal_days: Sequence[NewMealDay] | None = None,
+    revision: int = 0,
+    change: dict[str, Any] | None = None,
 ) -> Plan:
     """Store `days` as the athlete's next plan version and make it the active one.
 
@@ -94,7 +99,9 @@ def create_plan_version(
 
     `meal_days=None` carries the previous active version's meal days and planned meals forward
     (F8.1, D70: a change that does not edit meals must not drop the meal plan); pass a sequence
-    (even an empty one) to set them explicitly.
+    (even an empty one) to set them explicitly. `revision` is the optimistic-concurrency counter of
+    the new version (editors pass the previous one plus one so a stale client is detected, D75);
+    `change` is the `PlanChange` summary (default: version created).
     """
     session.execute(select(User.id).where(User.id == athlete_id).with_for_update()).one()
     if meal_days is None:
@@ -108,6 +115,7 @@ def create_plan_version(
                 NewMealDay(
                     weekday=d.weekday,
                     warning=d.warning,
+                    edited_by=d.edited_by,
                     meals=[
                         NewPlannedMeal(m.slot, m.meal_id, m.portion_factor, m.meal_key)
                         for m in sorted(d.meals, key=lambda m: m.position)
@@ -127,14 +135,18 @@ def create_plan_version(
         version=(latest or 0) + 1,
         source=source,
         active=True,
-        revision=0,
+        revision=revision,
         created_by=author_id,
         created_at=now,
         updated_at=now,
     )
     for day_order, day in enumerate(days):
         training_day = TrainingDay(
-            weekday=day.weekday, name=day.name, position=day_order, planned_kcal=day.planned_kcal
+            weekday=day.weekday,
+            name=day.name,
+            position=day_order,
+            planned_kcal=day.planned_kcal,
+            edited_by=day.edited_by,
         )
         for order, item in enumerate(day.exercises):
             training_day.exercises.append(
@@ -160,6 +172,7 @@ def create_plan_version(
                 weekday=meal_day.weekday,
                 position=day_order,
                 warning=meal_day.warning,
+                edited_by=meal_day.edited_by,
                 meals=[
                     PlannedMeal(
                         slot=m.slot,
@@ -174,11 +187,13 @@ def create_plan_version(
         )
     session.add(plan)
     session.flush()
+    author = session.get(User, author_id)
     session.add(
         PlanChange(
             plan_id=plan.id,
             author_id=author_id,
-            change={"kind": "created", "version": plan.version, "source": source},
+            author_role=author.role if author else None,
+            change=change or {"kind": "created", "version": plan.version, "source": source},
             created_at=now,
         )
     )
@@ -203,7 +218,7 @@ def resolve_athlete(user: User, athlete_id: str) -> uuid.UUID:
     return parsed
 
 
-def _ref(user: User) -> UserRef:
+def user_ref(user: User) -> UserRef:
     return UserRef.model_validate(
         {"id": user.id, "display_name": user.display_name, "role": user.role}
     )
@@ -256,7 +271,7 @@ def plan_view(session: Session, plan: Plan, warnings: Sequence[str] = ()) -> out
             "source": plan.source,
             "active": plan.active,
             "revision": plan.revision,
-            "created_by": _ref(users[plan.created_by]) if plan.created_by else None,
+            "created_by": user_ref(users[plan.created_by]) if plan.created_by else None,
             "created_at": plan.created_at,
             "updated_at": plan.updated_at,
             "training_days": [
@@ -272,7 +287,7 @@ def plan_view(session: Session, plan: Plan, warnings: Sequence[str] = ()) -> out
                         [(e, exercises[e.exercise_id]) for e in day.exercises]
                     ),
                     "planned_kcal": day.planned_kcal,
-                    "edited_by": _ref(users[day.edited_by]) if day.edited_by else None,
+                    "edited_by": user_ref(users[day.edited_by]) if day.edited_by else None,
                 }
                 for day in days
             ],

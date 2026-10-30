@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.engines import exercise_kcal as kcal_engine
 from app.engines import targets as targets_engine
+from app.engines.meal_plan import GeneratedMealPlan
 from app.engines.training_plan import CatalogExercise, GeneratedPlan, PlanRequest, generate_plan
 from app.errors import ProblemError
 from app.models import AthleteProfile, BodyMetric, Exercise, Plan, Targets, TrainingDay, User
@@ -217,6 +218,85 @@ def _weekly_kcal(
     )
 
 
+def generate_training(
+    session: Session, profile: AthleteProfileInput | AthleteProfile, weight_kg: float
+) -> tuple[GeneratedPlan, kcal_engine.PlannedWeeklyKcal, list[NewTrainingDay]]:
+    """Run the F5 engine for `profile` and price the days with F13.2 at `weight_kg`.
+
+    Shared by onboarding and "regenerate" (F8.2): both store the days as a plan version."""
+    catalog = _catalog(session)
+    by_id = {c.id: c for c in catalog}
+    generated = generate_plan(
+        PlanRequest(
+            experience=profile.experience,
+            goal=profile.goal,
+            days_per_week=profile.days_per_week,
+            preferred_days=list(profile.preferred_days),
+            session_minutes=profile.session_minutes,
+            equipment=profile.equipment,
+            avoided_exercise_ids=[str(i) for i in profile.avoided_exercise_ids],
+        ),
+        catalog,
+    )
+    weekly = _weekly_kcal(
+        [
+            (
+                day.weekday,
+                [
+                    (
+                        by_id[e.exercise_id].type,
+                        by_id[e.exercise_id].met,
+                        e.sets,
+                        e.rest_seconds,
+                        e.target_seconds,
+                    )
+                    for e in day.exercises
+                ],
+            )
+            for day in generated.days
+        ],
+        weight_kg,
+    )
+    days = [
+        NewTrainingDay(
+            weekday=day.weekday,
+            name=day.name,
+            planned_kcal=day_kcal.kcal,
+            exercises=[
+                NewPlannedExercise(
+                    exercise_id=uuid.UUID(e.exercise_id),
+                    sets=e.sets,
+                    rest_seconds=e.rest_seconds,
+                    rule=e.rule,
+                    increment_kg=e.increment_kg,
+                    reps_min=e.reps_min,
+                    reps_max=e.reps_max,
+                    target_weight_kg=e.target_weight_kg,
+                    target_seconds=e.target_seconds,
+                    deload_enabled=e.deload_enabled,
+                    planned_kcal=part.kcal,
+                )
+                for e, part in zip(day.exercises, day_kcal.parts, strict=True)
+            ],
+        )
+        for day, day_kcal in zip(generated.days, weekly.days, strict=True)
+    ]
+    return generated, weekly, days
+
+
+def new_meal_days(generated: GeneratedMealPlan) -> list[NewMealDay]:
+    return [
+        NewMealDay(
+            weekday=day.weekday,
+            warning=day.warning,
+            meals=[
+                NewPlannedMeal(m.slot, uuid.UUID(m.meal_id), m.portion_factor) for m in day.meals
+            ],
+        )
+        for day in generated.days
+    ]
+
+
 def _compute_targets(
     telemetry: Telemetry,
     *,
@@ -393,39 +473,7 @@ def onboard(
 
     # Plan first (pure), so its weekly kcal feeds the targets (F3.4) and is stored per
     # exercise and day (F13.2) at the weight just entered.
-    catalog = _catalog(session)
-    by_id = {c.id: c for c in catalog}
-    generated = generate_plan(
-        PlanRequest(
-            experience=profile_in.experience,
-            goal=profile_in.goal,
-            days_per_week=profile_in.days_per_week,
-            preferred_days=profile_in.preferred_days,
-            session_minutes=profile_in.session_minutes,
-            equipment=profile_in.equipment,
-            avoided_exercise_ids=[str(i) for i in profile_in.avoided_exercise_ids],
-        ),
-        catalog,
-    )
-    weekly = _weekly_kcal(
-        [
-            (
-                day.weekday,
-                [
-                    (
-                        by_id[e.exercise_id].type,
-                        by_id[e.exercise_id].met,
-                        e.sets,
-                        e.rest_seconds,
-                        e.target_seconds,
-                    )
-                    for e in day.exercises
-                ],
-            )
-            for day in generated.days
-        ],
-        weight,
-    )
+    generated, weekly, new_days = generate_training(session, profile_in, weight)
     targets_result = _compute_targets(
         telemetry,
         sex=profile_in.sex,
@@ -478,30 +526,6 @@ def onboard(
 
     targets_row = _store_targets(session, user.id, today, targets_result, now)
 
-    new_days = [
-        NewTrainingDay(
-            weekday=day.weekday,
-            name=day.name,
-            planned_kcal=day_kcal.kcal,
-            exercises=[
-                NewPlannedExercise(
-                    exercise_id=uuid.UUID(e.exercise_id),
-                    sets=e.sets,
-                    rest_seconds=e.rest_seconds,
-                    rule=e.rule,
-                    increment_kg=e.increment_kg,
-                    reps_min=e.reps_min,
-                    reps_max=e.reps_max,
-                    target_weight_kg=e.target_weight_kg,
-                    target_seconds=e.target_seconds,
-                    deload_enabled=e.deload_enabled,
-                    planned_kcal=part.kcal,
-                )
-                for e, part in zip(day.exercises, day_kcal.parts, strict=True)
-            ],
-        )
-        for day, day_kcal in zip(generated.days, weekly.days, strict=True)
-    ]
     # F7: the meal plan is generated with the training plan, from the targets just stored.
     generated_meals = meal_plans.generate(
         session,
@@ -520,17 +544,7 @@ def onboard(
         source="generated",
         days=new_days,
         now=now,
-        meal_days=[
-            NewMealDay(
-                weekday=day.weekday,
-                warning=day.warning,
-                meals=[
-                    NewPlannedMeal(m.slot, uuid.UUID(m.meal_id), m.portion_factor)
-                    for m in day.meals
-                ],
-            )
-            for day in generated_meals.days
-        ],
+        meal_days=new_meal_days(generated_meals),
     )
     try:
         session.commit()
