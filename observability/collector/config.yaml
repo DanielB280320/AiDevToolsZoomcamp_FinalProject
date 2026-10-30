@@ -149,6 +149,32 @@ processors:
           # A sender that does not gate (map/array/bytes body) must not skip the scrubbing below.
           - set(log.body, "") where not IsString(log.body)
           - keep_keys(log.attributes, ["service.name", "service.version", "env", "logger", "route", "method", "status", "duration_ms", "user_hash", "error_type", "check", "outcome", "kind", "rule", "decision", "engine", "count", "flag_key", "flag_old_value", "flag_new_value", "actor", "revision"])
+          # keep_keys filters by key only: an allowed key holding a map, array or bytes is deleted.
+          - delete_key(log.attributes, "route") where log.attributes["route"] != nil and not (IsString(log.attributes["route"]) or IsInt(log.attributes["route"]) or IsDouble(log.attributes["route"]) or IsBool(log.attributes["route"]))
+          - delete_key(log.attributes, "method") where log.attributes["method"] != nil and not (IsString(log.attributes["method"]) or IsInt(log.attributes["method"]) or IsDouble(log.attributes["method"]) or IsBool(log.attributes["method"]))
+          - delete_key(log.attributes, "status") where log.attributes["status"] != nil and not (IsString(log.attributes["status"]) or IsInt(log.attributes["status"]) or IsDouble(log.attributes["status"]) or IsBool(log.attributes["status"]))
+          - delete_key(log.attributes, "duration_ms") where log.attributes["duration_ms"] != nil and not (IsString(log.attributes["duration_ms"]) or IsInt(log.attributes["duration_ms"]) or IsDouble(log.attributes["duration_ms"]) or IsBool(log.attributes["duration_ms"]))
+          - delete_key(log.attributes, "user_hash") where log.attributes["user_hash"] != nil and not (IsString(log.attributes["user_hash"]) or IsInt(log.attributes["user_hash"]) or IsDouble(log.attributes["user_hash"]) or IsBool(log.attributes["user_hash"]))
+          - delete_key(log.attributes, "error_type") where log.attributes["error_type"] != nil and not (IsString(log.attributes["error_type"]) or IsInt(log.attributes["error_type"]) or IsDouble(log.attributes["error_type"]) or IsBool(log.attributes["error_type"]))
+          - delete_key(log.attributes, "check") where log.attributes["check"] != nil and not (IsString(log.attributes["check"]) or IsInt(log.attributes["check"]) or IsDouble(log.attributes["check"]) or IsBool(log.attributes["check"]))
+          - delete_key(log.attributes, "outcome") where log.attributes["outcome"] != nil and not (IsString(log.attributes["outcome"]) or IsInt(log.attributes["outcome"]) or IsDouble(log.attributes["outcome"]) or IsBool(log.attributes["outcome"]))
+          - delete_key(log.attributes, "kind") where log.attributes["kind"] != nil and not (IsString(log.attributes["kind"]) or IsInt(log.attributes["kind"]) or IsDouble(log.attributes["kind"]) or IsBool(log.attributes["kind"]))
+          - delete_key(log.attributes, "rule") where log.attributes["rule"] != nil and not (IsString(log.attributes["rule"]) or IsInt(log.attributes["rule"]) or IsDouble(log.attributes["rule"]) or IsBool(log.attributes["rule"]))
+          - delete_key(log.attributes, "decision") where log.attributes["decision"] != nil and not (IsString(log.attributes["decision"]) or IsInt(log.attributes["decision"]) or IsDouble(log.attributes["decision"]) or IsBool(log.attributes["decision"]))
+          - delete_key(log.attributes, "engine") where log.attributes["engine"] != nil and not (IsString(log.attributes["engine"]) or IsInt(log.attributes["engine"]) or IsDouble(log.attributes["engine"]) or IsBool(log.attributes["engine"]))
+          - delete_key(log.attributes, "count") where log.attributes["count"] != nil and not (IsString(log.attributes["count"]) or IsInt(log.attributes["count"]) or IsDouble(log.attributes["count"]) or IsBool(log.attributes["count"]))
+          - delete_key(log.attributes, "flag_key") where log.attributes["flag_key"] != nil and not (IsString(log.attributes["flag_key"]) or IsInt(log.attributes["flag_key"]) or IsDouble(log.attributes["flag_key"]) or IsBool(log.attributes["flag_key"]))
+          - delete_key(log.attributes, "flag_old_value") where log.attributes["flag_old_value"] != nil and not (IsString(log.attributes["flag_old_value"]) or IsInt(log.attributes["flag_old_value"]) or IsDouble(log.attributes["flag_old_value"]) or IsBool(log.attributes["flag_old_value"]))
+          - delete_key(log.attributes, "flag_new_value") where log.attributes["flag_new_value"] != nil and not (IsString(log.attributes["flag_new_value"]) or IsInt(log.attributes["flag_new_value"]) or IsDouble(log.attributes["flag_new_value"]) or IsBool(log.attributes["flag_new_value"]))
+          - delete_key(log.attributes, "actor") where log.attributes["actor"] != nil and not (IsString(log.attributes["actor"]) or IsInt(log.attributes["actor"]) or IsDouble(log.attributes["actor"]) or IsBool(log.attributes["actor"]))
+          - delete_key(log.attributes, "revision") where log.attributes["revision"] != nil and not (IsString(log.attributes["revision"]) or IsInt(log.attributes["revision"]) or IsDouble(log.attributes["revision"]) or IsBool(log.attributes["revision"]))
+          - delete_key(log.attributes, "logger") where log.attributes["logger"] != nil and not (IsString(log.attributes["logger"]) or IsInt(log.attributes["logger"]) or IsDouble(log.attributes["logger"]) or IsBool(log.attributes["logger"]))
+          - delete_key(log.attributes, "service.name") where log.attributes["service.name"] != nil and not (IsString(log.attributes["service.name"]) or IsInt(log.attributes["service.name"]) or IsDouble(log.attributes["service.name"]) or IsBool(log.attributes["service.name"]))
+          - delete_key(log.attributes, "service.version") where log.attributes["service.version"] != nil and not (IsString(log.attributes["service.version"]) or IsInt(log.attributes["service.version"]) or IsDouble(log.attributes["service.version"]) or IsBool(log.attributes["service.version"]))
+          - delete_key(log.attributes, "env") where log.attributes["env"] != nil and not (IsString(log.attributes["env"]) or IsInt(log.attributes["env"]) or IsDouble(log.attributes["env"]) or IsBool(log.attributes["env"]))
+          # Free-text severity / event name from the sender: only the known levels survive.
+          - set(log.severity_text, "") where not IsMatch(log.severity_text, "^(?i:trace|debug|info|warn|warning|error|critical|fatal)$")
+          - set(log.event_name, "")
           - replace_pattern(log.body, "[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+", "[email]")
           - replace_pattern(log.body, "(?i)\\bbearer\\s+\\S+", "Bearer [token]")
           - replace_pattern(log.body, "\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+", "[token]")
@@ -164,9 +190,19 @@ processors:
       - context: resource
         statements:
           - keep_keys(resource.attributes, ["service.name", "service.version", "deployment.environment.name", "env"])
+          # Values are bounded too (they become Loki labels / Tempo service names). A value that is
+          # not a string, or does not fit its shape, is deleted; a missing `env` is then inserted
+          # from FITWISE_ENV by resource/env. Environments: APP_ENV values (.env.example, bootstrap).
+          - delete_key(resource.attributes, "service.name") where resource.attributes["service.name"] != nil and not (IsString(resource.attributes["service.name"]) and IsMatch(resource.attributes["service.name"], "^fitwise-[a-z-]{1,40}$"))
+          - delete_key(resource.attributes, "service.version") where resource.attributes["service.version"] != nil and not (IsString(resource.attributes["service.version"]) and IsMatch(resource.attributes["service.version"], "^[A-Za-z0-9._+-]{1,64}$"))
+          - delete_key(resource.attributes, "env") where resource.attributes["env"] != nil and not (IsString(resource.attributes["env"]) and IsMatch(resource.attributes["env"], "^(?:local|dev|test|prod)$"))
+          - delete_key(resource.attributes, "deployment.environment.name") where resource.attributes["deployment.environment.name"] != nil and not (IsString(resource.attributes["deployment.environment.name"]) and IsMatch(resource.attributes["deployment.environment.name"], "^(?:local|dev|test|prod)$"))
       - context: scope
         statements:
           - keep_keys(scope.attributes, [])
+          # The instrumentation scope name / version are free text from the sender: cleared.
+          - set(scope.name, "")
+          - set(scope.version, "")
     metric_statements: *resource_gate
     log_statements: *resource_gate
 
