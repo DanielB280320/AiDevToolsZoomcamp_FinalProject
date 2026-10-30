@@ -7,8 +7,9 @@ legitimate log after a same-day reorder; `meal_log.slot_index` stays as a deprec
 
 Rollback safety (rule 8): the previous release runs on this schema after a rollback. It writes
 planned_meal and planned meal_log rows without `meal_key`, so BEFORE INSERT OR UPDATE triggers
-fill a missing key with the same formula as the backfill (the D70 position rule); the CHECK then
-holds for both releases, and a log and a meal written by the old release get the same key. The
+fill a missing key: a log takes the key of the planned meal it points to, and only falls back to
+the backfill formula (the D70 position rule) when that meal is unknown; a meal takes the formula.
+The CHECK then holds for both releases. The
 new code keeps writing `meal_log.slot_index` so the old release still matches new logs.
 
 Backfill reproduces the D70 position rule once: both tables get the same deterministic key
@@ -70,7 +71,11 @@ def upgrade() -> None:
         CREATE FUNCTION meal_log_fill_meal_key() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN
             IF NEW.planned_meal_id IS NOT NULL AND NEW.meal_key IS NULL THEN
-                IF NEW.slot IS NULL OR NEW.slot_index IS NULL THEN
+                -- The planned meal being checked off carries the key (any release's meal).
+                SELECT meal_key INTO NEW.meal_key FROM planned_meal WHERE id = NEW.planned_meal_id;
+                IF NEW.meal_key IS NOT NULL THEN
+                    NULL;
+                ELSIF NEW.slot IS NULL OR NEW.slot_index IS NULL THEN
                     NEW.meal_key := gen_random_uuid();
                 ELSE
                     NEW.meal_key := md5(
