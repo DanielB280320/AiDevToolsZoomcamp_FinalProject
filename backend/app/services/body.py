@@ -29,7 +29,7 @@ from app.models import AthleteProfile, BodyMetric, Suggestion, User
 from app.schemas import athlete as athlete_out
 from app.schemas.body import BodyMetricInput
 from app.schemas.problem import FieldError
-from app.services import athlete
+from app.services import athlete, portion_rescale
 from app.services.clock import age_on, local_today
 from app.telemetry import Telemetry
 
@@ -228,9 +228,13 @@ def log_metric(
 
 
 def accept_recalc(session: Session, user: User, row: Suggestion, now: dt.datetime) -> None:
-    """Store the proposed targets from today; earlier `Targets` rows stay as they are."""
+    """Store the proposed targets from today; earlier `Targets` rows stay as they are. Meal
+    portions are rescaled to the new kcal from today on (D74)."""
     proposed = dict(row.inputs["proposed_targets"])
     proposed["bmr_formula"] = targets_engine.BmrFormula(proposed["bmr_formula"])
     result = targets_engine.TargetsResult(**proposed)
     today = local_today(now, user.timezone)
-    athlete._store_targets(session, user.id, today, result, now)
+    stored = athlete._store_targets(session, user.id, today, result, now)
+    portion_rescale.rescale_future_meals(
+        session, athlete=user, author=user, new_kcal=stored.kcal, now=now, reason="recalc"
+    )

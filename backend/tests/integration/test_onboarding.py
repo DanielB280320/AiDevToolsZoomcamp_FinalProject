@@ -527,7 +527,14 @@ def test_put_uses_the_latest_weight_and_does_not_regenerate_the_plan(athlete: Ap
 
     assert update["targets"]["weight_used_kg"] == 70
     with Session(athlete.app.state.engine) as session:
-        assert [p.version for p in session.scalars(select(Plan)).all()] == [1]
+        # D74: the new targets rescale meal portions as plan version 2; the training days are
+        # carried over unchanged (never regenerated)
+        plans = session.scalars(select(Plan).order_by(Plan.version)).all()
+        assert [p.version for p in plans] == [1, 2]
+        old, new = plans
+        assert [
+            (d.weekday, d.name, [e.exercise_id for e in d.exercises]) for d in old.training_days
+        ] == [(d.weekday, d.name, [e.exercise_id for e in d.exercises]) for d in new.training_days]
 
 
 def test_put_with_unknown_avoided_exercise_is_422(athlete: Api) -> None:

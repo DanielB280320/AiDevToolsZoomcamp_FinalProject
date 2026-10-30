@@ -205,6 +205,13 @@ MEAL_DAY_ATTEMPTS = 60
 MEAL_PORTION_DECIMALS = 2
 # F7 (D68) passes of proportional rescaling that bring the day total onto the target.
 MEAL_SCALE_PASSES = 6
+# F14/D74 portion factors after a targets change stay within these bounds (inside the database
+# check 0 < factor <= 3 and the editor's 0.25 minimum); a larger change is clamped, never an error.
+RESCALE_PORTION_MIN = 0.25
+RESCALE_PORTION_MAX = 3.0
+# F14/D74 a day is on target within this fraction; passes of proportional rescaling per day.
+RESCALE_KCAL_TOLERANCE = 0.005
+RESCALE_PASSES = 6
 # F7 warnings shown with a day (the protein one is the spec wording).
 MEAL_WARNING_PROTEIN = (
     "Couldn't hit your protein target with the current library — add custom meals"
