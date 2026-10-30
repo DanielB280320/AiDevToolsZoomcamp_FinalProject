@@ -13,6 +13,7 @@ from app.migrations import load_migration_scripts
 from app.routers import (
     athletes,
     auth,
+    body,
     calendar,
     exercises,
     foods,
@@ -96,5 +97,6 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     api.include_router(logging.router)
     api.include_router(suggestions.router)
     api.include_router(athletes.router)
+    api.include_router(body.router)
     app.include_router(api)
     return app

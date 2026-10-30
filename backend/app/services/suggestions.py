@@ -43,6 +43,7 @@ from app.models import (
 from app.models import Suggestion as Row
 from app.schemas import suggestions as out
 from app.schemas.users import UserRef
+from app.services import body
 from app.services.clock import local_today
 from app.services.plans import NewPlannedExercise, NewTrainingDay, create_plan_version
 from app.telemetry.metrics import SuggestionRule
@@ -488,6 +489,15 @@ def accept(
     now: dt.datetime,
 ) -> Row:
     row = _locked(db, user, suggestion_id)
+    if row.kind == "recalc":
+        if overrides is not None:
+            raise _invalid("These overrides do not match the kind of this suggestion.")
+        body.accept_recalc(db, user, row, now)
+        row.status = "accepted"
+        row.decided_by = user.id
+        row.decided_at = now
+        db.commit()
+        return row
     applied = _applied(row, overrides)
     _apply_to_plan(db, user, row, applied, now)
     row.payload = {**row.payload, "applied": applied}
