@@ -189,6 +189,8 @@ def get_calendar(
         raise ProblemError(
             400, "range_too_large", f"The range may cover at most {MAX_RANGE_DAYS} days."
         )
+    from app.services import training_log
+
     today = local_today(now, user.timezone)
     tpl = _template(db, user)
     rows = db.execute(
@@ -206,6 +208,7 @@ def get_calendar(
     left_behind = {
         r.original_date for r, _ in rows if r.original_date and r.original_date != r.date
     }
+    energy = training_log.range_energy(db, user, start, end)
     days: list[out.CalendarDay] = []
     for offset in range((end - start).days + 1):
         day = start + dt.timedelta(days=offset)
@@ -236,7 +239,7 @@ def get_calendar(
                 training_day_name=name,
                 moved=moved,
                 training_completion=completion,
-                energy=out.EnergyBalance(date=day),
+                energy=energy[day],
             )
         )
     return out.CalendarRange(from_=start, to=end, timezone=user.timezone, days=days)

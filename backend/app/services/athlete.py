@@ -562,7 +562,7 @@ def get_profile(session: Session, athlete_id: uuid.UUID) -> out.AthleteProfile:
     return _profile_view(row)
 
 
-def _targets_on(session: Session, athlete_id: uuid.UUID, day: dt.date) -> Targets | None:
+def targets_on(session: Session, athlete_id: uuid.UUID, day: dt.date) -> Targets | None:
     """The latest row with `valid_from <= day`; a day before the first row gets the first row."""
     rows = select(Targets).where(Targets.user_id == athlete_id)
     return session.scalar(
@@ -574,7 +574,7 @@ def get_targets(
     session: Session, athlete_id: uuid.UUID, timezone: str, now: dt.datetime, on: dt.date | None
 ) -> out.Targets:
     """Targets valid on `on` (default: today in the athlete's time zone)."""
-    row = _targets_on(session, athlete_id, on or local_today(now, timezone))
+    row = targets_on(session, athlete_id, on or local_today(now, timezone))
     if row is None:
         raise _not_onboarded()
     return _targets_view(row)
@@ -690,7 +690,7 @@ def update_profile(
         )
         targets_row = _store_targets(session, user.id, today, result, now)
     else:
-        found = _targets_on(session, user.id, today)
+        found = targets_on(session, user.id, today)
         if found is None:
             raise _not_onboarded()
         targets_row = found

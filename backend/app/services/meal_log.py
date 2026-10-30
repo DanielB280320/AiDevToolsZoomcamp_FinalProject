@@ -191,6 +191,53 @@ def day_nutrition(db: Session, user: User, day: dt.date) -> DayNutrition:
     )
 
 
+def range_totals(
+    db: Session, user: User, start: dt.date, end: dt.date
+) -> dict[dt.date, tuple[cal.Macros, cal.Macros]]:
+    """(eaten, planned) macro totals for every day in `start..end` in a fixed number of queries.
+
+    Same rules as `day_nutrition` (logged quantities only; the plan version that applies on each
+    day), used by the calendar range so a 6-week grid stays fast (F9.4)."""
+    logs = db.scalars(
+        select(MealLog).where(
+            MealLog.athlete_id == user.id, MealLog.date >= start, MealLog.date <= end
+        )
+    ).all()
+    eaten_parts: dict[dt.date, list[Macros]] = {}
+    for log_view in _log_views(db, logs):
+        if log_view.status != "skipped":
+            eaten_parts.setdefault(log_view.date, []).append(log_view.totals)
+    candidates = db.execute(
+        select(MealDay.id, MealDay.weekday, Plan.version, Plan.created_at)
+        .join(Plan, Plan.id == MealDay.plan_id)
+        .where(Plan.athlete_id == user.id)
+        .order_by(Plan.version.desc())
+    ).all()
+    chosen: dict[dt.date, uuid.UUID] = {}
+    for offset in range((end - start).days + 1):
+        day = start + dt.timedelta(days=offset)
+        cutoff = utc_midnight_after(day, user.timezone)
+        for meal_day_id, weekday, _version, created_at in candidates:
+            if weekday == WEEKDAYS[day.weekday()] and created_at < cutoff:
+                chosen[day] = meal_day_id
+                break
+    planned_by_id: dict[uuid.UUID, cal.Macros] = {}
+    if chosen:
+        meal_days = db.scalars(
+            select(MealDay)
+            .where(MealDay.id.in_(set(chosen.values())))
+            .options(selectinload(MealDay.meals))
+        ).all()
+        for day_view in meal_plans.meal_day_views(db, meal_days, {}):
+            planned_by_id[day_view.id] = _sum([m.totals for m in day_view.meals])
+    result: dict[dt.date, tuple[cal.Macros, cal.Macros]] = {}
+    for offset in range((end - start).days + 1):
+        day = start + dt.timedelta(days=offset)
+        planned = planned_by_id[chosen[day]] if day in chosen else cal.Macros()
+        result[day] = (_sum(eaten_parts.get(day, [])), planned)
+    return result
+
+
 def energy_update(db: Session, user: User, day: dt.date) -> DayEnergyUpdate:
     from app.services import training_log  # late: training_log builds on this module
 

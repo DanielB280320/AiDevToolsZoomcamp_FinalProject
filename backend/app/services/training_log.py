@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.engines import energy_balance as energy_engine
 from app.engines.constants import DEFAULT_REST_SECONDS
 from app.engines.exercise_kcal import ExtraActivity as EngineActivity
 from app.engines.exercise_kcal import LoggedExercise, logged_kcal
@@ -32,6 +33,7 @@ from app.models import (
     ExtraActivity,
     PlannedExercise,
     SetLog,
+    Targets,
     TrainingDay,
     TrainingSession,
     User,
@@ -40,6 +42,7 @@ from app.schemas import calendar as cal
 from app.schemas import logging as out
 from app.schemas.plans import ExerciseSummary
 from app.services import meal_log
+from app.services.athlete import targets_on
 from app.services.calendar import owned_session, utc_midnight_after
 
 
@@ -344,16 +347,51 @@ def day_activities(db: Session, user: User, day: dt.date) -> list[out.Activity]:
     return [_activity_view(a, e) for a, e in rows]
 
 
+def _energy(
+    day: dt.date,
+    eaten: cal.Macros,
+    planned: cal.Macros,
+    training: int,
+    activities: int,
+    row: Targets | None,
+) -> cal.EnergyBalance:
+    """One day's balance from its parts and the `Targets` row valid on it (F13.1, F13.3)."""
+    baseline = row.baseline_kcal if row else 0
+    result = energy_engine.day_balance(
+        energy_engine.EnergyInputs(eaten.kcal, baseline, training, activities)
+    )
+    target = (
+        cal.Macros(kcal=row.kcal, protein_g=row.protein_g, carbs_g=row.carbs_g, fat_g=row.fat_g)
+        if row
+        else cal.Macros()
+    )
+    return cal.EnergyBalance(
+        date=day,
+        eaten=eaten,
+        planned=planned,
+        target=target,
+        burned=cal.Burned(
+            total_kcal=result.burned_kcal,
+            baseline_kcal=baseline,
+            training_kcal=training,
+            activities_kcal=activities,
+        ),
+        balance_kcal=result.balance_kcal,
+        target_balance_kcal=row.target_balance_kcal if row else 0,
+    )
+
+
 def day_energy(
     db: Session,
     user: User,
     day: dt.date,
     nutrition: "meal_log.DayNutrition | None" = None,
 ) -> cal.EnergyBalance:
-    """Eaten (F12.1, logged quantities only), planned and burned kcal (F13.1) for `day`.
+    """Eaten (F12.1, logged quantities only), planned, burned (F13.1) and target kcal for `day`.
 
-    The baseline (BMR x lifestyle) and the targets arrive with the energy-balance issue, so
-    burned `total_kcal` is the exercise part only until then."""
+    The baseline, targets and target balance come from the `Targets` row valid on `day`
+    (latest `valid_from <= day`, the first row for earlier days), so later target changes never
+    alter a past day (F13.2). An athlete without targets gets a zero baseline."""
     nutrition = nutrition or meal_log.day_nutrition(db, user, day)
     training = db.scalar(
         select(func.coalesce(func.sum(TrainingSession.kcal), 0)).where(
@@ -367,17 +405,52 @@ def day_energy(
             ExtraActivity.athlete_id == user.id, ExtraActivity.date == day
         )
     )
-    training, activities = int(training or 0), int(activities or 0)
-    burned = cal.Burned(
-        total_kcal=training + activities, training_kcal=training, activities_kcal=activities
+    row = targets_on(db, user.id, day)
+    return _energy(
+        day,
+        nutrition.eaten,
+        nutrition.planned_totals,
+        int(training or 0),
+        int(activities or 0),
+        row,
     )
-    return cal.EnergyBalance(
-        date=day,
-        eaten=nutrition.eaten,
-        planned=nutrition.planned_totals,
-        burned=burned,
-        balance_kcal=nutrition.eaten.kcal - burned.total_kcal,
+
+
+def range_energy(
+    db: Session, user: User, start: dt.date, end: dt.date
+) -> dict[dt.date, cal.EnergyBalance]:
+    """`day_energy` for every day in `start..end` in a fixed number of queries (week/month)."""
+    totals = meal_log.range_totals(db, user, start, end)
+    training = dict(
+        db.execute(
+            select(TrainingSession.date, func.coalesce(func.sum(TrainingSession.kcal), 0))
+            .where(
+                TrainingSession.athlete_id == user.id,
+                TrainingSession.date.between(start, end),
+                TrainingSession.status == "done",
+            )
+            .group_by(TrainingSession.date)
+        ).all()
     )
+    activities = dict(
+        db.execute(
+            select(ExtraActivity.date, func.coalesce(func.sum(ExtraActivity.kcal), 0))
+            .where(ExtraActivity.athlete_id == user.id, ExtraActivity.date.between(start, end))
+            .group_by(ExtraActivity.date)
+        ).all()
+    )
+    rows = list(db.scalars(select(Targets).where(Targets.user_id == user.id)))
+    rows.sort(key=lambda r: r.valid_from)
+    result: dict[dt.date, cal.EnergyBalance] = {}
+    for offset in range((end - start).days + 1):
+        day = start + dt.timedelta(days=offset)
+        valid = [r for r in rows if r.valid_from <= day]
+        row = valid[-1] if valid else (rows[0] if rows else None)
+        eaten, planned = totals[day]
+        result[day] = _energy(
+            day, eaten, planned, int(training.get(day) or 0), int(activities.get(day) or 0), row
+        )
+    return result
 
 
 def log_activity(
