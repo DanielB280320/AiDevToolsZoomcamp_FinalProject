@@ -276,6 +276,7 @@ Each decision is recorded in the [spec decisions log](spec.md#19-decisions-log);
 | [0008](adr/0008-enforce-agent-write-scopes-with-a-hook.md) | QA and PM write scopes guarded by a project `PreToolUse` hook (`.claude/hooks/scope_guard.py`) | [team.md](team.md#roles), #60 |
 | [0009](adr/0009-separate-migration-step.md) | Migrations + seed run as a separate one-shot step before the backend starts; rollback skips it | D50 |
 | [0010](adr/0010-pull-based-deploy.md) | Deploys are pull-based: hosts poll the approved tag; no AWS keys in GitHub | D57 |
+| [0011](adr/0011-user-deletion-vs-shared-references.md) | User deletion vs. shared references: RESTRICT stays, a trigger on users clears the references | D66, D71 |
 
 Other decisions that shape the code but need no separate ADR, because the spec states them fully:
 

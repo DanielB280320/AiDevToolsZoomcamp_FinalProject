@@ -216,14 +216,6 @@ def test_meal_plan_generation_leaks_no_meal_or_food_names(
 # ───────────── account deletion vs. planned_meal.meal_id RESTRICT ─────────────
 
 
-RESTRICT_BUG = pytest.mark.xfail(
-    strict=True,
-    reason="planned_meal.meal_id ON DELETE RESTRICT blocks the user-deletion cascade (QA #36, "
-    "same class as #131); flip to passing when fixed",
-)
-
-
-@RESTRICT_BUG
 def test_deleting_a_user_whose_custom_meal_is_in_their_own_plan(athlete: Api) -> None:
     """F18.2: a deleted user's own meals, plans and meal days all go. With
     `planned_meal.meal_id ON DELETE RESTRICT` the cascade users -> meal hits planned_meal rows
@@ -234,10 +226,6 @@ def test_deleting_a_user_whose_custom_meal_is_in_their_own_plan(athlete: Api) ->
     user_id = _me_id(athlete.client)
 
     with athlete.app.state.engine.begin() as c:
-        # Pre-existing on main, not #36: plan_change.author_id (NO ACTION) also blocks the
-        # cascade. Removed here so only planned_meal.meal_id is under test.
-        c.execute(text("DELETE FROM plan_change WHERE author_id = :id"), {"id": user_id})
-    with athlete.app.state.engine.begin() as c:
         c.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
     with athlete.app.state.engine.connect() as c:
         assert (
@@ -247,7 +235,6 @@ def test_deleting_a_user_whose_custom_meal_is_in_their_own_plan(athlete: Api) ->
         assert c.execute(text("SELECT count(*) FROM planned_meal")).scalar() == 0
 
 
-@RESTRICT_BUG
 def test_deleting_a_user_whose_custom_meal_is_in_another_users_plan(athlete: Api) -> None:
     """Cross-user case (F18.4 analogue of D66): A's custom meal placed in B's plan (DB level, as
     a coach edit or plan copy could do once #47/F8 land). Deleting A must not fail."""
