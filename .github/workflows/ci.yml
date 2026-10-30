@@ -139,6 +139,8 @@ jobs:
     env:
       # Images are tagged with the commit SHA, as in CD (#13). Built and loaded locally, never pushed.
       TAG: ${{ github.sha }}
+      # Open Food Facts fake instead of the real service (#153, CLAUDE.md rule 4).
+      COMPOSE_FILE: compose.yaml:compose.ci.yaml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -179,6 +181,7 @@ jobs:
     timeout-minutes: 25
     env:
       TAG: ${{ github.sha }}
+      COMPOSE_FILE: compose.yaml:compose.ci.yaml # Open Food Facts fake (#153)
       # Official Playwright image, same version as e2e/package-lock.json (@playwright/test 1.63.0),
       # pinned by index digest like the other tool images in the Makefile.
       PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27

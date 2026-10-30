@@ -34,6 +34,18 @@ fi
 api="${base}/api/v1"
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
+# --- 0. No real network (CLAUDE.md rule 4, #153) --------------------------------------------
+# The backend must talk to the Open Food Facts fake (compose.ci.yaml), never the real service.
+if [[ -z "${BASE_URL:-}" ]]; then
+  off_url=$($COMPOSE exec -T backend printenv OFF_BASE_URL 2>/dev/null || true)
+  if [[ "$off_url" != http://off-fake:* ]]; then
+    echo "contract-smoke: the backend's OFF_BASE_URL is '${off_url:-<default>}', not the Open Food Facts fake." >&2
+    echo "  Start the stack with: COMPOSE_FILE=compose.yaml:compose.ci.yaml make up" >&2
+    exit 1
+  fi
+  echo "contract-smoke: OFF_BASE_URL=${off_url} (fake, no external requests)"
+fi
+
 # --- 1. Served operations ---------------------------------------------------------------------
 served=$(curl -fsS --max-time 15 "${api}/openapi.json" | python3 -c '
 import json, sys
