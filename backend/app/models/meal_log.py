@@ -1,9 +1,9 @@
 """Meal logs (spec §8, F12): what an athlete ate on a day.
 
-A planned meal is checked off at most once per (athlete, date, slot, slot index): the partial
-unique index is what makes the check-off idempotent under concurrent requests (F12.3), and
-because every plan version gives its planned meals new ids, (slot, slot index) rather than
-`planned_meal_id` is what identifies the meal across versions. `planned_meal_id` is a plain id,
+A planned meal is checked off at most once per (athlete, date, meal key): the partial unique
+index is what makes the check-off idempotent under concurrent requests (F12.3). Every plan
+version gives its planned meals new ids, so the log carries `planned_meal.meal_key`, the identity
+that plan versions copy forward (D73), and not a position. `planned_meal_id` is a plain id,
 not a foreign key, so replacing the plan never rewrites history (CLAUDE.md rule 7); `eaten` logs
 store the grams that were planned at the time. Quantities are grams, stored metric.
 """
@@ -40,12 +40,14 @@ class MealLog(Base):
         CheckConstraint(
             "(status = 'extra') = (planned_meal_id IS NULL)", name="extra_has_no_planned_meal"
         ),
+        CheckConstraint(
+            "planned_meal_id IS NULL OR meal_key IS NOT NULL", name="planned_has_meal_key"
+        ),
         Index(
-            "uq_meal_log_athlete_id_date_slot_slot_index",
+            "uq_meal_log_athlete_id_date_meal_key",
             "athlete_id",
             "date",
-            "slot",
-            "slot_index",
+            "meal_key",
             unique=True,
             postgresql_where=text("planned_meal_id IS NOT NULL"),
         ),
@@ -59,8 +61,9 @@ class MealLog(Base):
     planned_meal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     status: Mapped[str] = mapped_column(String(8))
     slot: Mapped[str | None] = mapped_column(String(9))
-    # Which meal of that slot in the day's meal plan (0 = first). With `slot` this is the stable
-    # identity of a planned meal: it survives new plan versions, whose planned_meal ids change.
+    # `planned_meal.meal_key` of the meal this log was made for; null for extra food (D73).
+    meal_key: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    # Deprecated by D73 (position among the slot's meals, D70); no longer written or read.
     slot_index: Mapped[int | None] = mapped_column(Integer)
     logged_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
 

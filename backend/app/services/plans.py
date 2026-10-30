@@ -65,6 +65,8 @@ class NewPlannedMeal:
     slot: str
     meal_id: uuid.UUID
     portion_factor: float
+    # None: a new meal (gets a fresh key). Carry the key of the meal it replaces to keep its logs.
+    meal_key: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -107,7 +109,7 @@ def create_plan_version(
                     weekday=d.weekday,
                     warning=d.warning,
                     meals=[
-                        NewPlannedMeal(m.slot, m.meal_id, m.portion_factor)
+                        NewPlannedMeal(m.slot, m.meal_id, m.portion_factor, m.meal_key)
                         for m in sorted(d.meals, key=lambda m: m.position)
                     ],
                 )
@@ -164,6 +166,7 @@ def create_plan_version(
                         position=order,
                         meal_id=m.meal_id,
                         portion_factor=m.portion_factor,
+                        meal_key=m.meal_key or uuid.uuid4(),
                     )
                     for order, m in enumerate(meal_day.meals)
                 ],

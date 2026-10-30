@@ -319,7 +319,8 @@ def _new_version(api: Api, *, copy_meals: bool, now: dt.datetime = NOW) -> None:
         old = session.scalars(select(Plan).where(Plan.active.is_(True))).one()
         meal_days = [
             NewMealDay(
-                d.weekday, [NewPlannedMeal(m.slot, m.meal_id, m.portion_factor) for m in d.meals]
+                d.weekday,
+                [NewPlannedMeal(m.slot, m.meal_id, m.portion_factor, m.meal_key) for m in d.meals],
             )
             for d in session.scalars(select(MealDay).where(MealDay.plan_id == old.id))
         ]
@@ -393,7 +394,7 @@ def test_a_log_matching_no_planned_meal_stays_visible_and_undoable(athlete: Api)
     planned = _day(athlete.client)["meals"][0]["planned_meal"]["id"]
     log = _post(athlete.client, planned_meal_id=planned, status="eaten").json()["meal_log"]
     with Session(athlete.app.state.engine) as session:
-        session.execute(text("UPDATE meal_log SET slot_index = 7"))
+        session.execute(text("UPDATE meal_log SET meal_key = gen_random_uuid()"))
         session.commit()
     day = _day(athlete.client)
     assert day["energy"]["eaten"]["kcal"] == log["totals"]["kcal"]

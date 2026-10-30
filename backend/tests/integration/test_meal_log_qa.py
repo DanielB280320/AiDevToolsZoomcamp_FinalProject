@@ -266,7 +266,10 @@ def _plan_version_with_same_meals(api: Api) -> None:
             meal_days=[
                 NewMealDay(
                     d.weekday,
-                    [NewPlannedMeal(m.slot, m.meal_id, m.portion_factor) for m in d.meals],
+                    [
+                        NewPlannedMeal(m.slot, m.meal_id, m.portion_factor, m.meal_key)
+                        for m in d.meals
+                    ],
                 )
                 for d in days
             ],
@@ -334,13 +337,14 @@ def _meal_log(conn: Any, athlete: uuid.UUID, food: uuid.UUID, planned: bool) -> 
     log_id = uuid.uuid4()
     conn.execute(
         text(
-            "INSERT INTO meal_log (id, athlete_id, date, planned_meal_id, status, slot, logged_at)"
-            " VALUES (:id, :a, '2026-10-22', :p, :s, NULL, now())"
+            "INSERT INTO meal_log (id, athlete_id, date, planned_meal_id, status, slot, meal_key,"
+            " logged_at) VALUES (:id, :a, '2026-10-22', :p, :s, NULL, :k, now())"
         ),
         {
             "id": log_id,
             "a": athlete,
             "p": uuid.uuid4() if planned else None,
+            "k": uuid.uuid4() if planned else None,
             "s": "eaten" if planned else "extra",
         },
     )
@@ -394,23 +398,25 @@ def test_partial_unique_index_allows_many_extras_but_one_log_per_planned_meal(
             _meal_log(conn, athlete, food, planned=False)
             _meal_log(conn, athlete, food, planned=False)
             planned = _meal_log(conn, athlete, food, planned=True)
-            # The identity of a planned meal is (date, slot, slot index), not its per-version id.
-            conn.execute(
-                text("UPDATE meal_log SET slot = 'lunch', slot_index = 0 WHERE id = :i"),
-                {"i": planned},
-            )
+            # The identity of a planned meal is (date, meal key), not its per-version id (D73).
+            key = conn.execute(
+                text("SELECT meal_key FROM meal_log WHERE id = :i"), {"i": planned}
+            ).scalar_one()
+        insert = text(
+            "INSERT INTO meal_log (id, athlete_id, date, planned_meal_id, status,"
+            " slot, meal_key, logged_at)"
+            " VALUES (:id, :a, '2026-10-22', :p, 'skipped', 'lunch', :k, now())"
+        )
         with (
-            pytest.raises(IntegrityError, match="uq_meal_log_athlete_id_date_slot_slot_index"),
+            pytest.raises(IntegrityError, match="uq_meal_log_athlete_id_date_meal_key"),
             engine.begin() as conn,
         ):
-            conn.execute(
-                text(
-                    "INSERT INTO meal_log (id, athlete_id, date, planned_meal_id, status,"
-                    " slot, slot_index, logged_at)"
-                    " VALUES (:id, :a, '2026-10-22', :p, 'skipped', 'lunch', 0, now())"
-                ),
-                {"id": uuid.uuid4(), "a": athlete, "p": uuid.uuid4()},
-            )
+            conn.execute(insert, {"id": uuid.uuid4(), "a": athlete, "p": uuid.uuid4(), "k": key})
+        with (
+            pytest.raises(IntegrityError, match="ck_meal_log_planned_has_meal_key"),
+            engine.begin() as conn,
+        ):
+            conn.execute(insert, {"id": uuid.uuid4(), "a": athlete, "p": uuid.uuid4(), "k": None})
     finally:
         engine.dispose()
 
@@ -446,7 +452,7 @@ def test_migration_downgrades_and_upgrades_with_meal_log_data(migrated_database_
         with engine.begin() as conn:
             assert (
                 conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "a7d2e5c9b148"
+                == "d9b4e7a2c158"
             )
             _meal_log(conn, athlete, food, planned=True)
     finally:

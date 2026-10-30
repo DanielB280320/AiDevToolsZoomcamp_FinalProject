@@ -197,5 +197,10 @@ class PlannedMeal(Base):
         Uuid, ForeignKey("meal.id", ondelete="RESTRICT"), index=True
     )
     portion_factor: Mapped[float] = mapped_column(Numeric(4, 2, asdecimal=False))
+    # Stable identity of this meal slot across plan versions (D73): copied forward by
+    # `create_plan_version`, new for a meal added by hand. Meal logs are matched on it, so a
+    # reorder or an insertion never moves a log to another meal. Nullable in the database only so
+    # the previous release can still insert rows; the application always sets it.
+    meal_key: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=uuid.uuid4)
 
     meal_day: Mapped[MealDay] = relationship(back_populates="meals")

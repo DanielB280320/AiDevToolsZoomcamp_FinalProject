@@ -163,7 +163,7 @@ def test_migration_downgrades_and_upgrades_again_with_existing_data(
         with engine.begin() as conn:
             user = _user(conn, "a")
             _plan(conn, user, [_meal(conn, user)])
-        down = _alembic(migrated_database_url, "downgrade", "-1")
+        down = _alembic(migrated_database_url, "downgrade", "c5e8a1d7b362")
         assert down.returncode == 0, down.stderr
         with engine.connect() as conn:
             triggers = "SELECT count(*) FROM pg_trigger WHERE tgname = :n"
