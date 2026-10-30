@@ -2,7 +2,8 @@
 
 It speaks the two endpoints the app uses (`/cgi/search.pl`, `/api/v2/product/<code>.json`), records
 every request, and can be switched into failure modes: `5xx`, `slow` (answers after `delay`
-seconds), `garbage` (not JSON) or `wrong_shape` (JSON without `products`).
+seconds), `trickle` (sends the body in small chunks over `delay` seconds in total), `garbage`
+(not JSON) or `wrong_shape` (JSON without `products`).
 """
 
 import json
@@ -73,7 +74,21 @@ def _handler(state: FakeOff) -> type[BaseHTTPRequestHandler]:
             )
             if state.mode == "slow":
                 time.sleep(state.delay)
-            if state.mode == "5xx":
+            if state.mode == "trickle":
+                body = json.dumps({"products": state.products}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                step = max(1, len(body) // 20)
+                try:
+                    for i in range(0, len(body), step):
+                        self.wfile.write(body[i : i + step])
+                        self.wfile.flush()
+                        time.sleep(state.delay / 20)
+                except OSError:
+                    pass  # client gave up
+            elif state.mode == "5xx":
                 self._send(503, b'{"error": "down"}')
             elif state.mode == "garbage":
                 self._send(200, b"<html>not json</html>", "text/html")

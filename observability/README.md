@@ -78,10 +78,14 @@ second, independent gate with the **same** allow-lists:
 - Resource and scope attributes (every prod pipeline, #130): `transform/resource_allowlist` keeps
   only `service.name`, `service.version`, `deployment.environment.name` and `env` (what
   `make_resource` sets) and clears all scope attributes, before `resource/env` runs. A sender that
-  attaches `host.name`, `process.*` or free-form attributes loses them.
+  attaches `host.name`, `process.*` or free-form attributes loses them. Values are bounded too (#151):
+  `service.name` must match `^fitwise-[a-z-]+$`, `env` / `deployment.environment.name` must be one of
+  local, dev, test, prod, `service.version` a short version-like token; others are deleted (a missing
+  `env` is then inserted from `FITWISE_ENV`). Scope name and version are cleared.
 - Logs forwarded over OTLP (`logs/forwarded`, dev -> prod): the sender is not trusted to have gated.
   A non-string body (map, array, bytes) is blanked before the email/token scrubbing, the log
-  attribute allow-list is re-applied, and a record left with an empty body and no attributes is
+  attribute allow-list is re-applied (allowed keys holding a map, array or bytes are deleted),
+  `severity_text` is kept only if it is a known level, `event_name` is cleared, and a record left with an empty body and no attributes is
   dropped (`filter/empty_forwarded_logs`).
 
 `backend/tests/unit/test_collector_hardening_runtime.py` runs the real collector image (file
