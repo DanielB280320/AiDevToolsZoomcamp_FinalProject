@@ -187,3 +187,65 @@ def test_out_of_set_env_is_replaced_by_the_collectors_own(collector: Collector) 
     text = _read(out, "logs", "qa-env-bad")
     assert EMAIL not in text
     assert '"prod"' in text
+
+
+def test_qa_scope_name_and_resource_values_on_traces_and_metrics(collector: Collector) -> None:
+    url, out = collector
+    resource = {
+        "attributes": _attrs(**{"service.name": EMAIL, "service.version": EMAIL, "env": "PROD"})
+    }
+    scope = {"name": f"qa-tm-{EMAIL}", "version": EMAIL}
+    span = {
+        "traceId": "0123456789abcdef0123456789abcdd1",
+        "spanId": "0123456789abcdd1",
+        "name": "qa-tm-span",
+    }
+    point = {"asInt": "1", "timeUnixNano": "1700000000000000000"}
+    metric = {
+        "name": "qa_tm_metric",
+        "sum": {"aggregationTemporality": 2, "isMonotonic": True, "dataPoints": [point]},
+    }
+    _post(
+        url,
+        "/v1/traces",
+        {
+            "resourceSpans": [
+                {"resource": resource, "scopeSpans": [{"scope": scope, "spans": [span]}]}
+            ]
+        },
+    )
+    _post(
+        url,
+        "/v1/metrics",
+        {
+            "resourceMetrics": [
+                {"resource": resource, "scopeMetrics": [{"scope": scope, "metrics": [metric]}]}
+            ]
+        },
+    )
+    for signal, marker in (("traces", "qa-tm-span"), ("metrics", "qa_tm_metric")):
+        text = _read(out, signal, marker)
+        assert EMAIL not in text, signal
+        assert "PROD" not in text, signal
+        assert '"prod"' in text, signal
+
+
+def test_qa_severity_case_variant_kept_and_array_attr_deleted(collector: Collector) -> None:
+    url, out = collector
+    arr = {"arrayValue": {"values": [{"stringValue": EMAIL}]}}
+    rec = {
+        "body": {"stringValue": "qa-arr"},
+        "severityText": "WARNING",
+        "attributes": [
+            {"key": "user_hash", "value": arr},
+            {"key": "route", "value": {"stringValue": "/ok"}},
+        ],
+    }
+    _post(
+        url,
+        "/v1/logs",
+        _logs({"attributes": _attrs(**{"deployment.environment.name": f"x{EMAIL}"})}, [rec]),
+    )
+    text = _read(out, "logs", "qa-arr")
+    assert EMAIL not in text
+    assert "WARNING" in text and "/ok" in text
