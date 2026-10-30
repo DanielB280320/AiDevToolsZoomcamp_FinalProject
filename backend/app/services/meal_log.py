@@ -2,7 +2,7 @@
 
 * The planned meals of a date come from the athlete's active plan: the `MealDay` of that weekday,
   from the day the plan was created (same rule as the training template).
-* A check-off is idempotent per (athlete, date, planned meal): the partial unique index decides
+* A check-off is idempotent per (athlete, date, meal key; D73): the partial unique index decides
   under concurrency, and a repeat returns the existing log (F12.3).
 * `eaten` stores the grams that were planned at that moment, so later plan edits never change the
   past (rule 7). Eaten totals count logged quantities only (F12.1).
@@ -71,15 +71,12 @@ def planned_meals(
     return meal_day, view.meals
 
 
-def slot_keys(meals: Sequence[plan_out.PlannedMeal]) -> list[tuple[str, int]]:
-    """(slot, index among that slot's meals) for each planned meal: the identity that survives
-    new plan versions."""
-    seen: dict[str, int] = {}
-    keys: list[tuple[str, int]] = []
-    for meal in meals:
-        keys.append((meal.slot, seen.get(meal.slot, 0)))
-        seen[meal.slot] = seen.get(meal.slot, 0) + 1
-    return keys
+def meal_keys(meal_day: MealDay | None) -> dict[uuid.UUID, uuid.UUID]:
+    """`planned_meal.meal_key` by planned meal id: the identity that survives new plan versions
+    (D73)."""
+    if meal_day is None:
+        return {}
+    return {m.id: m.meal_key for m in meal_day.meals if m.meal_key is not None}
 
 
 # ───────────── logs → views ─────────────
@@ -134,17 +131,17 @@ def _log_views(db: Session, logs: Sequence[MealLog]) -> list[MealLogOut]:
 
 def day_logs(
     db: Session, athlete_id: uuid.UUID, day: dt.date
-) -> tuple[list[MealLogOut], dict[uuid.UUID, tuple[str, int]]]:
-    """The day's logs and, for planned-meal logs, their (slot, slot index) identity by log id."""
+) -> tuple[list[MealLogOut], dict[uuid.UUID, uuid.UUID]]:
+    """The day's logs and, for planned-meal logs, their meal key by log id."""
     logs = db.scalars(
         select(MealLog)
         .where(MealLog.athlete_id == athlete_id, MealLog.date == day)
         .order_by(MealLog.logged_at, MealLog.id)
     ).all()
     keys = {
-        log.id: (log.slot, log.slot_index)
+        log.id: log.meal_key
         for log in logs
-        if log.planned_meal_id is not None and log.slot is not None and log.slot_index is not None
+        if log.planned_meal_id is not None and log.meal_key is not None
     }
     return _log_views(db, logs), keys
 
@@ -170,13 +167,14 @@ class DayNutrition:
 
 def day_nutrition(db: Session, user: User, day: dt.date) -> DayNutrition:
     """Planned meals with their logs, the other logs, eaten totals and completion."""
-    _, planned = planned_meals(db, user, day)
+    meal_day, planned = planned_meals(db, user, day)
+    plan_keys = meal_keys(meal_day)
     logs, keys = day_logs(db, user.id, day)
     by_key = {keys[log.id]: log for log in logs if log.id in keys}
     matched: set[uuid.UUID] = set()
     meals: list[tuple[plan_out.PlannedMeal, MealLogOut | None]] = []
-    for meal, key in zip(planned, slot_keys(planned), strict=True):
-        log = by_key.get(key)
+    for meal in planned:
+        log = by_key.get(plan_keys[meal.id]) if meal.id in plan_keys else None
         if log is not None:
             matched.add(log.id)
             log = log.model_copy(update={"planned_meal_id": meal.id})
@@ -275,14 +273,13 @@ def _replace_items(db: Session, log: MealLog, items: Sequence[tuple[uuid.UUID, f
         db.add(MealLogItem(meal_log_id=log.id, food_id=food_id, position=position, grams=grams))
 
 
-def _existing(db: Session, user: User, body: MealLogInput, key: tuple[str, int]) -> MealLog | None:
+def _existing(db: Session, user: User, body: MealLogInput, key: uuid.UUID) -> MealLog | None:
     return db.scalar(
         select(MealLog)
         .where(
             MealLog.athlete_id == user.id,
             MealLog.date == body.date,
-            MealLog.slot == key[0],
-            MealLog.slot_index == key[1],
+            MealLog.meal_key == key,
             MealLog.planned_meal_id.is_not(None),
         )
         .with_for_update()
@@ -296,20 +293,17 @@ def log_meal(
     if body.date > local_today(now, user.timezone):
         raise ProblemError(422, "date_in_future", "Meals cannot be logged for a future day.")
     planned: plan_out.PlannedMeal | None = None
-    key: tuple[str, int] | None = None
+    key: uuid.UUID | None = None
+    slot_index: int | None = None
     if body.planned_meal_id is not None:
-        _, meals = planned_meals(db, user, body.date)
-        found = next(
-            (
-                (p, k)
-                for p, k in zip(meals, slot_keys(meals), strict=True)
-                if p.id == body.planned_meal_id
-            ),
-            None,
-        )
-        if found is None:
+        meal_day, meals = planned_meals(db, user, body.date)
+        planned = next((p for p in meals if p.id == body.planned_meal_id), None)
+        if planned is not None:
+            # Position among the slot's meals, still written for the previous release (D73).
+            slot_index = sum(1 for p in meals[: meals.index(planned)] if p.slot == planned.slot)
+        key = meal_keys(meal_day).get(body.planned_meal_id)
+        if planned is None or key is None:
             raise ProblemError(404, "planned_meal_not_found", "That meal is not planned that day.")
-        planned, key = found
     items = _items_for(db, user, body, planned)
     slot = body.slot if body.status == "extra" else planned.slot if planned else None
 
@@ -322,7 +316,8 @@ def log_meal(
             planned_meal_id=body.planned_meal_id,
             status=body.status,
             slot=slot,
-            slot_index=key[1] if key else None,
+            meal_key=key,
+            slot_index=slot_index,
             logged_at=now,
         )
         try:
