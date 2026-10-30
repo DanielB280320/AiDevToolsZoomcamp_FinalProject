@@ -56,5 +56,7 @@ class Suggestion(Base):
         Uuid, ForeignKey("exercise.id", ondelete="RESTRICT")
     )
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
-    decided_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL")
+    )
     decided_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))

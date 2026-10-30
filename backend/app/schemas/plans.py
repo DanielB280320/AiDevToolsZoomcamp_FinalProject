@@ -81,7 +81,7 @@ class Plan(ResponseModel):
     source: PlanSource
     active: bool
     revision: int
-    created_by: UserRef
+    created_by: UserRef | None
     created_at: dt.datetime
     updated_at: dt.datetime
     training_days: list[TrainingDay]

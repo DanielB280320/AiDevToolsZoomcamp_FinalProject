@@ -215,7 +215,7 @@ def plan_view(session: Session, plan: Plan, warnings: Sequence[str] = ()) -> out
         e.id: e for e in session.scalars(select(Exercise).where(Exercise.id.in_(exercise_ids)))
     }
     user_ids = (
-        {plan.created_by}
+        ({plan.created_by} if plan.created_by else set())
         | {d.edited_by for d in plan.training_days if d.edited_by}
         | {d.edited_by for d in plan.meal_days if d.edited_by}
     )
@@ -230,7 +230,7 @@ def plan_view(session: Session, plan: Plan, warnings: Sequence[str] = ()) -> out
             "source": plan.source,
             "active": plan.active,
             "revision": plan.revision,
-            "created_by": _ref(users[plan.created_by]),
+            "created_by": _ref(users[plan.created_by]) if plan.created_by else None,
             "created_at": plan.created_at,
             "updated_at": plan.updated_at,
             "training_days": [

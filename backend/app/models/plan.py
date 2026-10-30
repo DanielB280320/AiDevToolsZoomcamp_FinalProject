@@ -52,7 +52,10 @@ class Plan(Base):
     active: Mapped[bool] = mapped_column(Boolean, server_default=true())
     # Optimistic-concurrency counter for custom-mode edits (D42).
     revision: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
-    created_by: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    # Null once the author (a linked coach) deleted their account (D69).
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL")
+    )
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
 
@@ -85,7 +88,9 @@ class TrainingDay(Base):
     name: Mapped[str] = mapped_column(String(60))
     position: Mapped[int] = mapped_column("order", Integer)
     # Last hand editor (F8); null for generated days.
-    edited_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    edited_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL")
+    )
     # F13.2 estimate with the athlete's weight at creation or last edit (0 = not computed).
     planned_kcal: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
 
@@ -140,7 +145,9 @@ class PlanChange(Base):
     plan_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("plan.id", ondelete="CASCADE"), index=True
     )
-    author_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL")
+    )
     change: Mapped[dict[str, Any]] = mapped_column(JSON().with_variant(JSONB(), "postgresql"))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
 
@@ -163,7 +170,9 @@ class MealDay(Base):
     position: Mapped[int] = mapped_column("order", Integer)
     warning: Mapped[str | None] = mapped_column(Text)
     # Last hand editor (F8); null for generated days.
-    edited_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    edited_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL")
+    )
 
     plan: Mapped[Plan] = relationship(back_populates="meal_days")
     meals: Mapped[list["PlannedMeal"]] = relationship(
