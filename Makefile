@@ -127,19 +127,37 @@ test: ## Backend unit + integration (Postgres container) and frontend tests
 # Spec §10: line coverage of the pure engines must stay >= 90 %. Scoped to app/engines so the
 # threshold does not depend on the rest of the backend. Plain `uv run pytest` stays unaffected.
 PYTEST_COV := --cov=app.engines --cov-branch --cov-report=term-missing --cov-fail-under=90
+# Every integration test creates its own database, so tests parallelise safely (pytest-xdist).
+# Timing tests (marker `perf`) are excluded: parallel or noisy runs would make them flaky; they
+# run alone in `test-backend-perf`. Override the worker count with PYTEST_WORKERS=1 to debug.
+PYTEST_WORKERS ?= auto
+PYTEST_MAIN := $(PYTEST_COV) -n $(PYTEST_WORKERS) -m "not perf"
 
 # TEST_DATABASE_URL already set (e.g. a CI service container) -> use it as is.
 # Otherwise start the throwaway `db-test` container and point the tests at it.
 .PHONY: test-backend
 test-backend: check-uv ## Backend pytest (unit + integration) + engines coverage >= 90 %
 ifdef TEST_DATABASE_URL
-	cd $(BACKEND) && uv run --locked pytest $(PYTEST_COV)
+	cd $(BACKEND) && uv run --locked pytest $(PYTEST_MAIN)
 else
 	@$(MAKE) test-db-up
 	port=$$($(COMPOSE) --profile test port db-test 5432 | sed 's/.*://'); \
 	cd $(BACKEND) && \
 	TEST_DATABASE_URL="postgresql+psycopg://fitwise_test:fitwise_test@127.0.0.1:$$port/postgres" \
-	uv run --locked pytest $(PYTEST_COV)
+	uv run --locked pytest $(PYTEST_MAIN)
+endif
+
+# Timing tests alone, serially (spec F9.4/F15). Non-blocking in CI (job backend-perf).
+.PHONY: test-backend-perf
+test-backend-perf: check-uv
+ifdef TEST_DATABASE_URL
+	cd $(BACKEND) && uv run --locked pytest -m perf -s -p no:cacheprovider
+else
+	@$(MAKE) test-db-up
+	port=$$($(COMPOSE) --profile test port db-test 5432 | sed 's/.*://'); \
+	cd $(BACKEND) && \
+	TEST_DATABASE_URL="postgresql+psycopg://fitwise_test:fitwise_test@127.0.0.1:$$port/postgres" \
+	uv run --locked pytest -m perf -s -p no:cacheprovider
 endif
 
 .PHONY: test-db-up

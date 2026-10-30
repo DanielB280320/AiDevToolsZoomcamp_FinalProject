@@ -108,7 +108,7 @@ def test_a_search_term_longer_than_100_chars_is_400(seeded: Api) -> None:
 @pytest.mark.parametrize(
     "cursor",
     [
-        _cursor(1, str(uuid.uuid4())),  # name is not a string
+        _cursor(1, "6bb44202-050a-48a8-826f-3146f2a8bcab"),  # name is not a string (fixed id: xdist needs stable test ids)
         _cursor("a", "not-a-uuid"),
         base64.urlsafe_b64encode(b'{"a": 1}').decode(),
         base64.urlsafe_b64encode(b"null").decode(),
