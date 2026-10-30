@@ -3,6 +3,7 @@ import { Link } from "react-router";
 
 import { type DayView, useDay } from "../../api/calendar";
 import type { Me } from "../../api/session";
+import { EnergySummary } from "./EnergySummary";
 import { QueryState } from "./QueryState";
 import { StatusBadge } from "./StatusBadge";
 import { badgeKind } from "./status";
@@ -91,21 +92,7 @@ export function TodayView({ me }: { me: Me }) {
       </Section>
 
       <Section id="today-energy" title={t("calendar.today.energy")}>
-        <dl className="mt-2 grid grid-cols-3 gap-3 text-center">
-          <div>
-            <dt className="text-step--1 text-slate">{t("calendar.today.eaten")}</dt>
-            <dd className="font-display text-step-2 font-bold">{energy.eaten.kcal}</dd>
-          </div>
-          <div>
-            <dt className="text-step--1 text-slate">{t("calendar.today.burned")}</dt>
-            <dd className="font-display text-step-2 font-bold">{energy.burned.total_kcal}</dd>
-          </div>
-          <div>
-            <dt className="text-step--1 text-slate">{t("calendar.today.balance")}</dt>
-            <dd className="font-display text-step-2 font-bold">{energy.balance_kcal}</dd>
-          </div>
-        </dl>
-        <p className="mt-2 text-step--1 text-slate">{t("calendar.today.estimated")}</p>
+        <EnergySummary energy={energy} compact={false} />
       </Section>
 
       <PendingSuggestions athleteId={me.id} units={me.units} className="mt-8 border-t-4 border-plate pt-3" />

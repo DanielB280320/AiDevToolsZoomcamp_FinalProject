@@ -138,6 +138,18 @@
     "noMeals": "No meals planned",
     "moved": "Moved here",
     "todayMarker": "Today",
+    "energy": {
+      "estimatedTag": "Estimated",
+      "eaten": "Eaten",
+      "burned": "Burned",
+      "balance": "Balance",
+      "targetBalance": "Target balance",
+      "macros": "Macros eaten against target",
+      "protein": "Protein",
+      "carbs": "Carbs",
+      "fat": "Fat",
+      "macroValue": "{{eaten}} of {{target}} g"
+    },
     "meals": "{{eaten}} of {{planned}} meals eaten",
     "nav": {
       "label": "Calendar views",
@@ -201,6 +213,7 @@
       "kcal": "{{count}} kcal (estimated)",
       "eaten": "Eaten (kcal)",
       "burned": "Burned (kcal)",
+      "targetBalance": "Target balance (kcal)",
       "balance": "Balance (kcal)",
       "estimated": "All calorie numbers are estimates.",
       "attention": "{{notes}} coach notes are waiting for you.",

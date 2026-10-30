@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 import { type CalendarDay, useCalendar } from "../api/calendar";
 import { useSignedInUser } from "../components/RequireAuth";
 import { CalendarNav } from "../features/calendar/CalendarNav";
+import { EnergySummary } from "../features/calendar/EnergySummary";
 import { MoveSession } from "../features/calendar/MoveSession";
 import { QueryState } from "../features/calendar/QueryState";
 import { RangeControls } from "../features/calendar/RangeControls";
@@ -49,6 +50,7 @@ function DayRow({
           ? t("calendar.meals", { eaten: day.eaten_meal_count, planned: day.planned_meal_count })
           : t("calendar.noMeals")}
       </p>
+      <EnergySummary energy={day.energy} compact />
       {movable && (
         <div className="mt-2">
           <MoveSession athleteId={athleteId} day={day} targets={targets} />
