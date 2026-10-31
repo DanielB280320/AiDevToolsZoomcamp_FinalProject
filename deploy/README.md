@@ -212,3 +212,14 @@ On the host (as root, `sudo -i`):
 6. No retry: wait for two more polls (about 5 minutes) and check `journalctl -u fitwise-deploy --since '-6min' -o cat`: no further deploy of B.
 7. **Switch off (required):** `sed -i '/^FITWISE_DEMO_FAIL_HEALTH=1$/d' /opt/fitwise/.env; grep -c FITWISE_DEMO_FAIL_HEALTH /opt/fitwise/.env` must print 0.
 8. Evidence for the issue: the journal excerpt (no `.env` contents appear in it), the run link, and `journalctl -u fitwise-deploy | grep -Ei 'ghp_|github_pat_|bearer'` printing nothing. Re-promote B afterwards (switch off) to show it deploys normally.
+
+## Weekly adaptive calorie check (issue #42)
+
+```
+fitwise-adaptive-calories.timer (Mon,Tue 01:00 UTC, +-10 min, Persistent) -> fitwise-adaptive-calories.service -> /opt/fitwise/bin/adaptive-calories.sh
+  docker exec <backend container> python -m app.cli.adaptive_calories
+```
+
+- **Both hosts.** `deploy/bootstrap.sh` installs the script, service and timer on dev and prod and enables the timer (`deploy/bootstrap-remote.sh dev|prod`, idempotent; run it once after this change is on `main`).
+- **Why Monday and Tuesday.** The CLI decides "this week" in each athlete's time zone and evaluates an athlete once per Monday (D78), so the Tuesday run only serves zones west of UTC whose Monday had not started at the Monday run.
+- **Failure is visible.** A missing backend container or a failing CLI exits non-zero: the unit is `failed` (`systemctl --failed`, `journalctl -u fitwise-adaptive-calories -o cat`). The log holds only statuses and the number of suggestions created, never weights, targets or athlete ids. Run now: `sudo systemctl start fitwise-adaptive-calories.service`. Tests: `bash scripts/test-adaptive-calories.sh` (CI job `deploy-script-tests`).

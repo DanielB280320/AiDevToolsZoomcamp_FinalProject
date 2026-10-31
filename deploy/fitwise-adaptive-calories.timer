@@ -1,0 +1,14 @@
+[Unit]
+Description=Run the FitWise adaptive calorie check on Monday and Tuesday
+
+[Timer]
+# 01:00 UTC on Monday and on Tuesday. The check treats "this week" in each athlete's own time zone
+# and is idempotent per athlete and Monday: the Monday run serves UTC and every zone east of it,
+# the Tuesday run the zones west of UTC (UTC-12 starts Monday at 12:00 UTC), so nobody is a week late.
+OnCalendar=Mon,Tue *-*-* 01:00:00 UTC
+RandomizedDelaySec=10min
+# Run at boot if a run was missed (host was down).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,7 +1,6 @@
 """Suggestion request/response schemas (openapi.yaml tag Suggestions).
 
-Only `progression` suggestions exist so far (calories and recalc arrive with F14); the response
-keeps `payload` an open object whose shape is fixed by `kind` in the contract.
+The response keeps `payload` an open object whose shape is fixed by `kind` in the contract.
 """
 
 import datetime as dt
@@ -41,9 +40,21 @@ class Suggestion(ResponseModel):
     decided_at: dt.datetime | None
 
 
+class WeighInWeek(ResponseModel):
+    week_start: dt.date
+    weigh_ins: int
+
+
+class WeighInHint(ResponseModel):
+    message: str
+    evaluated_on: dt.date
+    required_per_week: Literal[4]
+    weeks: Annotated[list[WeighInWeek], Field(min_length=2, max_length=2)]
+
+
 class SuggestionList(ResponseModel):
     items: list[Suggestion]
-    weigh_in_hint: None = None
+    weigh_in_hint: WeighInHint | None = None
 
 
 class SuggestionOverrides(RequestModel):

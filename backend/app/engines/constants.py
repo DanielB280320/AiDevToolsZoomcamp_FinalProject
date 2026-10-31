@@ -228,3 +228,24 @@ WEIGHT_AVERAGE_WINDOW_DAYS = 7
 # F14 a weight this far (percent, inclusive) from the weight used for the current targets
 # prompts a recalculation.
 RECALC_THRESHOLD_PCT = 2.0
+
+# F14 adaptive calories (#42): expected weekly change of the 7-day average, percent of body
+# weight, and the tolerance around it, per goal.
+ADAPTIVE_EXPECTED_WEEKLY_PCT: dict[str, float] = {
+    "cutting": -0.75,
+    "recomposition": 0.0,
+    "maintenance": 0.0,
+    "wellness": 0.0,
+    "muscle_gain": 0.25,
+}
+ADAPTIVE_TOLERANCE_PCT: dict[str, float] = {
+    "cutting": 0.25,
+    "recomposition": 0.25,
+    "maintenance": 0.25,
+    "wellness": 0.25,
+    "muscle_gain": 0.15,
+}
+# F14.2 weigh-ins needed in each of the two evaluated weeks.
+ADAPTIVE_MIN_WEIGH_INS_PER_WEEK = 4
+# F14.3 size of one suggested step (kcal/day).
+ADAPTIVE_STEP_KCAL = 150
