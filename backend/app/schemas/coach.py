@@ -8,7 +8,8 @@ from pydantic import Field
 
 from app.models.coach import BIO_MAX
 from app.schemas.base import RequestModel, ResponseModel
-from app.schemas.users import UserRef
+from app.schemas.calendar import Ratio
+from app.schemas.users import Units, UserRef
 
 CoachLinkStatus = Literal["pending", "active", "declined", "ended"]
 
@@ -53,3 +54,23 @@ class CoachLink(ResponseModel):
 
 class CoachLinkList(ResponseModel):
     items: list[CoachLink]
+
+
+AttentionReason = Literal["low_adherence", "deload", "inactive"]
+
+
+class CoachAthleteSummary(ResponseModel):
+    athlete: UserRef
+    units: Units
+    timezone: str
+    link_id: uuid.UUID
+    linked_since: dt.datetime
+    needs_attention: bool
+    attention_reasons: list[AttentionReason]
+    training_adherence_7d: Ratio | None
+    last_log_date: dt.date | None
+    pending_suggestion_count: Annotated[int, Field(ge=0)]
+
+
+class CoachAthleteList(ResponseModel):
+    items: list[CoachAthleteSummary]

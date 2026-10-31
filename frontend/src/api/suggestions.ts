@@ -25,6 +25,29 @@ export function usePendingSuggestions(athleteId: string) {
   });
 }
 
+/** The most recent decided suggestions (accepted and rejected), newest decision first, with who decided. */
+export function useDecidedSuggestions(athleteId: string) {
+  return useQuery({
+    queryKey: ["suggestions", athleteId, "decided"] as const,
+    queryFn: async ({ signal }) => {
+      const results = await Promise.all(
+        (["accepted", "rejected"] as const).map(async (status) => {
+          const { data, error, response } = await api.GET("/athletes/{athlete_id}/suggestions", {
+            params: { path: { athlete_id: athleteId }, query: { status } },
+            signal,
+          });
+          if (!data) throw apiError(response, error);
+          return data.items.filter((s) => s.status === status);
+        }),
+      );
+      return results
+        .flat()
+        .sort((a, b) => (b.decided_at ?? "").localeCompare(a.decided_at ?? ""))
+        .slice(0, 5);
+    },
+  });
+}
+
 /** Deciding changes the pending list and, on accept, the targets on Today, the session and the plan. */
 function useRefreshAfterDecision() {
   const queryClient = useQueryClient();

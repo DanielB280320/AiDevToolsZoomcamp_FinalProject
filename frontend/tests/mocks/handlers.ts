@@ -16,6 +16,24 @@ export const handlers = [
   http.get(apiUrl("/notifications"), () =>
     HttpResponse.json({ items: [], unread_count: 0, next_cursor: null } satisfies Schemas["NotificationPage"]),
   ),
+  http.get(apiUrl("/coach/athletes"), () => HttpResponse.json({ items: [] } satisfies Schemas["CoachAthleteList"])),
+  // An empty plan: Today only reads it for the "edited by <coach>" labels (F8.3).
+  http.get(apiUrl("/athletes/:athleteId/plan"), ({ params }) =>
+    HttpResponse.json({
+      id: "plan-default",
+      athlete_id: String(params.athleteId),
+      version: 1,
+      source: "generated",
+      active: true,
+      revision: 0,
+      created_by: { id: String(params.athleteId), display_name: "Ana", role: "athlete" },
+      created_at: "2026-10-20T08:00:00Z",
+      updated_at: "2026-10-20T08:00:00Z",
+      warnings: [],
+      training_days: [],
+      meal_days: [],
+    } satisfies Schemas["Plan"]),
+  ),
   http.get(apiUrl("/athletes/:athleteId/suggestions"), () =>
     HttpResponse.json({ items: [], weigh_in_hint: null } satisfies Schemas["SuggestionList"]),
   ),

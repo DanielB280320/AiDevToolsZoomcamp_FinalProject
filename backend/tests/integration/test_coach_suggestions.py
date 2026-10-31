@@ -306,6 +306,7 @@ def test_qa_coach_progression_accept_writes_targets_to_a_coach_authored_version(
     _assert_coach_authored(world, plan, changes)
     accepted = [c for c in changes if c.change.get("kind") == "suggestion_accepted"]
     assert [c.change.get("suggestion_id") for c in accepted] == [sid]
+    assert len(changes) == 1, "one PlanChange row per decision (D65(3))"
     with Session(world.engine) as db:
         decided = db.get(Suggestion, uuid.UUID(sid))
         assert decided is not None and decided.planned_exercise_id is not None

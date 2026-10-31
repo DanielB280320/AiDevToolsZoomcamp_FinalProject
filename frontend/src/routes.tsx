@@ -3,6 +3,18 @@ import type { RouteObject } from "react-router";
 import { AppShell } from "./components/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
 import { BodyPage } from "./pages/BodyPage";
+import { CoachClientShell } from "./pages/CoachClientShell";
+import {
+  CoachClientBodyPage,
+  CoachClientMonthPage,
+  CoachClientPlanPage,
+  CoachClientProfilePage,
+  CoachClientProgressPage,
+  CoachClientSessionPage,
+  CoachClientTodayPage,
+  CoachClientWeekPage,
+} from "./pages/CoachClientPages";
+import { CoachClientsPage } from "./pages/CoachClientsPage";
 import { CoachPage } from "./pages/CoachPage";
 import { HomePage } from "./pages/HomePage";
 import { MonthPage } from "./pages/MonthPage";
@@ -38,6 +50,21 @@ export const routes: RouteObject[] = [
           { path: paths.plan, element: <PlanPage /> },
           { path: paths.notifications, element: <NotificationsPage /> },
           { path: paths.coach, element: <CoachPage /> },
+          { path: paths.coachClients, element: <CoachClientsPage /> },
+          {
+            path: paths.coachClientPattern,
+            element: <CoachClientShell />,
+            children: [
+              { index: true, element: <CoachClientTodayPage /> },
+              { path: "week", element: <CoachClientWeekPage /> },
+              { path: "month", element: <CoachClientMonthPage /> },
+              { path: "body", element: <CoachClientBodyPage /> },
+              { path: "plan", element: <CoachClientPlanPage /> },
+              { path: "progress", element: <CoachClientProgressPage /> },
+              { path: "progress/session/:sessionId", element: <CoachClientSessionPage /> },
+              { path: "profile", element: <CoachClientProfilePage /> },
+            ],
+          },
           { path: paths.progress, element: <ProgressPage /> },
           { path: paths.sessionChartPattern, element: <SessionChartPage /> },
           { path: paths.workoutPattern, element: <WorkoutPage /> },

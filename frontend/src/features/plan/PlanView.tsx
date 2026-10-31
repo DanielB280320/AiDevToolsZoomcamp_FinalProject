@@ -29,7 +29,7 @@ export function PlanView({ plan, units }: { plan: Plan; units: UnitSystem }) {
             <h4 className="font-display text-step-1 font-bold">
               {t("plan.training.dayTitle", { weekday: t(`plan.weekday.${day.weekday}`), name: day.name })}
             </h4>
-            {day.edited_by && <p className="text-step--1 font-semibold text-slate">{t("plan.editedBy", { name: day.edited_by.display_name })}</p>}
+            {day.edited_by?.role === "coach" && <p className="text-step--1 font-semibold text-slate">{t("plan.editedBy", { name: day.edited_by.display_name })}</p>}
             <ul>
               {day.exercises.map((exercise) => (
                 <li key={exercise.id} className="break-words">
@@ -46,7 +46,7 @@ export function PlanView({ plan, units }: { plan: Plan; units: UnitSystem }) {
         {plan.meal_days.map((day) => (
           <li key={day.id} className="border-l-4 border-plate pl-3">
             <h4 className="font-display text-step-1 font-bold">{t(`plan.weekdayLong.${day.weekday}`)}</h4>
-            {day.edited_by && <p className="text-step--1 font-semibold text-slate">{t("plan.editedBy", { name: day.edited_by.display_name })}</p>}
+            {day.edited_by?.role === "coach" && <p className="text-step--1 font-semibold text-slate">{t("plan.editedBy", { name: day.edited_by.display_name })}</p>}
             <ul>
               {day.meals.map((meal) => (
                 <li key={meal.id} className="break-words">

@@ -1854,9 +1854,11 @@ paths:
       operationId: endCoachLink
       summary: End a link (either side)
       description: |
-        Either party; an athlete may also withdraw a `pending` request. Access is revoked
-        immediately — subsequent coach calls on that athlete return `403`. Link must be `pending` or
-        `active` (409 otherwise). Notifies the other party.
+        Either party; an athlete may also withdraw a `pending` request (status `ended`). A coach
+        ending a `pending` request declines it: status `declined` and the athlete gets the
+        link-declined notification. Access is revoked immediately — subsequent coach calls on that
+        athlete return `403`. Link must be `pending` or `active` (409 otherwise). Notifies the
+        other party.
       x-fitwise-access: authenticated
       responses:
         '200':
@@ -4915,10 +4917,14 @@ components:
       description: '`low_adherence` < 70 % training adherence over 7 days; `deload` pending/applied in 14 days; `inactive` no logs for 3+ days.'
     CoachAthleteSummary:
       type: object
-      required: [athlete, link_id, linked_since, needs_attention, attention_reasons, training_adherence_7d, last_log_date, pending_suggestion_count]
+      required: [athlete, units, timezone, link_id, linked_since, needs_attention, attention_reasons, training_adherence_7d, last_log_date, pending_suggestion_count]
       properties:
         athlete:
           $ref: '#/components/schemas/UserRef'
+        units:
+          $ref: '#/components/schemas/Units'
+        timezone:
+          $ref: '#/components/schemas/Timezone'
         link_id:
           $ref: '#/components/schemas/Id'
         linked_since:

@@ -166,10 +166,10 @@ describe("Today", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
-  it("keeps the placeholder for coaches (no athlete selected)", async () => {
+  it("sends coaches to the client list (they have no day of their own)", async () => {
     server.use(meOk(meFixture({ role: "coach" })));
     renderApp("/today");
-    expect(await screen.findByText(/Your athletes and their latest days/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Clients" })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Calendar views" })).not.toBeInTheDocument();
   });
 });

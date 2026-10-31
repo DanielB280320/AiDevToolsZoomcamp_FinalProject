@@ -226,8 +226,9 @@ describe("sign-up submit", () => {
     expect(submit()).toHaveFocus();
     await user.keyboard("{Enter}");
 
-    expect(await screen.findByText("Hi, Kim")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/today");
+    // A coach lands on the client list (Today redirects there).
+    expect(await screen.findByRole("heading", { level: 1, name: "Clients" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/coach/clients");
     expect(bodies[0]).toMatchObject({ email: "kim@example.com", role: "coach", birth_date: "1990-02-03", units: "metric" });
   });
 });

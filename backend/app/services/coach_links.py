@@ -252,9 +252,17 @@ def end(db: Session, user: User, link_id: uuid.UUID, now: dt.datetime) -> out.Co
         raise ProblemError(403, "forbidden", "You do not have access to this link.")
     if link.status not in ("pending", "active"):
         raise _not_pending()
-    link.status = "ended"
+    # A coach closing a pending request declines it (D83); everything else ends the link.
+    declined = link.status == "pending" and user.id == link.coach_id
+    link.status = "declined" if declined else "ended"
     link.updated_at = now
     other = link.athlete_id if user.id == link.coach_id else link.coach_id
-    notifications.notify(db, other, "link_ended", {"link_id": link.id, "actor": _actor(user)}, now)
+    notifications.notify(
+        db,
+        other,
+        "link_request_declined" if declined else "link_ended",
+        {"link_id": link.id, "actor": _actor(user)},
+        now,
+    )
     db.commit()
     return view(db, link)

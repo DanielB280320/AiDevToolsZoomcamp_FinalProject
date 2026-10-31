@@ -44,7 +44,7 @@ export function draftFromPlan(days: TrainingDay[], units: UnitSystem): DraftDay[
     id: day.id,
     weekday: day.weekday,
     name: day.name,
-    editedBy: day.edited_by?.display_name ?? null,
+    editedBy: day.edited_by?.role === "coach" ? day.edited_by.display_name : null,
     exercises: day.exercises.map((e: PlannedExercise) => ({
       uid: newUid(),
       id: e.id,

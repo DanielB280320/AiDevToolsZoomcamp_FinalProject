@@ -10,6 +10,24 @@ export type CoachSearchResult = Schemas["CoachSearchResult"];
 export type CoachLink = Schemas["CoachLink"];
 export type CoachLinkStatus = Schemas["CoachLinkStatus"];
 
+export type CoachAthleteSummary = Schemas["CoachAthleteSummary"];
+export type AttentionReason = Schemas["AttentionReason"];
+
+export const coachAthletesKey = ["coach-athletes"] as const;
+
+/** The coach's clients in the order the API returns them: needs attention first (`listCoachAthletes`, F16.5). */
+export function useCoachAthletes(enabled = true) {
+  return useQuery({
+    queryKey: coachAthletesKey,
+    enabled,
+    queryFn: async ({ signal }) => {
+      const { data, error, response } = await api.GET("/coach/athletes", { signal });
+      if (data) return data.items;
+      throw apiError(response, error);
+    },
+  });
+}
+
 export const coachProfileKey = ["coach-profile"] as const;
 export const coachLinksKey = ["coach-links"] as const;
 
@@ -68,6 +86,7 @@ function useRefreshLinks() {
   return () => {
     void queryClient.invalidateQueries({ queryKey: coachLinksKey });
     void queryClient.invalidateQueries({ queryKey: meQueryKey });
+    void queryClient.invalidateQueries({ queryKey: coachAthletesKey });
   };
 }
 

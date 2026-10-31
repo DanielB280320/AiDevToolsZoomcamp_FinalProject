@@ -4,6 +4,7 @@ import { Navigate } from "react-router";
 import { useSignedInUser } from "../components/RequireAuth";
 import { CalendarNav } from "../features/calendar/CalendarNav";
 import { AthleteCoach } from "../features/coach/AthleteCoach";
+import { CoachNav } from "../features/coach/CoachNav";
 import { CoachPanel } from "../features/coach/CoachPanel";
 import { paths } from "../paths";
 
@@ -14,7 +15,7 @@ export function CoachPage() {
   if (me.role === "athlete" && !me.onboarding_completed) return <Navigate to={paths.onboarding} replace />;
   return (
     <article className="max-w-[40rem]">
-      {me.role === "athlete" && <CalendarNav />}
+      {me.role === "athlete" ? <CalendarNav /> : <CoachNav />}
       <h1 className="font-display text-step-4 font-bold">{t("coach.title")}</h1>
       {me.role === "athlete" ? <AthleteCoach /> : <CoachPanel />}
     </article>

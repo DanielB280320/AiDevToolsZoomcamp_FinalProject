@@ -540,10 +540,10 @@ describe("finish", () => {
 });
 
 describe("access", () => {
-  it("sends a coach back to Today", async () => {
+  it("sends a coach to the client list", async () => {
     server.use(meOk(meFixture({ role: "coach" })));
     const { router } = renderApp(`/workout/${SESSION_ID}`);
-    await screen.findByText("Your athletes and their latest days will appear here.");
-    expect(router.state.location.pathname).toBe("/today");
+    await screen.findByRole("heading", { level: 1, name: "Clients" });
+    expect(router.state.location.pathname).toBe("/coach/clients");
   });
 });
