@@ -3984,7 +3984,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     getExerciseChart: {
