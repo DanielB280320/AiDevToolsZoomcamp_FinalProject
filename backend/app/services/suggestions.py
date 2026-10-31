@@ -485,6 +485,7 @@ def _apply_to_plan(
         now=old.created_at,
         revision=old.revision + 1,
         change={"kind": "suggestion_accepted", "suggestion_id": str(row.id)},
+        change_at=now,
     )
     new.updated_at = now
     day_map = {o.id: n for o, n in zip(old_days, new.training_days, strict=True)}

@@ -67,11 +67,11 @@ async function onboard(request: APIRequestContext) {
   expect(response.status(), await response.text()).toBe(201);
 }
 
-/** A Monday 1 to 14 days ahead (the plan trains on Mondays), as `YYYY-MM-DD`. */
-function upcomingMonday(): string {
+/** The `weeksAhead`-th Monday after the next one (the plan trains on Mondays), as `YYYY-MM-DD`. */
+function upcomingMonday(weeksAhead = 0): string {
   const day = new Date();
   for (let i = 1; i <= 14; i++) {
-    const candidate = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() + i + 1));
+    const candidate = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() + i + 1 + 7 * weeksAhead));
     if (candidate.getUTCDay() === 1) return candidate.toISOString().slice(0, 10);
   }
   throw new Error("no Monday in 14 days");
@@ -96,6 +96,42 @@ async function finishSessionWithSuggestions(request: APIRequestContext) {
   const finish = await request.post(`/api/v1/sessions/${session.id}/finish`);
   expect(finish.status(), await finish.text()).toBe(200);
   expect((await finish.json()).suggestions.length).toBeGreaterThanOrEqual(2);
+}
+
+/**
+ * Makes a deload suggestion pending (F11, so the coach list flags the athlete: "needs attention").
+ * Session 1 calibrates the first strength exercise (accepted); sessions 2 to 4 log one rep per set
+ * at that weight, three failures in a row, so the fourth finish proposes a deload.
+ */
+async function makeDeloadPending(request: APIRequestContext) {
+  let weight = 20;
+  for (let week = 0; week < 4; week++) {
+    const dayResponse = await request.get(`/api/v1/athletes/me/days/${upcomingMonday(week)}`);
+    expect(dayResponse.status()).toBe(200);
+    const session = (await dayResponse.json()).session;
+    const exercise = (session.exercises as { exercise: { id: string; type: string }; planned_exercise_id: string; rule: string; sets: unknown[] }[]).find(
+      (e) => e.exercise.type === "strength" && e.rule !== "manual",
+    );
+    expect(exercise, "the Monday session has a strength exercise").toBeDefined();
+    for (let setNo = 1; setNo <= exercise!.sets.length; setNo++) {
+      const set = await request.post(`/api/v1/sessions/${session.id}/sets`, {
+        data: { exercise_id: exercise!.exercise.id, planned_exercise_id: exercise!.planned_exercise_id, set_no: setNo, reps: 1, weight_kg: weight },
+      });
+      expect(set.status(), await set.text()).toBe(201);
+    }
+    const finish = await request.post(`/api/v1/sessions/${session.id}/finish`);
+    expect(finish.status(), await finish.text()).toBe(200);
+    const mine = ((await finish.json()).suggestions as { id: string; inputs: { action?: string }; payload: { exercise: { id: string }; proposed: { target_weight_kg: number } } }[]).filter(
+      (s) => s.payload.exercise.id === exercise!.exercise.id,
+    );
+    if (week === 0) {
+      const calibrate = mine.find((s) => s.inputs.action === "calibrate");
+      expect(calibrate, "the first session calibrates").toBeDefined();
+      weight = calibrate!.payload.proposed.target_weight_kg;
+      const accepted = await request.post(`/api/v1/suggestions/${calibrate!.id}/accept`);
+      expect(accepted.status(), await accepted.text()).toBe(200);
+    }
+  }
 }
 
 async function link(athlete: APIRequestContext, coach: APIRequestContext, coachId: string) {
@@ -125,11 +161,13 @@ test("coach reviews a client, decides suggestions, edits the plan; the athlete s
   try {
     const coach = await signUp(coachApi, "coach", `Coach ${tag.slice(-6)}`, tag);
     const alice = await signUp(athleteContext.request, "athlete", `Alice ${tag.slice(-6)}`, `a-${tag}`);
-    // Zed only needs to be linked: the list orders by name inside a group.
+    // Zed sorts after Alice by name but has a deload pending, so the list must put him first.
     zedContext = await newContext(browser, baseURL);
     const zed = await signUp(zedContext.request, "athlete", `Zed ${tag.slice(-6)}`, `z-${tag}`);
     await onboard(athleteContext.request);
     await finishSessionWithSuggestions(athleteContext.request);
+    await onboard(zedContext.request);
+    await makeDeloadPending(zedContext.request);
     await link(athleteContext.request, coachApi, coach.id);
     await link(zedContext.request, coachApi, coach.id);
 
@@ -141,9 +179,12 @@ test("coach reviews a client, decides suggestions, edits the plan; the athlete s
       await expect(page.getByRole("heading", { level: 1, name: "Clients" })).toBeVisible();
       const rows = page.getByTestId("client-row");
       await expect(rows).toHaveCount(2);
-      await expect(rows.first()).toContainText(alice.name);
-      await expect(rows.first()).toContainText("2"); // pending suggestions
-      await expect(rows.nth(1)).toContainText(zed.name);
+      // Needs-attention clients come first, ahead of Alice who sorts earlier by name.
+      await expect(rows.first()).toContainText(zed.name);
+      await expect(rows.first()).toContainText("Needs attention");
+      await expect(rows.first().getByTestId("attention-reason")).toHaveText("Deload");
+      await expect(rows.nth(1)).toContainText(alice.name);
+      await expect(rows.nth(1)).not.toContainText("Needs attention");
     });
 
     await test.step("opens a client and reads Today, Month and Progress", async () => {

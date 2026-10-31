@@ -323,6 +323,22 @@ def test_qa_coach_progression_accept_writes_targets_to_a_coach_authored_version(
             ), key
 
 
+def test_progression_accept_records_the_decision_time_not_the_previous_versions(
+    world: World,  # noqa: F811
+) -> None:
+    sid = new_suggestion(world)
+    before, _ = _active_plan_and_changes(world)
+    world.app.state.clock.advance(hours=3)
+    decided_at = world.app.state.clock.now()
+    r = world.cleo.client.post(f"{API}/suggestions/{sid}/accept")
+    assert r.status_code == 200, r.text
+    plan, changes = _active_plan_and_changes(world)
+    assert plan.created_at == before.created_at  # the calendar template keeps its start (D65(3))
+    (change,) = [c for c in changes if c.change.get("kind") == "suggestion_accepted"]
+    assert change.created_at == decided_at
+    assert change.created_at > plan.created_at
+
+
 @pytest.mark.parametrize("kind", ["recalc", "calories"])
 def test_qa_coach_targets_accept_rescales_portions_in_one_coach_change(
     world: World,  # noqa: F811

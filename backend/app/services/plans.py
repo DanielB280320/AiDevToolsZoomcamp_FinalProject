@@ -90,6 +90,7 @@ def create_plan_version(
     meal_days: Sequence[NewMealDay] | None = None,
     revision: int = 0,
     change: dict[str, Any] | None = None,
+    change_at: dt.datetime | None = None,
 ) -> Plan:
     """Store `days` as the athlete's next plan version and make it the active one.
 
@@ -101,7 +102,8 @@ def create_plan_version(
     (F8.1, D70: a change that does not edit meals must not drop the meal plan); pass a sequence
     (even an empty one) to set them explicitly. `revision` is the optimistic-concurrency counter of
     the new version (editors pass the previous one plus one so a stale client is detected, D75);
-    `change` is the `PlanChange` summary (default: version created).
+    `change` is the `PlanChange` summary (default: version created) recorded at `change_at`
+    (default `now`; a suggestion accept keeps the plan's `created_at` but records the decision).
     """
     session.execute(select(User.id).where(User.id == athlete_id).with_for_update()).one()
     if meal_days is None:
@@ -194,7 +196,7 @@ def create_plan_version(
             author_id=author_id,
             author_role=author.role if author else None,
             change=change or {"kind": "created", "version": plan.version, "source": source},
-            created_at=now,
+            created_at=change_at or now,
         )
     )
     session.flush()

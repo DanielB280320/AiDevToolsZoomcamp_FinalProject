@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, type Schemas } from "./client";
+import { coachAthletesKey } from "./coach";
 import { apiError } from "./errors";
 
 export type Suggestion = Schemas["Suggestion"];
@@ -55,6 +56,9 @@ function useRefreshAfterDecision() {
     for (const key of ["suggestions", "day", "session", "calendar", "plan", "plan-versions"]) {
       void queryClient.invalidateQueries({ queryKey: [key] });
     }
+    // The coach context shows the new targets and the pending count of the client list.
+    void queryClient.invalidateQueries({ queryKey: ["athlete-targets"] });
+    void queryClient.invalidateQueries({ queryKey: coachAthletesKey });
   };
 }
 
