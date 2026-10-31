@@ -2050,7 +2050,9 @@ paths:
       tags: [Notifications]
       operationId: markNotificationRead
       summary: Mark one notification read
-      description: Idempotent (F17.2). Another user's notification → `403`.
+      description: >
+        Idempotent (F17.2): a second call returns `200` and keeps the first `read_at`. Another
+        user's notification, and an unknown id, are both `403` (D41, D79.5); there is no `404`.
       x-fitwise-access: authenticated
       responses:
         '200':
@@ -2065,8 +2067,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
   /notifications/read-all:
     post:
@@ -5020,6 +5020,9 @@ components:
     # ───────── Notifications ─────────
     NotificationType:
       type: string
+      description: >
+        `content_removed` (D79.4): a meal, planned meal or food of yours was removed because its
+        owner deleted their account. Its `payload` is empty.
       enum:
         - progression_suggestion
         - calorie_suggestion
@@ -5030,6 +5033,7 @@ components:
         - link_request_declined
         - link_ended
         - plan_edited_by_coach
+        - content_removed
     Notification:
       type: object
       required: [id, type, payload, created_at, read_at]

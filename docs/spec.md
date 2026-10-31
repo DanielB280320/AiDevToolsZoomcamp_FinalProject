@@ -463,6 +463,8 @@ Events: pending progression suggestion, pending calorie adjustment, target-recal
 
 Decisions on creation, banners and the `content_removed` type: D79.
 
+**Implementation notes (backend, #45).** Table `notification` (`user_id` cascades with the user, `payload` JSON of ids and dates only, `read_at` null while unread); a partial unique index on (`user_id`, `type`, `payload.suggestion_id`) makes a retried event a no-op. Producers call only `services/notifications.notify(db, user_id, type, payload, now)`, which writes in the caller's transaction (never commits) and rejects payload keys outside the contract's `NotificationPayload`. Wired today: the progression finish hook, the weekly calorie job, and the weigh-in recalc (which deletes the replaced pending suggestion's notification if unread). `notify_content_removed(db, deleted_user_id, now)` collects the other users whose meals contain a custom food of the deleted user, or whose meal plans (any version) contain one of their meals, and notifies each once; `deleteMe` (#50) must call it in the same transaction before the delete. `GET /notifications` pages by a `(created_at, id)` cursor, newest first. No metric is added: notification creation is visible through the existing request metrics, and nothing about notifications carries a name or free text.
+
 ### F18. Data ownership — *Must*
 
 - **Export**: one ZIP containing `profile.json`, `plan_versions.json`, and CSVs for set logs, meal logs, body metrics, extra activities and suggestions.

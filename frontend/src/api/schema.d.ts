@@ -1251,7 +1251,7 @@ export interface paths {
         put?: never;
         /**
          * Mark one notification read
-         * @description Idempotent (F17.2). Another user's notification → `403`.
+         * @description Idempotent (F17.2): a second call returns `200` and keeps the first `read_at`. Another user's notification, and an unknown id, are both `403` (D41, D79.5); there is no `404`.
          */
         post: operations["markNotificationRead"];
         delete?: never;
@@ -2472,8 +2472,11 @@ export interface components {
         NoteList: {
             items: components["schemas"]["Note"][];
         };
-        /** @enum {string} */
-        NotificationType: "progression_suggestion" | "calorie_suggestion" | "recalc_prompt" | "coach_note" | "link_request_received" | "link_request_approved" | "link_request_declined" | "link_ended" | "plan_edited_by_coach";
+        /**
+         * @description `content_removed` (D79.4): a meal, planned meal or food of yours was removed because its owner deleted their account. Its `payload` is empty.
+         * @enum {string}
+         */
+        NotificationType: "progression_suggestion" | "calorie_suggestion" | "recalc_prompt" | "coach_note" | "link_request_received" | "link_request_approved" | "link_request_declined" | "link_ended" | "plan_edited_by_coach" | "content_removed";
         Notification: {
             id: components["schemas"]["Id"];
             type: components["schemas"]["NotificationType"];
@@ -4514,7 +4517,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     markAllNotificationsRead: {

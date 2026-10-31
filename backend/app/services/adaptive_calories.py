@@ -27,7 +27,7 @@ from app.engines import body_tracking
 from app.engines import constants as c
 from app.models import AthleteProfile, BodyMetric, Suggestion, User
 from app.schemas import suggestions as out
-from app.services import athlete
+from app.services import athlete, notifications
 from app.services.clock import local_today
 from app.telemetry import Telemetry
 
@@ -173,6 +173,8 @@ def generate(
         created_at=now,
     )
     db.add(row)
+    db.flush()
+    notifications.notify(db, user.id, "calorie_suggestion", {"suggestion_id": row.id}, now)
     db.commit()
     if telemetry is not None:
         telemetry.metrics.suggestion_generated("calories", RULE)
