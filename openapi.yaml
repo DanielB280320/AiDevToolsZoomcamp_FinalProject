@@ -1547,8 +1547,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
   /athletes/{athlete_id}/charts/exercise/{exercise_id}:
     parameters:

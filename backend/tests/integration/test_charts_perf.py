@@ -4,6 +4,9 @@ The test seeds the year itself (3 sessions a week with sets, 3 meal logs a day w
 weigh-in every day, an extra activity every 5th day) and times each endpoint 25 times through the
 full ASGI stack and Postgres. Run `pytest -s tests/integration/test_charts_perf.py` to see the
 numbers. Timing tests can be noisy on a loaded machine: rerun on its own before suspecting code.
+
+Marked `perf`: `make test-backend` skips it (`-m "not perf"`) so a noisy runner cannot fail the
+build; CI runs it in the non-blocking `backend-perf` job and `make test-backend-perf` runs it alone.
 """
 
 import datetime as dt
@@ -62,6 +65,7 @@ def year(api: Api) -> tuple[Api, dict[str, Any]]:
     return api, ids
 
 
+@pytest.mark.perf
 def test_every_chart_endpoint_p95_is_under_500_ms_with_a_year_of_data(
     year: tuple[Api, dict[str, Any]],
 ) -> None:
