@@ -158,6 +158,14 @@ describe("inbox", () => {
     expect(await screen.findByRole("link", { name: "Notifications, 1 unread" })).toBeInTheDocument();
   });
 
+  it("calorie_suggestion leads to Today, where every suggestion kind is listed", async () => {
+    const user = userEvent.setup();
+    fakeNotifications([note("calorie_suggestion")]);
+    const { router } = renderApp("/notifications");
+    await user.click(await screen.findByRole("button", { name: new RegExp(en.notifications.types.calorie_suggestion) }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/today"));
+  });
+
   it("content_removed leads to Today", async () => {
     const user = userEvent.setup();
     fakeNotifications([note("content_removed")]);

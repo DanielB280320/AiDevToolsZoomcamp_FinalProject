@@ -16,11 +16,12 @@ export function textKey(type: NotificationType) {
 /** Where a notification leads; `null` when its type has no target yet (coach issues add theirs). */
 export function targetOf(notification: AppNotification): string | null {
   switch (notification.type) {
+    // Today lists every pending suggestion kind (spec section 5).
     case "progression_suggestion":
+    case "calorie_suggestion":
     case "content_removed":
       return paths.today;
-    // The weigh-in page hosts the recalculation prompt and the calorie suggestion's context.
-    case "calorie_suggestion":
+    // Only the Body page renders the recalculation prompt.
     case "recalc_prompt":
       return paths.body;
     default:
