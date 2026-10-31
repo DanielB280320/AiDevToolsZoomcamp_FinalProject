@@ -4839,15 +4839,18 @@ components:
           type: boolean
           default: true
     CoachProfile:
-      allOf:
-        - $ref: '#/components/schemas/CoachProfileInput'
-        - type: object
-          required: [user_id, display_name]
-          properties:
-            user_id:
-              $ref: '#/components/schemas/Id'
-            display_name:
-              type: string
+      type: object
+      required: [user_id, display_name, bio, discoverable]
+      properties:
+        user_id:
+          $ref: '#/components/schemas/Id'
+        display_name:
+          type: string
+        bio:
+          type: string
+          maxLength: 500
+        discoverable:
+          type: boolean
     CoachSearchResult:
       type: object
       description: Never contains the coach's email (F16.2).
@@ -5068,7 +5071,16 @@ components:
         date:
           $ref: '#/components/schemas/LocalDate'
         actor:
-          $ref: '#/components/schemas/UserRef'
+          $ref: '#/components/schemas/NotificationActor'
+    NotificationActor:
+      type: object
+      description: Who caused the event, by id and role only (never a name, D81).
+      required: [id, role]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        role:
+          $ref: '#/components/schemas/Role'
     NotificationPage:
       type: object
       required: [items, unread_count, next_cursor]

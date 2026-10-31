@@ -158,7 +158,8 @@
       "month": "Month",
       "body": "Body",
       "plan": "Plan",
-      "progress": "Progress"
+      "progress": "Progress",
+      "coach": "Coach"
     },
     "status": {
       "done": "Done",
@@ -971,6 +972,55 @@
       "recalc_prompt": "Your weigh-in suggests recalculating your targets.",
       "content_removed": "A food or meal of yours was removed because its owner deleted their account.",
       "generic": "You have a new notification."
+    }
+  },
+  "coach": {
+    "title": "Coach",
+    "loading": "Loading…",
+    "loadFailed": "FitWise couldn't load this page. Check your connection and try again.",
+    "actionFailed": "That didn't work. Check your connection and try again.",
+    "errors": {
+      "linkExists": "You already have a coach or a pending request. End it first.",
+      "notPending": "This request is no longer pending.",
+      "notFound": "This coach is no longer available.",
+      "generic": "That didn't work. Check your connection and try again."
+    },
+    "athlete": {
+      "currentTitle": "Your coach",
+      "pendingTitle": "Request sent",
+      "pendingBody": "Waiting for {{name}} to answer.",
+      "activeBody": "{{name}} can see your plan and logs, and can edit your plan.",
+      "endLink": "End link",
+      "searchTitle": "Find a coach",
+      "searchLabel": "Coach name or exact email",
+      "searchHint": "Type at least 3 characters.",
+      "searchButton": "Search",
+      "tooShort": "Type at least 3 characters.",
+      "noResults": "No coaches found. Check the spelling, or ask your coach to turn on discovery.",
+      "resultsLabel": "Coaches found",
+      "noBio": "No bio yet.",
+      "request": "Request",
+      "requestFor": "Request {{name}}",
+      "requested": "Request sent."
+    },
+    "coach": {
+      "profileTitle": "Your profile",
+      "bioLabel": "Bio",
+      "bioHint": "Shown to athletes who search for coaches. Up to 500 characters.",
+      "discoverable": "Athletes can find me in search",
+      "save": "Save profile",
+      "saving": "Saving…",
+      "saved": "Profile saved.",
+      "saveFailed": "The profile wasn't saved. Check the bio length and try again.",
+      "incomingTitle": "Requests",
+      "noIncoming": "No requests waiting.",
+      "incomingBody": "{{name}} wants you as their coach.",
+      "approve": "Approve",
+      "decline": "Decline",
+      "athletesTitle": "Your athletes",
+      "noAthletes": "No linked athletes yet.",
+      "endLink": "End link",
+      "endLinkFor": "End link with {{name}}"
     }
   }
 }

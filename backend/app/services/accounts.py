@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 from app.errors import ProblemError
 from app.models import SignInFailure, User
 from app.schemas.problem import FieldError
-from app.schemas.users import Me, SignUpRequest, UpdateMeRequest
-from app.services import notifications
+from app.schemas.users import Me, SignUpRequest, UpdateMeRequest, UserRef
+from app.services import coach_links, notifications
 from app.services.athlete import is_onboarded
 from app.services.clock import age_on, local_today
 from app.services.passwords import hash_password, needs_rehash, verify_password
@@ -131,7 +131,7 @@ def update_me(session: Session, user: User, request: UpdateMeRequest, now: dt.da
 
 def me_view(session: Session, user: User) -> Me:
     """The `Me` body. Athletes are onboarded once their profile exists, coaches always are;
-    coach links and notifications arrive in later milestones and are empty until then."""
+    the active coach and pending request come from `coach_links` (F16)."""
     return Me(
         id=user.id,
         email=user.email,
@@ -143,10 +143,17 @@ def me_view(session: Session, user: User) -> Me:
         disclaimer_accepted_at=user.disclaimer_accepted_at.astimezone(dt.UTC),
         created_at=user.created_at.astimezone(dt.UTC),
         onboarding_completed=is_onboarded(session, user),
-        active_coach=None,
-        pending_coach_link_id=None,
+        active_coach=_active_coach_ref(session, user),
+        pending_coach_link_id=(
+            coach_links.pending_link_id(session, user.id) if user.role == "athlete" else None
+        ),
         unread_notification_count=notifications.unread_count(session, user.id),
     )
+
+
+def _active_coach_ref(session: Session, user: User) -> UserRef | None:
+    coach = coach_links.active_coach(session, user.id) if user.role == "athlete" else None
+    return None if coach is None else coach_links.user_ref(coach)
 
 
 def _find_by_email(session: Session, email: str) -> User | None:

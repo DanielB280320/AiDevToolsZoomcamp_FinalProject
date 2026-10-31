@@ -10,6 +10,7 @@ const TABS = [
   { to: paths.body, key: "body" },
   { to: paths.plan, key: "plan" },
   { to: paths.progress, key: "progress" },
+  { to: paths.coach, key: "coach" },
 ] as const;
 
 /** Today / Week / Month switcher, shown at the top of each calendar page (thumb-sized on mobile). */

@@ -3,6 +3,7 @@ import type { RouteObject } from "react-router";
 import { AppShell } from "./components/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
 import { BodyPage } from "./pages/BodyPage";
+import { CoachPage } from "./pages/CoachPage";
 import { HomePage } from "./pages/HomePage";
 import { MonthPage } from "./pages/MonthPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -36,6 +37,7 @@ export const routes: RouteObject[] = [
           { path: paths.body, element: <BodyPage /> },
           { path: paths.plan, element: <PlanPage /> },
           { path: paths.notifications, element: <NotificationsPage /> },
+          { path: paths.coach, element: <CoachPage /> },
           { path: paths.progress, element: <ProgressPage /> },
           { path: paths.sessionChartPattern, element: <SessionChartPage /> },
           { path: paths.workoutPattern, element: <WorkoutPage /> },

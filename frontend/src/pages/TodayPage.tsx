@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Navigate } from "react-router";
+import { Link, Navigate } from "react-router";
 
 import { useSignedInUser } from "../components/RequireAuth";
 import { CalendarNav } from "../features/calendar/CalendarNav";
@@ -31,7 +31,14 @@ export function TodayPage() {
         </time>
       </h1>
       {me.role === "coach" ? (
-        <p className="mt-8 max-w-[52ch] border-t-4 border-iron pt-4 text-step-0">{t("today.placeholder.coach")}</p>
+        <div className="mt-8 max-w-[52ch] border-t-4 border-iron pt-4 text-step-0">
+          <p>{t("today.placeholder.coach")}</p>
+          <p className="mt-3">
+            <Link to={paths.coach} className="font-semibold">
+              {t("coach.title")}
+            </Link>
+          </p>
+        </div>
       ) : (
         <TodayView me={me} />
       )}

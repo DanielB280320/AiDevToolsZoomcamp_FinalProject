@@ -2392,9 +2392,11 @@ export interface components {
             /** @default true */
             discoverable: boolean;
         };
-        CoachProfile: components["schemas"]["CoachProfileInput"] & {
+        CoachProfile: {
             user_id: components["schemas"]["Id"];
             display_name: string;
+            bio: string;
+            discoverable: boolean;
         };
         /** @description Never contains the coach's email (F16.2). */
         CoachSearchResult: {
@@ -2492,7 +2494,12 @@ export interface components {
             link_id?: components["schemas"]["Id"];
             plan_id?: components["schemas"]["Id"];
             date?: components["schemas"]["LocalDate"];
-            actor?: components["schemas"]["UserRef"];
+            actor?: components["schemas"]["NotificationActor"];
+        };
+        /** @description Who caused the event, by id and role only (never a name, D81). */
+        NotificationActor: {
+            id: components["schemas"]["Id"];
+            role: components["schemas"]["Role"];
         };
         NotificationPage: {
             items: components["schemas"]["Notification"][];

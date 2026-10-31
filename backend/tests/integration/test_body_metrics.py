@@ -3,6 +3,7 @@ Navy body fat, the 2 % recalculation suggestion with accept/reject, authorizatio
 coach / stranger) and no health values in telemetry."""
 
 import datetime as dt
+import re
 from typing import Any
 
 import pytest
@@ -333,10 +334,10 @@ def test_no_weights_in_logs_spans_or_metrics(
         assert client.post(ONBOARD, json=onboarding()).status_code == 201
         body = {
             "date": TODAY,
-            "weight_kg": 77.77,
-            "neck_cm": 33.33,
-            "waist_cm": 78.78,
-            "hip_cm": 99.99,
+            "weight_kg": 74.37,
+            "neck_cm": 36.41,
+            "waist_cm": 83.29,
+            "hip_cm": 97.53,
         }
         r = client.post(BM, json=body)
         sid = r.json()["recalc_suggestion"]["id"]
@@ -347,5 +348,7 @@ def test_no_weights_in_logs_spans_or_metrics(
         + repr([(dict(s.attributes or {}), s.name) for s in exporter.get_finished_spans()])
         + repr(reader.get_metrics_data())
     )
-    for value in ("77.77", "33.33", "78.78", "99.99"):
-        assert value not in blob
+    # Sentinels with a number-boundary match: a float such as `duration_ms=12.3456...` can contain
+    # any short digit run, so a plain substring check was flaky (it must only match a whole number).
+    for value in ("74.37", "36.41", "83.29", "97.53"):
+        assert not re.search(rf"(?<![\d.]){re.escape(value)}(?!\d)", blob), value

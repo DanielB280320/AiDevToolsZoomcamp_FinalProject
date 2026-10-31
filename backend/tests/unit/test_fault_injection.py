@@ -109,6 +109,7 @@ def test_is_logging_route_table() -> None:
     assert not is_logging_route("GET", LOGGING_POSTS[0])
 
 
+@pytest.mark.perf  # wall-clock threshold: flaky under xdist (D77), runs in the perf job
 def test_the_app_wires_the_middleware_and_the_delay_is_measured(
     offline_app: FastAPI, json_logs: JsonLogs
 ) -> None:
