@@ -43,7 +43,7 @@ from app.schemas import logging as out
 from app.schemas.plans import ExerciseSummary
 from app.services import meal_log
 from app.services.athlete import targets_on
-from app.services.calendar import owned_session, utc_midnight_after
+from app.services.calendar import session_of, utc_midnight_after
 
 
 def editable_until(row: TrainingSession, user: User) -> dt.datetime:
@@ -168,7 +168,7 @@ def _recompute(db: Session, row: TrainingSession) -> None:
 def _locked_session(
     db: Session, user: User, session_id: uuid.UUID, now: dt.datetime
 ) -> TrainingSession:
-    owned_session(db, user, session_id)  # 403 for strangers, coaches and unknown ids
+    session_of(db, user, session_id)  # 403 for another athlete's or unknown ids
     row = db.scalar(
         select(TrainingSession)
         .where(TrainingSession.id == session_id)

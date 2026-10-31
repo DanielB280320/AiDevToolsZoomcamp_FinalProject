@@ -585,10 +585,10 @@ def test_coach_cannot_put_or_onboard_and_has_no_profile_of_their_own(onboarded: 
     coach = _signup_other(onboarded, "coach@x.test", role="coach")
 
     problem(coach.put(f"/api/v1/athletes/{victim}/profile", json=profile_body()), 403, "not_linked")
-    problem(coach.get(f"/api/v1/athletes/{victim}/profile"), 403, "not_linked")  # no link yet (#47)
+    problem(coach.get(f"/api/v1/athletes/{victim}/profile"), 403, "not_linked")  # no link yet
     problem(coach.put(PROFILE, json=profile_body()), 403, "wrong_role")
     problem(coach.post(ONBOARD, json=onboarding()), 403, "wrong_role")
-    problem(coach.get(PROFILE), 404, "not_onboarded")
+    problem(coach.get(PROFILE), 403, "not_linked")
     assert onboarded.client.get(PROFILE).json()["goal"] == "cutting"
 
 

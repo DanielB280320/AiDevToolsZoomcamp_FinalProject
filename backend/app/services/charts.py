@@ -58,7 +58,7 @@ def _range_start(today: dt.date, weeks: int) -> dt.date:
 def session_chart(
     db: Session, user: User, session_id: uuid.UUID, now: dt.datetime
 ) -> out.SessionChart:
-    row = calendar.owned_session(db, user, session_id)
+    row = calendar.session_of(db, user, session_id)
     view = calendar.session_view(db, user, row, local_today(now, user.timezone))
     exercises: list[out.SessionChartExercise] = []
     for item in view.exercises:

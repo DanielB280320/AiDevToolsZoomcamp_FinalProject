@@ -35,18 +35,11 @@ from app.models import (
 from app.models.plan import WEEKDAYS
 from app.schemas import calendar as out
 from app.services import suggestions
+from app.services.access import not_linked
 from app.services.clock import local_today
-from app.services.plans import CALIBRATION_HINT, resolve_athlete
+from app.services.plans import CALIBRATION_HINT
 
 MAX_RANGE_DAYS = 42
-
-
-def athlete_scope(user: User, athlete_id: str) -> uuid.UUID:
-    """The athlete whose calendar is requested. Only athletes have one (coach access: #47)."""
-    resolved = resolve_athlete(user, athlete_id)
-    if user.role != "athlete":
-        raise ProblemError(403, "not_linked", "You do not have access to this athlete.")
-    return resolved
 
 
 def weekday_of(day: dt.date) -> str:
@@ -394,16 +387,17 @@ def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) 
     )
 
 
-def owned_session(db: Session, user: User, session_id: uuid.UUID) -> TrainingSession:
-    """403 for an unknown id and for another athlete's session alike (D41: no id enumeration)."""
+def session_of(db: Session, athlete: User, session_id: uuid.UUID) -> TrainingSession:
+    """The session of the (already authorised) `athlete`. An unknown id and another athlete's
+    session are the same 403 (D41: no id enumeration)."""
     row = db.get(TrainingSession, session_id)
-    if row is None or row.athlete_id != user.id:
-        raise ProblemError(403, "not_linked", "You do not have access to this athlete.")
+    if row is None or row.athlete_id != athlete.id:
+        raise not_linked()
     return row
 
 
 def get_session(db: Session, user: User, session_id: uuid.UUID, now: dt.datetime) -> out.Session:
-    row = owned_session(db, user, session_id)
+    row = session_of(db, user, session_id)
     return session_view(db, user, row, local_today(now, user.timezone))
 
 
@@ -416,9 +410,7 @@ def move_session(
     db: Session, user: User, session_id: uuid.UUID, target: dt.date, now: dt.datetime
 ) -> out.Session:
     """D45: not finished, same ISO week (Monday start), today or later, target day free."""
-    row = owned_session(db, user, session_id)
-    if user.role != "athlete":
-        raise ProblemError(403, "wrong_role", "Only the athlete can move sessions.")
+    row = session_of(db, user, session_id)
     today = local_today(now, user.timezone)
     if row.status == "done" or row.finished_at is not None:
         raise ProblemError(409, "session_finished", "A finished session cannot be moved.")

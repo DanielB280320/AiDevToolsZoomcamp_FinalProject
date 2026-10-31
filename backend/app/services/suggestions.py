@@ -44,6 +44,7 @@ from app.models import Suggestion as Row
 from app.schemas import suggestions as out
 from app.schemas.users import UserRef
 from app.services import adaptive_calories, athlete, body, notifications, portion_rescale
+from app.services.access import not_linked
 from app.services.clock import local_today
 from app.services.plans import NewPlannedExercise, NewTrainingDay, create_plan_version
 from app.telemetry.metrics import SuggestionRule
@@ -331,15 +332,15 @@ def list_suggestions(
 # ───────────── decide ─────────────
 
 
-def _locked(db: Session, user: User, suggestion_id: uuid.UUID) -> Row:
+def _locked(db: Session, athlete_user: User, suggestion_id: uuid.UUID) -> Row:
     row = db.scalar(
         select(Row)
         .where(Row.id == suggestion_id)
         .with_for_update()
         .execution_options(populate_existing=True)
     )
-    if row is None or row.athlete_id != user.id:
-        raise ProblemError(403, "not_linked", "You do not have access to this athlete.")
+    if row is None or row.athlete_id != athlete_user.id:
+        raise not_linked()
     if row.status != "pending":
         raise ProblemError(
             409, "suggestion_already_decided", "This suggestion has already been decided."
@@ -382,6 +383,7 @@ def _applied(row: Row, overrides: out.SuggestionOverrides | None) -> dict[str, A
 def _accept_calories(
     db: Session,
     user: User,
+    actor: User,
     row: Row,
     overrides: out.SuggestionOverrides | None,
     now: dt.datetime,
@@ -403,7 +405,7 @@ def _accept_calories(
     )
     athlete.store_kcal(db, user.id, today, applied, now)
     portion_rescale.rescale_future_meals(
-        db, athlete=user, author=user, new_kcal=applied, now=now, reason="calories"
+        db, athlete=user, author=actor, new_kcal=applied, now=now, reason="calories"
     )
     return applied
 
@@ -436,7 +438,7 @@ def _target_in_plan(db: Session, row: Row, plan: Plan) -> PlannedExercise | None
 
 
 def _apply_to_plan(
-    db: Session, user: User, row: Row, applied: dict[str, Any], now: dt.datetime
+    db: Session, user: User, actor: User, row: Row, applied: dict[str, Any], now: dt.datetime
 ) -> None:
     """Write the accepted targets as a new plan version (F8.2), like any other plan edit.
 
@@ -477,7 +479,7 @@ def _apply_to_plan(
     new = create_plan_version(
         db,
         athlete_id=row.athlete_id,
-        author_id=user.id,
+        author_id=actor.id,
         source=old.source,
         days=days,
         now=old.created_at,
@@ -487,8 +489,8 @@ def _apply_to_plan(
     db.add(
         PlanChange(
             plan_id=new.id,
-            author_id=user.id,
-            author_role=user.role,
+            author_id=actor.id,
+            author_role=actor.role,
             change={"kind": "suggestion_accepted", "suggestion_id": str(row.id)},
             created_at=now,
         )
@@ -530,6 +532,7 @@ def _apply_to_plan(
 def accept(
     db: Session,
     user: User,
+    actor: User,
     suggestion_id: uuid.UUID,
     overrides: out.SuggestionOverrides | None,
     now: dt.datetime,
@@ -538,36 +541,36 @@ def accept(
     if row.kind == "recalc":
         if overrides is not None:
             raise _invalid("These overrides do not match the kind of this suggestion.")
-        body.accept_recalc(db, user, row, now)
+        body.accept_recalc(db, user, actor, row, now)
         row.status = "accepted"
-        row.decided_by = user.id
+        row.decided_by = actor.id
         row.decided_at = now
         db.commit()
         return row
     if row.kind == "calories":
         row.payload = {
             **row.payload,
-            "applied_kcal": _accept_calories(db, user, row, overrides, now),
+            "applied_kcal": _accept_calories(db, user, actor, row, overrides, now),
         }
         row.status = "accepted"
-        row.decided_by = user.id
+        row.decided_by = actor.id
         row.decided_at = now
         db.commit()
         return row
     applied = _applied(row, overrides)
-    _apply_to_plan(db, user, row, applied, now)
+    _apply_to_plan(db, user, actor, row, applied, now)
     row.payload = {**row.payload, "applied": applied}
     row.status = "accepted"
-    row.decided_by = user.id
+    row.decided_by = actor.id
     row.decided_at = now
     db.commit()
     return row
 
 
-def reject(db: Session, user: User, suggestion_id: uuid.UUID, now: dt.datetime) -> Row:
+def reject(db: Session, user: User, actor: User, suggestion_id: uuid.UUID, now: dt.datetime) -> Row:
     row = _locked(db, user, suggestion_id)
     row.status = "rejected"
-    row.decided_by = user.id
+    row.decided_by = actor.id
     row.decided_at = now
     db.commit()
     return row

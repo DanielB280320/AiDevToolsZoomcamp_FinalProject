@@ -73,12 +73,6 @@ def _invalid(field: str, code: str, message: str) -> FieldError:
     return FieldError(field=field, code=code, message=message)
 
 
-def require_athlete(user: User) -> None:
-    """Only athletes have a profile; a coach calling an athlete-only operation gets 403."""
-    if user.role != "athlete":
-        raise ProblemError(403, "wrong_role", "Only athletes can do this.")
-
-
 def _check_avoided_exercises(
     session: Session, user_id: uuid.UUID, ids: Sequence[uuid.UUID], prefix: str
 ) -> None:
@@ -494,7 +488,6 @@ def onboard(
     telemetry: Telemetry,
 ) -> out.OnboardingResult:
     """Complete the wizard in one transaction (F2.1, F2.2 training and meal plan, F7, F2.6, D55)."""
-    require_athlete(user)
     profile_in, metric_in = request.profile, request.body_metric
     # Serialises concurrent onboarding calls of the same athlete.
     session.execute(select(User.id).where(User.id == user.id).with_for_update()).one()
@@ -698,7 +691,6 @@ def update_profile(
     """Replace the profile; recompute targets from today when a target-relevant field changed
     and keep the earlier `Targets` rows (D46). The training plan is not regenerated; meal portions
     are rescaled to the new kcal from today on (D74)."""
-    require_athlete(user)
     session.execute(select(User.id).where(User.id == user.id).with_for_update()).one()
     row = session.get(AthleteProfile, user.id)
     if row is None:

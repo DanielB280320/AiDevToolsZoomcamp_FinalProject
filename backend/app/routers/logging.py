@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Response
 
-from app.dependencies import CurrentUser, SessionDep, TelemetryDep
+from app.dependencies import OwnerAccess, OwnerSession, SessionDep, TelemetryDep
 from app.models import Suggestion as Row
 from app.schemas.logging import (
     ActivityInput,
@@ -51,7 +51,7 @@ def log_set(
     session_id: uuid.UUID,
     body: SetLogInput,
     response: Response,
-    user: CurrentUser,
+    access: OwnerSession,
     db: SessionDep,
     clock: ClockDep,
     telemetry: TelemetryDep,
@@ -59,6 +59,7 @@ def log_set(
 ) -> SetLog:
     """Log (or re-log) a set; idempotent per (session, exercise, set number) (F10.1)."""
     now = clock.now()
+    user = access.athlete
     log, created = training_log.log_set(db, user, session_id, body, now)
     telemetry.metrics.set_logged()
     # Editing a finished session replaces its pending suggestions (F10.3).
@@ -80,13 +81,14 @@ def log_set(
 def delete_set_log(
     session_id: uuid.UUID,
     set_log_id: uuid.UUID,
-    user: CurrentUser,
+    access: OwnerSession,
     db: SessionDep,
     clock: ClockDep,
     telemetry: TelemetryDep,
     flags: FlagsDep,
 ) -> Response:
     now = clock.now()
+    user = access.athlete
     training_log.delete_set(db, user, session_id, set_log_id, now)
     _count(
         telemetry,
@@ -103,7 +105,7 @@ def delete_set_log(
 )
 def finish_session(
     session_id: uuid.UUID,
-    user: CurrentUser,
+    access: OwnerSession,
     db: SessionDep,
     clock: ClockDep,
     telemetry: TelemetryDep,
@@ -112,6 +114,7 @@ def finish_session(
 ) -> FinishSessionResult:
     """Close the workout: completion (F10.2), kcal (F13.2) and progression suggestions (F11)."""
     now = clock.now()
+    user = access.athlete
     row, first = training_log.finish_session(
         db, user, session_id, body.finished_at if body else None, now
     )
@@ -131,15 +134,13 @@ def finish_session(
     responses={**_COMMON, 404: _PROBLEM, 422: _PROBLEM},
 )
 def log_activity(
-    athlete_id: str,
+    access: OwnerAccess,
     body: ActivityInput,
-    user: CurrentUser,
     db: SessionDep,
     clock: ClockDep,
 ) -> ActivityResult:
     """Off-plan timed activity on any day; counts for burned kcal, not completion (F10.4)."""
-    calendar.athlete_scope(user, athlete_id)
-    return training_log.log_activity(db, user, body, clock.now())
+    return training_log.log_activity(db, access.athlete, body, clock.now())
 
 
 @router.delete(
@@ -148,11 +149,8 @@ def log_activity(
     response_model=DayEnergyUpdate,
     responses={**_COMMON, 404: _PROBLEM},
 )
-def delete_activity(
-    athlete_id: str, activity_id: uuid.UUID, user: CurrentUser, db: SessionDep
-) -> DayEnergyUpdate:
-    calendar.athlete_scope(user, athlete_id)
-    return training_log.delete_activity(db, user, activity_id)
+def delete_activity(access: OwnerAccess, activity_id: uuid.UUID, db: SessionDep) -> DayEnergyUpdate:
+    return training_log.delete_activity(db, access.athlete, activity_id)
 
 
 @router.post(
@@ -171,18 +169,16 @@ def delete_activity(
     },
 )
 def log_meal(
-    athlete_id: str,
+    access: OwnerAccess,
     body: MealLogInput,
     response: Response,
-    user: CurrentUser,
     db: SessionDep,
     clock: ClockDep,
     telemetry: TelemetryDep,
 ) -> MealLogResult:
     """Check off, adjust or skip a planned meal, or add extra food (F12). Idempotent per
     (date, planned meal): a repeat returns 200 and does not count as a new check-off (F12.3)."""
-    calendar.athlete_scope(user, athlete_id)
-    result, new_checkoff = meal_log.log_meal(db, user, body, clock.now())
+    result, new_checkoff = meal_log.log_meal(db, access.athlete, body, clock.now())
     if new_checkoff:
         telemetry.metrics.meal_checked_off()
     if result.meal_log.planned_meal_id is not None and not new_checkoff:
@@ -196,8 +192,5 @@ def log_meal(
     response_model=DayEnergyUpdate,
     responses={**_COMMON, 404: _PROBLEM},
 )
-def delete_meal_log(
-    athlete_id: str, meal_log_id: uuid.UUID, user: CurrentUser, db: SessionDep
-) -> DayEnergyUpdate:
-    calendar.athlete_scope(user, athlete_id)
-    return meal_log.delete_meal_log(db, user, meal_log_id)
+def delete_meal_log(access: OwnerAccess, meal_log_id: uuid.UUID, db: SessionDep) -> DayEnergyUpdate:
+    return meal_log.delete_meal_log(db, access.athlete, meal_log_id)

@@ -1,7 +1,6 @@
 """Chart endpoints (openapi.yaml, tag Charts): pre-aggregated series for the progress views (F15).
 
-Owner only until coach linking (#47) makes `resolve_athlete` accept a linked coach; every other
-id is `403 not_linked` (D41).
+Owner or linked coach (`OwnerOrCoachAccess`); every other id is `403 not_linked` (D41).
 """
 
 import datetime as dt
@@ -10,7 +9,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
-from app.dependencies import CurrentUser, SessionDep
+from app.dependencies import OwnerOrCoachAccess, SessionDep
 from app.schemas.charts import (
     AdherenceChart,
     BodyChart,
@@ -19,7 +18,7 @@ from app.schemas.charts import (
     WeeklySummary,
 )
 from app.schemas.problem import Problem
-from app.services import calendar, charts
+from app.services import charts
 from app.services.clock import ClockDep
 
 router = APIRouter(tags=["Charts"])
@@ -36,10 +35,9 @@ Weeks = Annotated[int, Query(description="4, 12, 26 or 52 (default 12).")]
     responses={**_COMMON, 404: _PROBLEM},
 )
 def get_session_chart(
-    athlete_id: str, session_id: uuid.UUID, user: CurrentUser, db: SessionDep, clock: ClockDep
+    access: OwnerOrCoachAccess, session_id: uuid.UUID, db: SessionDep, clock: ClockDep
 ) -> SessionChart:
-    calendar.athlete_scope(user, athlete_id)
-    return charts.session_chart(db, user, session_id, clock.now())
+    return charts.session_chart(db, access.athlete, session_id, clock.now())
 
 
 @router.get(
@@ -49,15 +47,15 @@ def get_session_chart(
     responses={**_COMMON, 404: _PROBLEM},
 )
 def get_exercise_chart(
-    athlete_id: str,
+    access: OwnerOrCoachAccess,
     exercise_id: uuid.UUID,
-    user: CurrentUser,
     db: SessionDep,
     clock: ClockDep,
     weeks: Weeks = 12,
 ) -> ExerciseChart:
-    calendar.athlete_scope(user, athlete_id)
-    return charts.exercise_chart(db, user, exercise_id, charts.check_weeks(weeks), clock.now())
+    return charts.exercise_chart(
+        db, access.athlete, exercise_id, charts.check_weeks(weeks), clock.now()
+    )
 
 
 @router.get(
@@ -67,15 +65,13 @@ def get_exercise_chart(
     responses=_COMMON,
 )
 def get_adherence_chart(
-    athlete_id: str,
-    user: CurrentUser,
+    access: OwnerOrCoachAccess,
     db: SessionDep,
     clock: ClockDep,
     from_: Annotated[dt.date, Query(alias="from")],
     to: Annotated[dt.date, Query()],
 ) -> AdherenceChart:
-    calendar.athlete_scope(user, athlete_id)
-    return charts.adherence_chart(db, user, from_, to, clock.now())
+    return charts.adherence_chart(db, access.athlete, from_, to, clock.now())
 
 
 @router.get(
@@ -85,14 +81,12 @@ def get_adherence_chart(
     responses=_COMMON,
 )
 def get_weekly_summary(
-    athlete_id: str,
-    user: CurrentUser,
+    access: OwnerOrCoachAccess,
     db: SessionDep,
     clock: ClockDep,
     week_start: Annotated[dt.date | None, Query()] = None,
 ) -> WeeklySummary:
-    calendar.athlete_scope(user, athlete_id)
-    return charts.weekly_summary(db, user, week_start, clock.now())
+    return charts.weekly_summary(db, access.athlete, week_start, clock.now())
 
 
 @router.get(
@@ -102,7 +96,6 @@ def get_weekly_summary(
     responses=_COMMON,
 )
 def get_body_chart(
-    athlete_id: str, user: CurrentUser, db: SessionDep, clock: ClockDep, weeks: Weeks = 12
+    access: OwnerOrCoachAccess, db: SessionDep, clock: ClockDep, weeks: Weeks = 12
 ) -> BodyChart:
-    calendar.athlete_scope(user, athlete_id)
-    return charts.body_chart(db, user, charts.check_weeks(weeks), clock.now())
+    return charts.body_chart(db, access.athlete, charts.check_weeks(weeks), clock.now())
