@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -14,7 +15,7 @@ import { formatWeight, kgToLb, lbToKg, parseDecimal, parseWhole, type UnitSystem
 type Field = "weight" | "repsMin" | "repsMax" | "seconds" | "kcal";
 
 /** "6-10 reps · 42.5 kg" for whichever targets are present. */
-function describeTargets(t: ReturnType<typeof useTranslation>["t"], targets: ExerciseTargets, units: UnitSystem) {
+function describeTargets(t: TFunction, targets: ExerciseTargets, units: UnitSystem) {
   const reps =
     targets.reps_min != null && targets.reps_max != null && targets.reps_min !== targets.reps_max
       ? t("suggestions.repRange", { min: targets.reps_min, max: targets.reps_max })

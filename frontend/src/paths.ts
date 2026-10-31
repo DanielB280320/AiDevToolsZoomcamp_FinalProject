@@ -7,6 +7,7 @@ export const paths = {
   week: "/week",
   month: "/month",
   body: "/body",
+  plan: "/plan",
   progress: "/progress",
   sessionChart: (sessionId: string) => `/progress/session/${sessionId}`,
   sessionChartPattern: "/progress/session/:sessionId",

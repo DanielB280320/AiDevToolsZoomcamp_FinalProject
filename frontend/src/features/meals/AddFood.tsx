@@ -30,7 +30,7 @@ const FORM_FIELDS = [
 
 type Picked = { id: string; name: string };
 
-function CustomFoodForm({ onCreated }: { onCreated: (food: Picked) => void }) {
+export function CustomFoodForm({ onCreated }: { onCreated: (food: Picked) => void }) {
   const { t } = useTranslation();
   const create = useCreateFood();
   const [form, setForm] = useState({

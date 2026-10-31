@@ -157,6 +157,7 @@
       "week": "Week",
       "month": "Month",
       "body": "Body",
+      "plan": "Plan",
       "progress": "Progress"
     },
     "status": {
@@ -764,6 +765,181 @@
       "fat": "Body fat (%)",
       "fatLabel": "Body fat percent",
       "empty": "No weigh-ins in this range yet."
+    }
+  },
+  "plan": {
+    "title": "Plan",
+    "loading": "Loading your plan…",
+    "status": "Version {{version}}, {{source}}",
+    "coachNotice": "Only the athlete can edit a plan for now. Coach editing arrives with coach linking.",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "saveOverLatest": "Save over the latest plan",
+    "discard": "Discard changes",
+    "cancel": "Cancel",
+    "saved": "Plan saved. Past sessions and logs are unchanged.",
+    "saveFailed": "FitWise couldn't save the plan. Check your connection and try again.",
+    "invalid": "Some plan fields need fixing. See the messages next to each field.",
+    "otherTabUnsaved": "You have unsaved changes in the other tab. Save or discard them first, because saving renews the plan.",
+    "noResults": "No results.",
+    "editedBy": "Edited by {{name}}",
+    "weekday": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "weekdayLong": {
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday",
+      "sun": "Sunday"
+    },
+    "slot": {
+      "breakfast": "Breakfast",
+      "lunch": "Lunch",
+      "dinner": "Dinner",
+      "snack": "Snack"
+    },
+    "tabs": {
+      "label": "Plan sections",
+      "training": "Training",
+      "meals": "Meals",
+      "history": "History"
+    },
+    "errors": {
+      "nameRequired": "Enter a name for the day.",
+      "sets": "Sets must be a whole number from 1 to 10.",
+      "rest": "Rest must be 0 to 600 seconds.",
+      "seconds": "Seconds must be a whole number from 5 to 14400.",
+      "reps": "Reps must be a whole number from 1 to 100.",
+      "weight": "Enter a weight from 0 to 500.",
+      "increment": "Enter an increment from 0 to 20.",
+      "grams": "Grams must be more than 0 and at most 2000.",
+      "portion": "Portion must be from 0.25 to 3."
+    },
+    "conflict": {
+      "title": "The plan changed",
+      "body": "The plan was changed elsewhere, for example by your coach. We loaded the latest version but kept your draft. Save to overwrite the latest plan with your draft, or reload to drop your draft.",
+      "reload": "Reload the latest plan and drop my draft"
+    },
+    "training": {
+      "empty": "No training days yet.",
+      "dayTitle": "{{weekday}}: {{name}}",
+      "weekday": "Weekday",
+      "dayName": "Day name",
+      "newDayName": "New day",
+      "addDay": "Add training day",
+      "moveDayUp": "Move {{name}} up",
+      "moveDayDown": "Move {{name}} down",
+      "removeDay": "Remove day {{name}}",
+      "addExercise": "Add exercise",
+      "searchHint": "Type at least 2 letters of the exercise name.",
+      "addNamed": "Add {{name}}",
+      "moveExerciseUp": "Move {{name}} up",
+      "moveExerciseDown": "Move {{name}} down",
+      "removeExercise": "Remove {{name}}",
+      "type": {
+        "strength": "Strength",
+        "bodyweight": "Bodyweight",
+        "timed": "Timed"
+      },
+      "sets": "Sets",
+      "repsMin": "Reps",
+      "repsMax": "Max reps (optional)",
+      "repsMaxHint": "Leave empty for fixed reps, fill for a range.",
+      "weight": "Weight ({{unit}})",
+      "weightHint": "Leave empty to choose a weight at the first session.",
+      "seconds": "Seconds",
+      "rest": "Rest (seconds)",
+      "rule": "Progression",
+      "rules": {
+        "linear": "Linear",
+        "double": "Double progression",
+        "manual": "Manual"
+      },
+      "increment": "Increment ({{unit}})",
+      "deload": "Allow deload weeks"
+    },
+    "meals": {
+      "empty": "No meals planned.",
+      "slot": "Meal",
+      "portion": "Portion",
+      "portionHint": "1 = as in the library (0.25 to 3).",
+      "portionLocked": "Grams below are final amounts.",
+      "gramsOf": "Grams of {{name}}",
+      "remove": "Remove {{name}}",
+      "replace": "Replace {{name}}",
+      "replaceButton": "Replace meal",
+      "add": "Add meal",
+      "addTo": "Add meal on {{weekday}}",
+      "kcal": "{{kcal}} kcal",
+      "picker": {
+        "title": "Choose a meal",
+        "search": "Search meals",
+        "choose": "Choose {{name}}",
+        "failed": "Couldn't search meals. Try again."
+      },
+      "create": {
+        "open": "Create custom meal",
+        "title": "New custom meal",
+        "name": "Meal name",
+        "slots": "Fits these meals",
+        "gramsOf": "Grams of {{name}}",
+        "removeFood": "Remove {{name}}",
+        "searchFood": "Search foods to add",
+        "addFood": "Add {{name}}",
+        "newFood": "Create custom food",
+        "submit": "Create meal",
+        "failed": "Couldn't create the meal."
+      }
+    },
+    "regenerate": {
+      "title": "Regenerate suggested plan",
+      "lead": "Build a new plan from your current profile and targets.",
+      "button": "Regenerate plan",
+      "confirmTitle": "Regenerate your plan?",
+      "confirmBody": "This creates a new plan version. Previous versions stay readable in History. Logs of regenerated meals appear as extra meals, because the new meals are different.",
+      "unsaved": "Your unsaved changes will be lost.",
+      "confirm": "Yes, regenerate",
+      "done": "Plan regenerated.",
+      "failed": "FitWise couldn't regenerate the plan. Try again."
+    },
+    "history": {
+      "version": "Version {{version}}",
+      "active": "Active",
+      "date": "Date",
+      "source": "Source",
+      "author": "Author",
+      "sources": {
+        "generated": "Generated",
+        "custom": "Custom"
+      },
+      "roles": {
+        "athlete": "Athlete",
+        "coach": "Coach",
+        "unknown": "Unknown"
+      },
+      "open": "Open version {{version}}",
+      "openButton": "Open",
+      "back": "Back to versions",
+      "viewing": "Version {{version}}",
+      "readOnly": "Read-only: you are viewing an older version. Nothing here can be edited.",
+      "failed": "Couldn't load the plan versions."
+    },
+    "view": {
+      "training": "Training",
+      "meals": "Meals",
+      "sets": "{{sets}} sets of {{reps}} at {{weight}}",
+      "timed": "{{sets}} sets of {{seconds}} s",
+      "calibrate": "a weight to choose",
+      "meal": "{{slot}}: {{name}} ({{kcal}} kcal)"
     }
   }
 }
