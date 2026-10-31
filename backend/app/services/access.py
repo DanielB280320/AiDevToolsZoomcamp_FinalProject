@@ -6,10 +6,11 @@ Rules, from the `x-fitwise-access` value of the operation in `openapi.yaml`:
   cannot log or change the profile, F16.4).
 * `owner-or-coach`: the athlete, or a coach with an `active` coach link (read and write).
 
-Everything else (no link, `pending`/`declined`/`ended` link, other athlete, a coach calling `me`,
-an unknown id) is 403 `not_linked` with the same body, so ids cannot be enumerated (D41). A
-malformed id is 400. Only `status == 'active'` counts as a link and it is queried on every request,
-so ending a link takes effect immediately. Nothing here logs.
+A coach calling `me` has no data of their own: 403 `wrong_role` on `owner` operations, 403
+`not_linked` on `owner-or-coach` ones. Everything else (no link, `pending`/`declined`/`ended`
+link, other athlete, an unknown id) is 403 `not_linked` with the same body, so ids cannot be
+enumerated (D41). A malformed id is 400. Only `status == 'active'` counts as a link and it is
+queried on every request, so ending a link takes effect immediately. Nothing here logs.
 """
 
 import uuid
