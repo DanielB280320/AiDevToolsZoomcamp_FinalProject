@@ -419,8 +419,18 @@ def test_every_athlete_scoped_operation_has_a_builder() -> None:
 
 # ───────────── owner and coach matrix ─────────────
 
-ACTORS = ["owner", "linked_coach", "unlinked_coach", "pending_coach", "ended_coach", "stranger"]
-DENIED_NOT_LINKED = {"unlinked_coach", "pending_coach", "ended_coach", "stranger"}
+ACTORS = [
+    "owner",
+    "linked_coach",
+    "unlinked_coach",
+    "pending_coach",
+    "declined_coach",
+    "ended_coach",
+    "stranger",
+]
+DENIED_NOT_LINKED = {
+    "unlinked_coach", "pending_coach", "declined_coach", "ended_coach", "stranger"
+}  # fmt: skip
 
 
 def actor_client(w: World, actor: str) -> TestClient:
@@ -429,6 +439,7 @@ def actor_client(w: World, actor: str) -> TestClient:
         "linked_coach": w.cleo,
         "unlinked_coach": w.dan,
         "pending_coach": w.eve,
+        "declined_coach": w.fay,
         "ended_coach": w.gus,
         "stranger": w.bob,
     }[actor].client
