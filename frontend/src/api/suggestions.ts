@@ -52,7 +52,7 @@ export function useDecidedSuggestions(athleteId: string) {
 function useRefreshAfterDecision() {
   const queryClient = useQueryClient();
   return () => {
-    for (const key of ["suggestions", "day", "session", "calendar"]) {
+    for (const key of ["suggestions", "day", "session", "calendar", "plan", "plan-versions"]) {
       void queryClient.invalidateQueries({ queryKey: [key] });
     }
   };
