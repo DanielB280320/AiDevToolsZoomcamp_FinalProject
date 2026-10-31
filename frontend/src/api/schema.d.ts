@@ -2185,7 +2185,7 @@ export interface components {
             proposed_kcal: components["schemas"]["Kcal"];
             /** @enum {integer} */
             delta_kcal: -150 | 150;
-            /** @description Always `false` for a created suggestion. A -150 kcal step that would go below the calorie floor (F3.6) is not created at all (D77). */
+            /** @description Always `false` for a created suggestion. A -150 kcal step that would go below the calorie floor (F3.6) is not created at all (D78). */
             floor_applied: boolean;
             expected_weekly_change_pct: number;
             tolerance_pct: number;
