@@ -8,7 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models import BodyMetric, Suggestion, Targets, User
-from app.services import adaptive_calories
+from app.services import adaptive_calories, clock
 from tests.contract import assert_matches_schema
 from tests.integration.auth_helpers import NOW, Api, problem, signup_body
 from tests.integration.test_rescale_portions import (
@@ -214,7 +214,7 @@ def test_monday_is_decided_in_the_athletes_time_zone(athlete: Api) -> None:  # n
             ("America/Los_Angeles", tuesday_utc, dt.date(2026, 10, 26)),
         ):
             user.timezone = tz
-            ev = adaptive_calories.evaluate(db, user, adaptive_calories.local_today(now, tz))
+            ev = adaptive_calories.evaluate(db, user, clock.local_today(now, tz))
             assert ev is not None and ev.evaluated_on == want, tz
 
 
