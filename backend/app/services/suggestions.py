@@ -12,7 +12,8 @@
   untouched sessions from today on use the new ones.
 * Rejecting changes nothing but the suggestion. The next finished session of the exercise
   simply produces a fresh pending suggestion.
-* Only the athlete decides until coach linking lands (#47). Another athlete's suggestion, and an
+* The athlete or their linked coach decides (F11, D82; the access dependency has resolved who).
+  `decided_by` and the plan change record the actor. Another athlete's suggestion, and an
   unknown id, are `403 not_linked` (D41).
 
 Nothing here logs: targets, reps and reasons are health data (spec section 6.5).
