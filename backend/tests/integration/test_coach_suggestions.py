@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Plan, PlanChange, Suggestion
+from app.models import Plan, PlanChange, PlannedExercise, Suggestion, TrainingDay
 from tests.integration.auth_helpers import NOW, problem
 from tests.integration.test_authorization_matrix import (
     API,
@@ -262,5 +262,88 @@ def test_decide_without_an_active_link_is_403_and_changes_nothing(
     before = fingerprint(world.engine)
     r = _who(world)[who].client.post(f"{API}/suggestions/{sid}/{verb}")
     problem(r, 403, "not_linked")
+    assert fingerprint(world.engine) == before
+    assert _row(world, sid).status == "pending"
+
+
+# ───────────── QA (#180): exact effects and authorship of a coach decision ─────────────
+
+
+def _active_plan_and_changes(w: World) -> tuple[Plan, list[PlanChange]]:
+    with Session(w.engine) as db:
+        plan = db.scalar(select(Plan).where(Plan.athlete_id == w.ana.id, Plan.active.is_(True)))
+        assert plan is not None
+        changes = list(db.scalars(select(PlanChange).where(PlanChange.plan_id == plan.id)))
+        db.expunge_all()
+        return plan, changes
+
+
+def _assert_coach_authored(w: World, plan: Plan, changes: list[PlanChange]) -> None:
+    assert plan.created_by == w.cleo.id
+    assert changes, "a new plan version records at least one PlanChange"
+    assert {(c.author_id, c.author_role) for c in changes} == {(w.cleo.id, "coach")}
+
+
+@pytest.mark.parametrize("overrides", [None, "edit"])
+def test_qa_coach_progression_accept_writes_targets_to_a_coach_authored_version(
+    world: World,  # noqa: F811
+    overrides: str | None,
+) -> None:
+    sid = new_suggestion(world)
+    row = _row(world, sid)
+    timed = row.payload["exercise"]["type"] == "timed"
+    expected: dict[str, Any] = dict(row.payload["proposed"])
+    body: dict[str, Any] | None = None
+    if overrides:
+        edit = {"target_seconds": 47} if timed else {"target_weight_kg": 27.5}
+        expected.update(edit)
+        body = {"overrides": edit}
+    versions = _plan_versions(world)
+    r = world.cleo.client.post(f"{API}/suggestions/{sid}/accept", json=body)
+    assert r.status_code == 200, r.text
+    assert _plan_versions(world) == versions + 1
+    plan, changes = _active_plan_and_changes(world)
+    _assert_coach_authored(world, plan, changes)
+    accepted = [c for c in changes if c.change.get("kind") == "suggestion_accepted"]
+    assert [c.change.get("suggestion_id") for c in accepted] == [sid]
+    with Session(world.engine) as db:
+        decided = db.get(Suggestion, uuid.UUID(sid))
+        assert decided is not None and decided.planned_exercise_id is not None
+        planned = db.get(PlannedExercise, decided.planned_exercise_id)
+        assert planned is not None
+        day = db.get(TrainingDay, planned.training_day_id)
+        assert day is not None and day.plan_id == plan.id
+        keys = ("target_seconds",) if timed else ("target_weight_kg", "reps_min", "reps_max")
+        for key in keys:
+            got = getattr(planned, key)
+            want = expected[key]
+            assert (None if got is None else float(got)) == (
+                None if want is None else float(want)
+            ), key
+
+
+@pytest.mark.parametrize("kind", ["recalc", "calories"])
+def test_qa_coach_targets_accept_rescales_portions_in_one_coach_change(
+    world: World,  # noqa: F811
+    kind: str,
+) -> None:
+    sid = MAKERS[kind](world)
+    versions = _plan_versions(world)
+    r = world.cleo.client.post(f"{API}/suggestions/{sid}/accept")
+    assert r.status_code == 200, r.text
+    assert _plan_versions(world) == versions + 1  # D74: the plan has meal days
+    plan, changes = _active_plan_and_changes(world)
+    _assert_coach_authored(world, plan, changes)
+    assert [c.change.get("kind") for c in changes] == ["portions_rescaled"]
+    assert changes[0].change.get("reason") == kind
+
+
+def test_qa_coach_recalc_rejects_overrides_and_stays_pending(world: World) -> None:  # noqa: F811
+    sid = _make_recalc(world)
+    before = fingerprint(world.engine)
+    r = world.cleo.client.post(
+        f"{API}/suggestions/{sid}/accept", json={"overrides": {"kcal": 2000}}
+    )
+    problem(r, 422, "invalid_overrides")
     assert fingerprint(world.engine) == before
     assert _row(world, sid).status == "pending"
