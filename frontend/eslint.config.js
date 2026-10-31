@@ -53,6 +53,10 @@ export default tseslint.config(
               "aria-controls",
               "aria-live",
               "data-testid",
+              // Chart props (Recharts) that name data fields or stroke patterns, never user-facing text.
+              "dataKey",
+              "strokeDasharray",
+              "testId",
             ],
           },
         },

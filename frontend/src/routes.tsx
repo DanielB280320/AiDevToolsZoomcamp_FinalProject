@@ -7,6 +7,8 @@ import { HomePage } from "./pages/HomePage";
 import { MonthPage } from "./pages/MonthPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
+import { ProgressPage } from "./pages/ProgressPage";
+import { SessionChartPage } from "./pages/SessionChartPage";
 import { SignInPage } from "./pages/SignInPage";
 import { SignUpPage } from "./pages/SignUpPage";
 import { TodayPage } from "./pages/TodayPage";
@@ -30,6 +32,8 @@ export const routes: RouteObject[] = [
           { path: paths.week, element: <WeekPage /> },
           { path: paths.month, element: <MonthPage /> },
           { path: paths.body, element: <BodyPage /> },
+          { path: paths.progress, element: <ProgressPage /> },
+          { path: paths.sessionChartPattern, element: <SessionChartPage /> },
           { path: paths.workoutPattern, element: <WorkoutPage /> },
           { path: paths.onboarding, element: <OnboardingPage /> },
         ],
