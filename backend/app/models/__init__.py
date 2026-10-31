@@ -2,6 +2,7 @@
 
 from app.models.athlete import AthleteProfile, BodyMetric, Targets
 from app.models.base import Base
+from app.models.coach import CoachLink, CoachProfile, Entitlement
 from app.models.exercise import Exercise
 from app.models.feature_flag import FeatureFlag
 from app.models.food import Food, Meal, MealItem
@@ -23,6 +24,9 @@ __all__ = [
     "AthleteProfile",
     "Base",
     "BodyMetric",
+    "CoachLink",
+    "CoachProfile",
+    "Entitlement",
     "Exercise",
     "ExtraActivity",
     "FeatureFlag",

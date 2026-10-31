@@ -16,6 +16,7 @@ from app.routers import (
     body,
     calendar,
     charts,
+    coach,
     exercises,
     foods,
     health,
@@ -102,5 +103,6 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     api.include_router(body.router)
     api.include_router(charts.router)
     api.include_router(notifications.router)
+    api.include_router(coach.router)
     app.include_router(api)
     return app

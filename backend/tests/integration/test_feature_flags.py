@@ -337,6 +337,7 @@ def test_cli_list_shows_effective_values_and_who_set_them(
 # AC7 the latency flag, set through the CLI, delays only the logging routes of the running app
 
 
+@pytest.mark.perf  # wall-clock thresholds are unreliable under xdist (D77)
 def test_latency_flag_set_by_cli_delays_logging_routes_only(
     api: Api, migrated_database_url: str
 ) -> None:

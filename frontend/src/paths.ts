@@ -10,6 +10,7 @@ export const paths = {
   plan: "/plan",
   progress: "/progress",
   notifications: "/notifications",
+  coach: "/coach",
   sessionChart: (sessionId: string) => `/progress/session/${sessionId}`,
   sessionChartPattern: "/progress/session/:sessionId",
   workout: (sessionId: string) => `/workout/${sessionId}`,
