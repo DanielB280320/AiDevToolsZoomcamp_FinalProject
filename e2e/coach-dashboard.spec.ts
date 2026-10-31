@@ -219,6 +219,12 @@ test("coach context fits a 360 px screen with 44 px tap targets", async ({ page,
     await expect(page.getByTestId("client-row")).toHaveCount(1);
     expect(await noPageScroll()).toBe(true);
     await tallEnough([page.getByRole("link", { name: alice.name })]);
+    // QA (#48): cards below 1024 px (no column headers), a table from 1024 px.
+    await expect(page.getByRole("columnheader", { name: "Client", exact: true })).toBeHidden();
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await expect(page.getByRole("columnheader", { name: "Client", exact: true })).toBeVisible();
+    expect(await page.getByTestId("client-row").first().evaluate((row) => getComputedStyle(row).display)).toBe("table-row");
+    await page.setViewportSize({ width: 360, height: 740 });
 
     for (const tail of ["", "/week", "/month", "/body", "/plan", "/progress", "/profile"]) {
       await page.goto(`/coach/clients/${alice.id}${tail}`);
