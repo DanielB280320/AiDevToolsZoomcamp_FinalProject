@@ -7,7 +7,7 @@
 # Installs Docker + Compose plugin + jq, creates the `deploy` user, /opt/fitwise with CURRENT_TAG /
 # PREVIOUS_TAG and a root-only env file (secrets generated on the host), runs a placeholder
 # container on port 80 until the first real deploy, and installs the pull-based deploy poller
-# (systemd timer + scripts, #13, ADR 0010); on prod also the nightly backup timer (#66).
+# (systemd timer + scripts, #13, ADR 0010); the weekly adaptive-calorie timer (#42); on prod also the nightly backup timer (#66).
 #
 #   DEPLOY_REF=<branch|sha>   where to fetch the deploy scripts from (default main; public repo).
 #                             Scripts next to this file are used instead when present.
@@ -105,6 +105,10 @@ if [ "$ENV_NAME" = prod ]; then
   install_file fitwise-backup.service /etc/systemd/system/fitwise-backup.service 644
   install_file fitwise-backup.timer /etc/systemd/system/fitwise-backup.timer 644
 fi
+# Weekly adaptive calorie check (#42): dev and prod; runs the CLI inside the backend container.
+install_file adaptive-calories.sh "$APP_DIR/bin/adaptive-calories.sh" 755
+install_file fitwise-adaptive-calories.service /etc/systemd/system/fitwise-adaptive-calories.service 644
+install_file fitwise-adaptive-calories.timer /etc/systemd/system/fitwise-adaptive-calories.timer 644
 conf="$(printf 'GITHUB_REPOSITORY=%s\nDEPLOY_ENV=%s\nIMAGE_NAMESPACE=%s' "$REPO" "$ENV_NAME" "$IMAGE_NAMESPACE")"
 if [ "$(cat /etc/fitwise-deploy.env 2>/dev/null)" != "$conf" ]; then
   printf '%s\n' "$conf" > /etc/fitwise-deploy.env
@@ -113,6 +117,7 @@ if [ "$(cat /etc/fitwise-deploy.env 2>/dev/null)" != "$conf" ]; then
 fi
 [ "$changed" = 0 ] || systemctl daemon-reload
 systemctl enable --now fitwise-deploy.timer >/dev/null
+systemctl enable --now fitwise-adaptive-calories.timer >/dev/null
 [ "$ENV_NAME" != prod ] || systemctl enable --now fitwise-backup.timer >/dev/null
 
 # Placeholder on port 80 (removed by the first real deploy).
