@@ -489,7 +489,7 @@ def test_coach_and_stranger_cannot_write_or_delete_meal_logs(athlete: Api) -> No
     for who in (stranger, coach):
         problem(who.post(f"{BASE}/athletes/{me}/meal-logs", json=body), 403, "not_linked")
         problem(who.delete(f"{BASE}/athletes/{me}/meal-logs/{log['id']}"), 403, "not_linked")
-    problem(coach.post(f"{ME}/meal-logs", json=body), 403, "not_linked")
+    problem(coach.post(f"{ME}/meal-logs", json=body), 403, "wrong_role")
     # A stranger's own scope cannot reach someone else's log.
     problem(stranger.delete(f"{ME}/meal-logs/{log['id']}"), 404, "meal_log_not_found")
     assert athlete.new_client().post(f"{ME}/meal-logs", json=body).status_code == 401

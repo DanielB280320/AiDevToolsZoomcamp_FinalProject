@@ -299,14 +299,14 @@ def test_stranger_gets_403_on_get_and_post(athlete: Api) -> None:
         assert db.scalar(select(func.count()).select_from(BodyMetric)) == 1
 
 
-def test_coach_gets_403_on_post_and_not_linked_coach_on_get(athlete: Api) -> None:
+def test_an_unlinked_coach_is_not_linked_on_get_post_and_me(athlete: Api) -> None:
     url = f"/api/v1/athletes/{_my_id(athlete)}/body-metrics"
     coach = _other(athlete, email="co@x.test", display_name="Co", role="coach")
     problem(coach.post(url, json={"date": TODAY, "weight_kg": 70}), 403, "not_linked")
     problem(coach.get(url), 403, "not_linked")
     own = "/api/v1/athletes/me/body-metrics"
     problem(coach.post(own, json={"date": TODAY, "weight_kg": 70}), 403, "wrong_role")
-    problem(coach.get(own), 403, "wrong_role")
+    problem(coach.get(own), 403, "not_linked")
     with Session(athlete.app.state.engine) as db:
         assert db.scalar(select(func.count()).select_from(BodyMetric)) == 1
 

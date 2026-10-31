@@ -11,8 +11,8 @@ sessions keep pointing at the version they were performed against, so their targ
 * Meals keep their `meal_key` (D73) when the request names an existing planned meal by `id`
   (reorder, replace in place, change grams or portion), so logs made today keep showing. A meal
   without `id` is new and gets a new key.
-* Authorization: only the athlete may edit for now; `authorize_edit` is the single place where
-  an active coach link (#46/#47) will be accepted.
+* Authorization is done by the caller (`app.services.access`): `user` is the author (the athlete
+  or a coach with an active link, stored as `author_role`), `athlete_uuid` the plan's owner.
 
 Nothing here logs: plan content is health data (spec section 6.5).
 """
@@ -56,17 +56,6 @@ from app.services.plans import (
     create_plan_version,
     plan_view,
 )
-
-
-def authorize_edit(user: User, athlete_id: str) -> uuid.UUID:
-    """The athlete whose plan `user` may change, else 403 `not_linked` (F8.4, D41).
-
-    Today that is the athlete themselves. A coach with an active link to the athlete will be
-    accepted here once coach links land (#46/#47); an unlinked coach or a stranger stays 403."""
-    athlete = plans.resolve_athlete(user, athlete_id)
-    if user.role != "athlete":
-        raise ProblemError(403, "not_linked", "You do not have access to this athlete.")
-    return athlete
 
 
 def _invalid(*errors: FieldError) -> ProblemError:
@@ -317,11 +306,10 @@ def _check_targets(
 def update_training(
     db: Session,
     user: User,
-    athlete_id: str,
+    athlete_uuid: uuid.UUID,
     body: schemas.TrainingPlanUpdate,
     now: dt.datetime,
 ) -> schemas.Plan:
-    athlete_uuid = authorize_edit(user, athlete_id)
     old = _lock_active(db, athlete_uuid, body.revision)
     athlete = db.get(User, athlete_uuid)
     assert athlete is not None  # noqa: S101 - the plan's owner exists
@@ -541,11 +529,10 @@ def _meal_for(
 def update_meals(
     db: Session,
     user: User,
-    athlete_id: str,
+    athlete_uuid: uuid.UUID,
     body: schemas.MealPlanUpdate,
     now: dt.datetime,
 ) -> schemas.Plan:
-    athlete_uuid = authorize_edit(user, athlete_id)
     old = _lock_active(db, athlete_uuid, body.revision)
     athlete = db.get(User, athlete_uuid)
     assert athlete is not None  # noqa: S101
@@ -617,12 +604,11 @@ def update_meals(
 
 
 def regenerate(
-    db: Session, user: User, athlete_id: str, scope: str, now: dt.datetime
+    db: Session, user: User, athlete_uuid: uuid.UUID, scope: str, now: dt.datetime
 ) -> schemas.Plan:
     """A new `generated` version from the current profile and targets (F8.2). The part outside
     `scope` is copied from the current version. Regenerated meals are new meals (new keys), so
     logs of the replaced meals stay visible as extra meal logs (D73)."""
-    athlete_uuid = authorize_edit(user, athlete_id)
     old = _lock_active(db, athlete_uuid, None)
     athlete = db.get(User, athlete_uuid)
     assert athlete is not None  # noqa: S101
@@ -717,7 +703,6 @@ def get_version(db: Session, athlete: uuid.UUID, version: int) -> schemas.Plan:
 
 
 __all__ = [
-    "authorize_edit",
     "get_version",
     "list_versions",
     "regenerate",

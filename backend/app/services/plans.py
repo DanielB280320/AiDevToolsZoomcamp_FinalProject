@@ -204,20 +204,6 @@ def create_plan_version(
 # ───────────── reads ─────────────
 
 
-def resolve_athlete(user: User, athlete_id: str) -> uuid.UUID:
-    """`me` or the caller's own id. Any other id is 403 `not_linked` (D41); the linked-coach
-    case arrives with #47. A malformed id is a 400."""
-    if athlete_id == "me":
-        return user.id
-    try:
-        parsed = uuid.UUID(athlete_id)
-    except ValueError:
-        raise ProblemError(400, "bad_request", "The athlete id is invalid.") from None
-    if parsed != user.id:
-        raise ProblemError(403, "not_linked", "You do not have access to this athlete.")
-    return parsed
-
-
 def user_ref(user: User) -> UserRef:
     return UserRef.model_validate(
         {"id": user.id, "display_name": user.display_name, "role": user.role}

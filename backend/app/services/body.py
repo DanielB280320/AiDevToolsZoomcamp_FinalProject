@@ -193,7 +193,6 @@ def log_metric(
     now: dt.datetime,
     telemetry: Telemetry,
 ) -> LogOutcome:
-    athlete.require_athlete(user)
     # Serialises concurrent weigh-ins (and onboarding/profile changes) of the same athlete.
     session.execute(select(User.id).where(User.id == user.id).with_for_update()).one()
     profile = session.get(AthleteProfile, user.id)
@@ -232,7 +231,9 @@ def log_metric(
     return LogOutcome(row, created, recalc)
 
 
-def accept_recalc(session: Session, user: User, row: Suggestion, now: dt.datetime) -> None:
+def accept_recalc(
+    session: Session, user: User, actor: User, row: Suggestion, now: dt.datetime
+) -> None:
     """Store the proposed targets from today; earlier `Targets` rows stay as they are. Meal
     portions are rescaled to the new kcal from today on (D74)."""
     proposed = dict(row.inputs["proposed_targets"])
@@ -241,5 +242,5 @@ def accept_recalc(session: Session, user: User, row: Suggestion, now: dt.datetim
     today = local_today(now, user.timezone)
     stored = athlete._store_targets(session, user.id, today, result, now)
     portion_rescale.rescale_future_meals(
-        session, athlete=user, author=user, new_kcal=stored.kcal, now=now, reason="recalc"
+        session, athlete=user, author=actor, new_kcal=stored.kcal, now=now, reason="recalc"
     )

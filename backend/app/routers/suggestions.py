@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
-from app.dependencies import CurrentUser, SessionDep, TelemetryDep
+from app.dependencies import OwnerOrCoachAccess, OwnerOrCoachSuggestion, SessionDep, TelemetryDep
 from app.schemas.problem import Problem
 from app.schemas.suggestions import (
     AcceptSuggestionRequest,
@@ -14,7 +14,7 @@ from app.schemas.suggestions import (
     SuggestionList,
     SuggestionStatus,
 )
-from app.services import calendar, suggestions
+from app.services import suggestions
 from app.services.clock import ClockDep
 
 router = APIRouter(tags=["Suggestions"])
@@ -30,16 +30,14 @@ _COMMON: dict[int | str, dict[str, Any]] = {400: _PROBLEM, 401: _PROBLEM, 403: _
     responses=_COMMON,
 )
 def list_suggestions(
-    athlete_id: str,
-    user: CurrentUser,
+    access: OwnerOrCoachAccess,
     db: SessionDep,
     clock: ClockDep,
     status: Annotated[SuggestionStatus, Query()] = "pending",
     kind: Annotated[SuggestionKind | None, Query()] = None,
 ) -> SuggestionList:
     """Newest first; `status` defaults to `pending`."""
-    owner = calendar.athlete_scope(user, athlete_id)
-    return suggestions.list_suggestions(db, owner, status, kind, clock.now())
+    return suggestions.list_suggestions(db, access.athlete.id, status, kind, clock.now())
 
 
 @router.post(
@@ -50,14 +48,21 @@ def list_suggestions(
 )
 def accept_suggestion(
     suggestion_id: uuid.UUID,
-    user: CurrentUser,
+    access: OwnerOrCoachSuggestion,
     db: SessionDep,
     clock: ClockDep,
     telemetry: TelemetryDep,
     body: AcceptSuggestionRequest | None = None,
 ) -> Suggestion:
     """Accept, optionally with edited values; they become the exercise's next targets."""
-    row = suggestions.accept(db, user, suggestion_id, body.overrides if body else None, clock.now())
+    row = suggestions.accept(
+        db,
+        access.athlete,
+        access.actor,
+        suggestion_id,
+        body.overrides if body else None,
+        clock.now(),
+    )
     telemetry.metrics.suggestion_decided(row.kind, "accepted")  # type: ignore[arg-type]
     return suggestions.view(db, row)
 
@@ -70,12 +75,12 @@ def accept_suggestion(
 )
 def reject_suggestion(
     suggestion_id: uuid.UUID,
-    user: CurrentUser,
+    access: OwnerOrCoachSuggestion,
     db: SessionDep,
     clock: ClockDep,
     telemetry: TelemetryDep,
 ) -> Suggestion:
     """Reject; nothing else changes (F11.3)."""
-    row = suggestions.reject(db, user, suggestion_id, clock.now())
+    row = suggestions.reject(db, access.athlete, access.actor, suggestion_id, clock.now())
     telemetry.metrics.suggestion_decided(row.kind, "rejected")  # type: ignore[arg-type]
     return suggestions.view(db, row)
