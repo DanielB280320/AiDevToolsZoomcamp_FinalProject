@@ -9,6 +9,7 @@ export const paths = {
   body: "/body",
   plan: "/plan",
   progress: "/progress",
+  notifications: "/notifications",
   sessionChart: (sessionId: string) => `/progress/session/${sessionId}`,
   sessionChartPattern: "/progress/session/:sessionId",
   workout: (sessionId: string) => `/workout/${sessionId}`,

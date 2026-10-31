@@ -9,6 +9,7 @@ import { StatusBadge } from "./StatusBadge";
 import { badgeKind } from "./status";
 import { paths } from "../../paths";
 import { MealsSection } from "../meals/MealsSection";
+import { TodayBanners } from "../notifications/TodayBanners";
 import { PendingSuggestions } from "../suggestions/PendingSuggestions";
 
 type SessionExercise = NonNullable<DayView["session"]>["exercises"][number];
@@ -65,6 +66,8 @@ export function TodayView({ me }: { me: Me }) {
   const kind = badgeKind(day.data.training_status, day.data.training_completion);
   return (
     <>
+      <TodayBanners />
+
       <Section id="today-training" title={t("calendar.today.training")}>
         <p className="mt-2 flex items-center gap-3 text-step-1">
           <StatusBadge kind={kind} />

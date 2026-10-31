@@ -941,5 +941,36 @@
       "calibrate": "a weight to choose",
       "meal": "{{slot}}: {{name}} ({{kcal}} kcal)"
     }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "unreadTag": "Unread",
+    "actionFailed": "That didn't save. Try again.",
+    "bell": {
+      "none": "Notifications",
+      "unread_one": "Notifications, {{count}} unread",
+      "unread_other": "Notifications, {{count}} unread",
+      "overflow": "99+"
+    },
+    "inbox": {
+      "unreadCount_one": "{{count}} unread",
+      "unreadCount_other": "{{count}} unread",
+      "markAll": "Mark all read",
+      "empty": "You have no notifications.",
+      "loadMore": "Load more"
+    },
+    "banners": {
+      "title": "New notifications",
+      "open": "Open",
+      "dismiss": "Dismiss",
+      "seeAll": "See all notifications"
+    },
+    "types": {
+      "progression_suggestion": "A new progression suggestion is ready for your training.",
+      "calorie_suggestion": "A new calorie target suggestion is ready.",
+      "recalc_prompt": "Your weigh-in suggests recalculating your targets.",
+      "content_removed": "A food or meal of yours was removed because its owner deleted their account.",
+      "generic": "You have a new notification."
+    }
   }
 }
