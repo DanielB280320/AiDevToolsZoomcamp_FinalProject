@@ -43,7 +43,7 @@ from app.models import (
 from app.models import Suggestion as Row
 from app.schemas import suggestions as out
 from app.schemas.users import UserRef
-from app.services import adaptive_calories, athlete, body, portion_rescale
+from app.services import adaptive_calories, athlete, body, notifications, portion_rescale
 from app.services.clock import local_today
 from app.services.plans import NewPlannedExercise, NewTrainingDay, create_plan_version
 from app.telemetry.metrics import SuggestionRule
@@ -296,6 +296,15 @@ def refresh_for_session(
         )
         db.add(suggestion)
         created.append(suggestion)
+    db.flush()
+    for suggestion in created:
+        notifications.notify(
+            db,
+            session.athlete_id,
+            "progression_suggestion",
+            {"suggestion_id": suggestion.id},
+            now,
+        )
     db.commit()
     return created
 

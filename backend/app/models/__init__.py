@@ -6,6 +6,7 @@ from app.models.exercise import Exercise
 from app.models.feature_flag import FeatureFlag
 from app.models.food import Food, Meal, MealItem
 from app.models.meal_log import MealLog, MealLogItem
+from app.models.notification import Notification
 from app.models.plan import (
     MealDay,
     Plan,
@@ -31,6 +32,7 @@ __all__ = [
     "MealItem",
     "MealLog",
     "MealLogItem",
+    "Notification",
     "Plan",
     "PlanChange",
     "PlannedExercise",

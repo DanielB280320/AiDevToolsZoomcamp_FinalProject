@@ -29,7 +29,7 @@ from app.models import AthleteProfile, BodyMetric, Suggestion, User
 from app.schemas import athlete as athlete_out
 from app.schemas.body import BodyMetricInput
 from app.schemas.problem import FieldError
-from app.services import athlete, portion_rescale
+from app.services import athlete, notifications, portion_rescale
 from app.services.clock import age_on, local_today
 from app.telemetry import Telemetry
 
@@ -125,13 +125,17 @@ def _recalc_suggestion(
     telemetry: Telemetry,
 ) -> Suggestion | None:
     """Replace the pending recalc suggestion by a fresh one when the 2 % rule fires (F14)."""
-    session.execute(
-        delete(Suggestion).where(
-            Suggestion.athlete_id == user.id,
-            Suggestion.kind == "recalc",
-            Suggestion.status == "pending",
+    replaced = list(
+        session.scalars(
+            select(Suggestion.id).where(
+                Suggestion.athlete_id == user.id,
+                Suggestion.kind == "recalc",
+                Suggestion.status == "pending",
+            )
         )
     )
+    session.execute(delete(Suggestion).where(Suggestion.id.in_(replaced)))
+    notifications.discard_unread_for_suggestions(session, user.id, "recalc_prompt", replaced)
     current = athlete.targets_on(session, user.id, today)
     if current is None:
         return None
@@ -177,6 +181,7 @@ def _recalc_suggestion(
     )
     session.add(row)
     session.flush()
+    notifications.notify(session, user.id, "recalc_prompt", {"suggestion_id": row.id}, now)
     telemetry.metrics.suggestion_generated("recalc", RECALC_RULE)
     return row
 

@@ -16,6 +16,7 @@ from app.errors import ProblemError
 from app.models import SignInFailure, User
 from app.schemas.problem import FieldError
 from app.schemas.users import Me, SignUpRequest, UpdateMeRequest
+from app.services import notifications
 from app.services.athlete import is_onboarded
 from app.services.clock import age_on, local_today
 from app.services.passwords import hash_password, needs_rehash, verify_password
@@ -144,7 +145,7 @@ def me_view(session: Session, user: User) -> Me:
         onboarding_completed=is_onboarded(session, user),
         active_coach=None,
         pending_coach_link_id=None,
-        unread_notification_count=0,
+        unread_notification_count=notifications.unread_count(session, user.id),
     )
 
 
