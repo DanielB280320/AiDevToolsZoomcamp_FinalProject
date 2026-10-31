@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 
 import { useCachedMe, useSignOut } from "../api/session";
+import { Bell } from "../features/notifications/Bell";
 import { paths } from "../paths";
 
 function SignOutButton() {
@@ -48,7 +49,12 @@ export function Header() {
           {t("app.name")}
         </Link>
         {/* Primary navigation (Today, Plan, Progress) lands here with those pages. */}
-        {me && <SignOutButton />}
+        {me && (
+          <div className="flex items-center gap-3">
+            <Bell unread={me.unread_notification_count} />
+            <SignOutButton />
+          </div>
+        )}
       </div>
     </header>
   );

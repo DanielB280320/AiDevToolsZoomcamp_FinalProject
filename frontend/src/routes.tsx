@@ -6,6 +6,7 @@ import { BodyPage } from "./pages/BodyPage";
 import { HomePage } from "./pages/HomePage";
 import { MonthPage } from "./pages/MonthPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { NotificationsPage } from "./pages/NotificationsPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PlanPage } from "./pages/PlanPage";
 import { ProgressPage } from "./pages/ProgressPage";
@@ -34,6 +35,7 @@ export const routes: RouteObject[] = [
           { path: paths.month, element: <MonthPage /> },
           { path: paths.body, element: <BodyPage /> },
           { path: paths.plan, element: <PlanPage /> },
+          { path: paths.notifications, element: <NotificationsPage /> },
           { path: paths.progress, element: <ProgressPage /> },
           { path: paths.sessionChartPattern, element: <SessionChartPage /> },
           { path: paths.workoutPattern, element: <WorkoutPage /> },

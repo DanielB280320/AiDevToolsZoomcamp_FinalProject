@@ -13,6 +13,9 @@ export const handlers = [
   http.get(apiUrl("/healthz"), () => HttpResponse.json({ status: "ok", version: "test" } satisfies Schemas["Health"])),
   defaultDay(),
   defaultCalendar(),
+  http.get(apiUrl("/notifications"), () =>
+    HttpResponse.json({ items: [], unread_count: 0, next_cursor: null } satisfies Schemas["NotificationPage"]),
+  ),
   http.get(apiUrl("/athletes/:athleteId/suggestions"), () =>
     HttpResponse.json({ items: [], weigh_in_hint: null } satisfies Schemas["SuggestionList"]),
   ),
