@@ -200,6 +200,24 @@ def test_coach_and_stranger_cannot_read_or_decide(athlete: Api) -> None:  # noqa
     assert listing(athlete, kind="calories")["items"][0]["status"] == "pending"
 
 
+def test_monday_is_decided_in_the_athletes_time_zone(athlete: Api) -> None:  # noqa: F811
+    """01:00 UTC Monday 2026-10-26 is still Sunday in Los Angeles and already Monday in Auckland;
+    the Tuesday run reaches Los Angeles' Monday, so the double run covers every zone."""
+    flat_weeks(athlete)
+    monday_utc = dt.datetime(2026, 10, 26, 1, 0, tzinfo=dt.UTC)
+    tuesday_utc = monday_utc + dt.timedelta(days=1)
+    with Session(athlete.app.state.engine) as db:
+        user = db.scalars(select(User)).one()
+        for tz, now, want in (
+            ("America/Los_Angeles", monday_utc, dt.date(2026, 10, 19)),
+            ("Pacific/Auckland", monday_utc, dt.date(2026, 10, 26)),
+            ("America/Los_Angeles", tuesday_utc, dt.date(2026, 10, 26)),
+        ):
+            user.timezone = tz
+            ev = adaptive_calories.evaluate(db, user, adaptive_calories.local_today(now, tz))
+            assert ev is not None and ev.evaluated_on == want, tz
+
+
 def test_athletes_without_targets_are_skipped(api: Api) -> None:
     assert api.signup().status_code == 201
     assert run_job(api) == 0
