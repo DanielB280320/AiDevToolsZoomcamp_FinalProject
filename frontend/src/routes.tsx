@@ -2,6 +2,7 @@ import type { RouteObject } from "react-router";
 
 import { AppShell } from "./components/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
+import { AccountPage } from "./pages/AccountPage";
 import { BodyPage } from "./pages/BodyPage";
 import { CoachClientShell } from "./pages/CoachClientShell";
 import {
@@ -48,6 +49,7 @@ export const routes: RouteObject[] = [
           { path: paths.month, element: <MonthPage /> },
           { path: paths.body, element: <BodyPage /> },
           { path: paths.plan, element: <PlanPage /> },
+          { path: paths.account, element: <AccountPage /> },
           { path: paths.notifications, element: <NotificationsPage /> },
           { path: paths.coach, element: <CoachPage /> },
           { path: paths.coachClients, element: <CoachClientsPage /> },

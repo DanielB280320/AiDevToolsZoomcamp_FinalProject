@@ -8,12 +8,12 @@ import datetime as dt
 import hashlib
 import math
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import ProblemError
-from app.models import SignInFailure, User
+from app.models import CoachLink, Notification, SignInFailure, User
 from app.schemas.problem import FieldError
 from app.schemas.users import Me, SignUpRequest, UpdateMeRequest, UserRef
 from app.services import coach_links, notifications
@@ -175,3 +175,38 @@ def _rate_limited(wait: dt.timedelta) -> ProblemError:
         f"minute{'s' if minutes != 1 else ''}.",
         headers={"Retry-After": str(seconds)},
     )
+
+
+def delete_account(session: Session, user: User, password: str, now: dt.datetime) -> None:
+    """Delete the caller's account after the password check (F18, D48): wrong password is 403
+    and nothing changes.
+
+    One transaction: other users' notifications that point at this user are dropped, the other
+    side of every active coach link gets `link_ended`, users whose meals lose content get one
+    `content_removed` (D66, D71, collected before the delete because triggers remove the rows),
+    then the user row goes and the database cascades the rest (F18.2). Notification payloads are
+    empty so they never reference the deleted account; nothing is logged (rule 6)."""
+    if not verify_password(user.password_hash, password):
+        raise ProblemError(403, "forbidden", "The password is incorrect.")
+    user_id = user.id
+    email_key = _email_key(user.email)
+    others = session.scalars(
+        select(CoachLink.athlete_id if user.role == "coach" else CoachLink.coach_id).where(
+            CoachLink.status == "active",
+            or_(CoachLink.coach_id == user_id, CoachLink.athlete_id == user_id),
+        )
+    ).all()
+    session.execute(
+        delete(Notification).where(
+            or_(
+                Notification.payload["actor"]["id"].as_string() == str(user_id),
+                Notification.payload["athlete_id"].as_string() == str(user_id),
+            )
+        )
+    )
+    for other in sorted(set(others)):
+        notifications.notify(session, other, "link_ended", {}, now)
+    notifications.notify_content_removed(session, user_id, now)
+    session.execute(delete(SignInFailure).where(SignInFailure.email_key == email_key))
+    session.execute(delete(User).where(User.id == user_id))
+    session.commit()

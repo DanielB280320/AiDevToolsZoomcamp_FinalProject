@@ -12,6 +12,8 @@ export const paths = {
   plan: "/plan",
   progress: "/progress",
   notifications: "/notifications",
+  /** Data export and account deletion (F18). */
+  account: "/account",
   coach: "/coach",
   coachClients: "/coach/clients",
   /** A client's views in the coach context (F16); `tail` is `/week`, `/plan`, ... */
