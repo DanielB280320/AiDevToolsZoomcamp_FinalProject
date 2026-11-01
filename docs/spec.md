@@ -643,7 +643,7 @@ Single command: **`make test`** runs everything below (except e2e, which runs wi
 | Integration | API + real Postgres (Compose service in CI): auth, authorization matrix, logging idempotency, export/delete, Open Food Facts fake | pytest + httpx, Docker |
 | Frontend unit | Components, unit conversion, forms | Vitest + RTL |
 | Contract | Backend responses validate against `openapi.yaml` | schemathesis (smoke) |
-| End-to-end | Key journeys: (1) sign up → onboarding → Today; (2) log sets → finish → accept suggestion; (3) check off meals → balance updates; (4) coach link → coach views chart → leaves note | Playwright |
+| End-to-end | Key journeys: (1) sign up → onboarding → Today; (2) log sets → finish → accept suggestion; (3) check off meals → balance updates; (4) coach link → coach views chart → leaves note | Playwright (`e2e/`; every spec on `make e2e` and in CI; only the `@smoke` subset, `smoke.spec.ts` and journey 1, runs after each deploy and in the rollback check via `npm run smoke`, #52) |
 
 Coverage target: ≥ 90 % lines for `backend/app/engines/`, ≥ 75 % backend overall.
 
@@ -668,8 +668,8 @@ Coverage target: ≥ 90 % lines for `backend/app/engines/`, ≥ 75 % backend ove
 
 | Trigger | Pipeline |
 |---|---|
-| Pull request | Lint (ruff, eslint), type-check (mypy, tsc), unit + integration tests, frontend tests, OpenAPI validation, dependency scan, secret scan, build images (no push) |
-| Merge to `main` | Same checks → build & push images (`sha` tag) → **record the approved tag for dev** (move ref `deploy/dev` to the SHA) → the dev host's timer pulls and deploys → smoke test (`/readyz` + e2e smoke) against the public URL |
+| Pull request | Lint (ruff, eslint), type-check (mypy, tsc), unit + integration tests, frontend tests, OpenAPI validation, dependency scan, secret scan, build images (no push), all Playwright journeys headless against the compose stack (1 worker, no retries) |
+| Merge to `main` | Same checks → build & push images (`sha` tag) → **record the approved tag for dev** (move ref `deploy/dev` to the SHA) → the dev host's timer pulls and deploys → smoke test (`/readyz` + the `@smoke` e2e subset, `npm run smoke`, under 2 minutes) against the public URL |
 | Manual `workflow_dispatch` "Promote to production" | Choose an already-deployed-to-dev SHA → GitHub Environment `production` requires approval → the job in that environment moves `deploy/prod` to the SHA → the prod host's timer deploys it → smoke test → if the health check fails, **the host rolls back to `PREVIOUS_TAG` by itself** |
 | Manual "Rollback production" | Same approval gate. Moves `deploy/prod` back to the last release that was **verified good on prod** before the current one (read from the `deploy/prod` history and the version on prod's `/healthz`; a record counts only if the run that wrote it succeeded, D67; see `deploy/README.md`); the host restarts it from `PREVIOUS_TAG` without the migration step and the job checks `/healthz` `version`, `/readyz` and the e2e smoke. The host also rolls back locally on a failed health check, and the on-call agent's `oncall/ops/rollback.sh` wraps the same host script |
 

@@ -1,6 +1,6 @@
-import { randomBytes } from "node:crypto";
+import { type APIRequestContext, type BrowserContext, expect, type Page, test } from "@playwright/test";
 
-import { type APIRequestContext, type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { link, newContext, onboard, run, signIn, signUp } from "./helpers";
 
 /**
  * Coach dashboard journey (#48, spec F16, F16.5, F11, F8.3):
@@ -12,60 +12,6 @@ import { type APIRequestContext, type Browser, type BrowserContext, expect, type
  * passwords); everything the coach does goes through the UI. A second test checks the coach
  * context at a 360 px viewport.
  */
-
-const TIME_ZONE = "Pacific/Auckland";
-
-interface Person {
-  id: string;
-  email: string;
-  password: string;
-  name: string;
-}
-
-const run = () => `${Date.now()}-${randomBytes(3).toString("hex")}`;
-
-async function signUp(request: APIRequestContext, role: "athlete" | "coach", name: string, tag: string): Promise<Person> {
-  const email = `e2e-${role}+${tag}@example.test`;
-  const password = `e2e-${randomBytes(12).toString("hex")}`;
-  const response = await request.post("/api/v1/auth/signup", {
-    data: {
-      email,
-      password,
-      display_name: name,
-      role,
-      birth_date: "1990-01-01",
-      units: "metric",
-      timezone: TIME_ZONE,
-      accept_disclaimer: true,
-    },
-  });
-  expect(response.status(), await response.text()).toBe(201);
-  return { id: (await response.json()).id as string, email, password, name };
-}
-
-async function onboard(request: APIRequestContext) {
-  const response = await request.post("/api/v1/athletes/me/onboarding", {
-    data: {
-      profile: {
-        sex: "female",
-        height_cm: 165,
-        lifestyle: "lightly_active",
-        goal: "maintenance",
-        experience: "beginner",
-        days_per_week: 3,
-        preferred_days: ["mon", "wed", "fri"],
-        session_minutes: 60,
-        equipment: "full_gym",
-        avoided_exercise_ids: [],
-        diet: "omnivore",
-        allergies: [],
-        meals_per_day: 3,
-      },
-      body_metric: { weight_kg: 65, body_fat_method: "skip" },
-    },
-  });
-  expect(response.status(), await response.text()).toBe(201);
-}
 
 /** The `weeksAhead`-th Monday after the next one (the plan trains on Mondays), as `YYYY-MM-DD`. */
 function upcomingMonday(weeksAhead = 0): string {
@@ -132,24 +78,6 @@ async function makeDeloadPending(request: APIRequestContext) {
       expect(accepted.status(), await accepted.text()).toBe(200);
     }
   }
-}
-
-async function link(athlete: APIRequestContext, coach: APIRequestContext, coachId: string) {
-  const requested = await athlete.post("/api/v1/coach-links", { data: { coach_id: coachId } });
-  expect(requested.status(), await requested.text()).toBe(201);
-  const approved = await coach.post(`/api/v1/coach-links/${(await requested.json()).id}/approve`);
-  expect(approved.status(), await approved.text()).toBe(200);
-}
-
-async function signIn(page: Page, person: Person) {
-  await page.goto("/sign-in");
-  await page.getByLabel("Email", { exact: true }).fill(person.email);
-  await page.getByLabel("Password", { exact: true }).fill(person.password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-}
-
-async function newContext(browser: Browser, baseURL: string | undefined) {
-  return browser.newContext({ baseURL, locale: "en-US", timezoneId: TIME_ZONE });
 }
 
 test("coach reviews a client, decides suggestions, edits the plan; the athlete sees who did what", async ({ page, browser, baseURL }) => {

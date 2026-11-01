@@ -212,7 +212,7 @@ jobs:
         run: docker compose down --volumes --remove-orphans
 
   e2e:
-    name: End-to-end (Playwright smoke, Chromium)
+    name: End-to-end (Playwright journeys, Chromium)
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -237,7 +237,7 @@ jobs:
             backend frontend
       - name: Start the stack
         run: docker compose up --no-build --wait --wait-timeout 180
-      - name: Playwright smoke test (official container, Chromium)
+      - name: Playwright journeys, all specs (official container, headless Chromium)
         # Host network: the stack is published on 127.0.0.1:HTTP_PORT (default 8088).
         run: |
           docker run --rm --network host --ipc=host -v "$PWD/e2e:/e2e" -w /e2e \
@@ -527,7 +527,7 @@ jobs:
         run: |
           docker run --rm --network host --ipc=host -v "$PWD/e2e:/e2e" -w /e2e \
             -e CI=true -e E2E_BASE_URL="$DEV_BASE_URL" \
-            "$PLAYWRIGHT_IMAGE" sh -c 'npm ci --no-audit --no-fund && npx playwright test'
+            "$PLAYWRIGHT_IMAGE" sh -c 'npm ci --no-audit --no-fund && npm run smoke'
       - name: Upload Playwright report and traces
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

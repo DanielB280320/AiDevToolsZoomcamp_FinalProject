@@ -9,7 +9,7 @@
   },
   "scripts": {
     "test": "playwright test",
-    "smoke": "playwright test smoke.spec.ts"
+    "smoke": "playwright test --grep @smoke"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"
