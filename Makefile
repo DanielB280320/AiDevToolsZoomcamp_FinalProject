@@ -108,9 +108,8 @@ rollback-compat: ## Rollback guard: previous image (PREV_REF, default merge-base
 	COMPOSE="$(COMPOSE)" scripts/rollback-compat.sh $(PREV_REF)
 
 .PHONY: seed-demo
-seed-demo: ## Load the demo athlete + coach (not yet: #51)
-	@echo "make seed-demo: demo data is not implemented yet (#51)." >&2
-	@exit 1
+seed-demo: ## Load the demo athlete + coach with 8 weeks of history (stack running; refuses in prod)
+	$(COMPOSE) exec -T backend python -m app.cli.seed_demo
 
 # --------------------------------------------------------------------------------------------
 ##@ Quality
