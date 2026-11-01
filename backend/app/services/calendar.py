@@ -145,7 +145,7 @@ def _materialise(
 
 
 def get_day(db: Session, user: User, date_text: str, now: dt.datetime) -> out.DayView:
-    from app.services import meal_log, training_log
+    from app.services import meal_log, notes, training_log
 
     day = resolve_date(date_text, user, now)
     today = local_today(now, user.timezone)
@@ -168,7 +168,13 @@ def get_day(db: Session, user: User, date_text: str, now: dt.datetime) -> out.Da
         training_completion=view.completion if view else None,
         nutrition_completion=nutrition.completion,
         pending_suggestions=[],
-        notes=[],
+        notes=notes.for_day(
+            db,
+            user.id,
+            day,
+            row.id if row else None,
+            [e.exercise.id for e in view.exercises] if view else [],
+        ),
         meal_warning=meal_day.warning if meal_day else None,
     )
 

@@ -15,6 +15,8 @@ import {
 } from "../../api/workout";
 import { paths } from "../../paths";
 import { QueryState } from "../calendar/QueryState";
+import { useDay } from "../../api/calendar";
+import { dayNotes, exerciseNotes, NoteThread, sessionNotes } from "../notes/NoteThread";
 import { type Clock, systemClock } from "./clock";
 import { ExerciseAdder } from "./ExerciseAdder";
 import { ExerciseCard, type SetSaver } from "./ExerciseCard";
@@ -56,6 +58,7 @@ function addedExercise(exercise: ExerciseSummary): SessionExercise {
 export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; sessionId: string; clock?: Clock }) {
   const { t } = useTranslation();
   const session = useSession(sessionId);
+  const day = useDay(me.id, session.data?.date); // the coach notes of the workout's day
   const logSet = useLogSet(sessionId);
   const finish = useFinishSession(sessionId);
   const timer = useRestTimer(clock);
@@ -101,6 +104,13 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
         {data.status === "done" ? t("workout.statusDone") : t("workout.progress", { value: percent(data.completion) })}
       </p>
 
+      {day.data && (
+        <>
+          <NoteThread athleteId={me.id} notes={dayNotes(day.data.notes)} label={t("notes.dayLabel")} />
+          <NoteThread athleteId={me.id} notes={sessionNotes(day.data.notes)} label={t("notes.sessionLabel")} />
+        </>
+      )}
+
       {locked && (
         <p role="status" className="mt-3 border-l-4 border-plate pl-3">
           {t("workout.locked")}
@@ -125,6 +135,8 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
             <ExerciseCard
               key={exercise.planned_exercise_id ?? exercise.exercise.id}
               exercise={exercise}
+              notes={day.data ? exerciseNotes(day.data.notes, exercise.exercise.id) : []}
+              athleteId={me.id}
               units={me.units}
               locked={locked}
               pending={logSet.isPending}

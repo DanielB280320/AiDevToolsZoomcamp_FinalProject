@@ -7,6 +7,7 @@ const TEXT_KEYS: Partial<Record<NotificationType, string>> = {
   calorie_suggestion: "notifications.types.calorie_suggestion",
   recalc_prompt: "notifications.types.recalc_prompt",
   content_removed: "notifications.types.content_removed",
+  coach_note: "notifications.types.coach_note",
 };
 
 export function textKey(type: NotificationType) {
@@ -24,6 +25,9 @@ export function targetOf(notification: AppNotification): string | null {
     // Only the Body page renders the recalculation prompt.
     case "recalc_prompt":
       return paths.body;
+    // The note's day (an exercise note without a day opens Today).
+    case "coach_note":
+      return notification.payload.date ? paths.day(notification.payload.date) : paths.today;
     default:
       return null;
   }

@@ -22,10 +22,11 @@ async function fetchDay(athleteId: string, date: string, signal?: AbortSignal): 
 }
 
 /** Today view data. `date` is `today` (resolved by the server in the athlete's zone) or a day. */
-export function useDay(athleteId: string, date: string) {
+export function useDay(athleteId: string, date: string | undefined) {
   return useQuery({
-    queryKey: dayQueryKey(athleteId, date),
-    queryFn: ({ signal }) => fetchDay(athleteId, date, signal),
+    queryKey: dayQueryKey(athleteId, date ?? ""),
+    queryFn: ({ signal }) => fetchDay(athleteId, date as string, signal),
+    enabled: date !== undefined,
   });
 }
 

@@ -1189,7 +1189,7 @@ export interface paths {
         put?: never;
         /**
          * Leave a note (coach)
-         * @description Only an actively linked coach; athletes get `403` (notes are one-way). Notifies the athlete.
+         * @description Only an actively linked coach; athletes get `403 wrong_role` (notes are one-way). Notifies the athlete (one `coach_note` notification, ids only). `404` when the session or exercise does not exist or is not the athlete's. Notes stay visible to the athlete after the link ends (D84).
          */
         post: operations["createNote"];
         delete?: never;

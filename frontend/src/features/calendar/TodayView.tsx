@@ -9,6 +9,7 @@ import { QueryState } from "./QueryState";
 import { StatusBadge } from "./StatusBadge";
 import { badgeKind } from "./status";
 import { paths } from "../../paths";
+import { NoteThread, dayNotes, exerciseNotes, sessionNotes } from "../notes/NoteThread";
 import { MealsSection } from "../meals/MealsSection";
 import { TodayBanners } from "../notifications/TodayBanners";
 import { DecidedSuggestions } from "../suggestions/DecidedSuggestions";
@@ -23,7 +24,21 @@ function formatWeight(kg: number, units: Me["units"]): string {
   return units === "imperial" ? `${Math.round(kg * KG_TO_LB * 2) / 2} lb` : `${Math.round(kg * 100) / 100} kg`;
 }
 
-function ExerciseRow({ exercise, units }: { exercise: SessionExercise; units: Me["units"] }) {
+function ExerciseRow({
+  exercise,
+  units,
+  athleteId,
+  notes,
+  sessionId,
+  canNote,
+}: {
+  exercise: SessionExercise;
+  units: Me["units"];
+  athleteId: string;
+  notes: DayView["notes"];
+  sessionId: string;
+  canNote: boolean;
+}) {
   const { t } = useTranslation();
   const first = exercise.sets[0];
   const target = [
@@ -34,12 +49,20 @@ function ExerciseRow({ exercise, units }: { exercise: SessionExercise; units: Me
     .filter(Boolean)
     .join(" · ");
   return (
-    <li className="flex items-baseline justify-between gap-3 border-b border-line py-2">
-      <span className="font-semibold">{exercise.exercise.name}</span>
-      <span className="text-right text-step--1 text-slate">
-        {t("calendar.today.sets", { count: exercise.sets.length })}
-        {target && ` · ${target}`}
-      </span>
+    <li className="border-b border-line py-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-semibold">{exercise.exercise.name}</span>
+        <span className="text-right text-step--1 text-slate">
+          {t("calendar.today.sets", { count: exercise.sets.length })}
+          {target && ` · ${target}`}
+        </span>
+      </div>
+      <NoteThread
+        athleteId={athleteId}
+        notes={exerciseNotes(notes, exercise.exercise.id)}
+        target={canNote ? { scope: "exercise", exercise_id: exercise.exercise.id, session_id: sessionId } : undefined}
+        label={exercise.exercise.name}
+      />
     </li>
   );
 }
@@ -96,13 +119,16 @@ export function TodayView({
   me,
   readOnly = false,
   sessionLink,
+  date = "today",
 }: {
   me: Pick<Me, "id" | "units">;
   readOnly?: boolean;
   sessionLink?: (sessionId: string) => string;
+  /** `today` (the user's day) or an ISO date, e.g. the day a coach note refers to. */
+  date?: string;
 }) {
   const { t } = useTranslation();
-  const day = useDay(me.id, "today");
+  const day = useDay(me.id, date);
   const plan = usePlan(me.id);
 
   if (!day.data) {
@@ -135,9 +161,25 @@ export function TodayView({
           </Link>
         )}
         {session && (
+          <NoteThread
+            athleteId={me.id}
+            notes={sessionNotes(day.data.notes)}
+            target={readOnly ? { scope: "session", session_id: session.id } : undefined}
+            label={t("notes.sessionLabel")}
+          />
+        )}
+        {session && (
           <ul className="mt-2">
             {session.exercises.map((exercise) => (
-              <ExerciseRow key={exercise.planned_exercise_id ?? exercise.order} exercise={exercise} units={me.units} />
+              <ExerciseRow
+                key={exercise.planned_exercise_id ?? exercise.order}
+                exercise={exercise}
+                units={me.units}
+                athleteId={me.id}
+                notes={day.data.notes}
+                sessionId={session.id}
+                canNote={readOnly}
+              />
             ))}
           </ul>
         )}
@@ -155,10 +197,15 @@ export function TodayView({
       <PendingSuggestions athleteId={me.id} units={me.units} className="mt-8 border-t-4 border-plate pt-3" />
       <DecidedSuggestions athleteId={me.id} units={me.units} className="mt-8 border-t-4 border-plate pt-3" />
 
-      {day.data.notes.length > 0 && (
-        <p className="mt-8 border-t-4 border-plate pt-3">
-          {t("calendar.today.attention", { notes: day.data.notes.length })}
-        </p>
+      {(readOnly || dayNotes(day.data.notes).length > 0) && (
+        <Section id="today-notes" title={t("notes.dayTitle")}>
+          <NoteThread
+            athleteId={me.id}
+            notes={dayNotes(day.data.notes)}
+            target={readOnly ? { scope: "day", date: day.data.date } : undefined}
+            label={t("notes.dayLabel")}
+          />
+        </Section>
       )}
     </>
   );

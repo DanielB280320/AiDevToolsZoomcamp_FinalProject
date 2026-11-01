@@ -4,6 +4,8 @@ export const paths = {
   signIn: "/sign-in",
   signUp: "/sign-up",
   today: "/today",
+  /** The athlete's own view of one day (a note's day, F16). */
+  day: (date: string) => `/today?date=${date}`,
   week: "/week",
   month: "/month",
   body: "/body",

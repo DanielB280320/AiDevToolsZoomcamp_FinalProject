@@ -1,9 +1,10 @@
 import { useTranslation } from "react-i18next";
-import { Navigate } from "react-router";
+import { Navigate, useSearchParams } from "react-router";
 
 import { useSignedInUser } from "../components/RequireAuth";
 import { CalendarNav } from "../features/calendar/CalendarNav";
 import { TodayView } from "../features/calendar/TodayView";
+import { isIsoDate } from "../lib/calendarDates";
 import { localDay } from "../lib/today";
 import { paths } from "../paths";
 
@@ -14,10 +15,14 @@ import { paths } from "../paths";
 export function TodayPage() {
   const { t, i18n } = useTranslation();
   const me = useSignedInUser();
+  const [params] = useSearchParams();
+  const requested = params.get("date");
+  const date = requested && isIsoDate(requested) ? requested : undefined;
   // F2.2: a new athlete sets up the plan before seeing Today.
   if (me.role === "athlete" && !me.onboarding_completed) return <Navigate to={paths.onboarding} replace />;
   if (me.role === "coach") return <Navigate to={paths.coachClients} replace />;
-  const today = localDay(new Date(), me.timezone, i18n.language);
+  // `?date=` opens another day (a note's day); the label is built from that calendar date.
+  const today = localDay(date ? new Date(`${date}T12:00:00Z`) : new Date(), date ? "UTC" : me.timezone, i18n.language);
 
   return (
     <article className="max-w-[40rem]">
@@ -31,7 +36,7 @@ export function TodayPage() {
           </span>
         </time>
       </h1>
-      <TodayView me={me} />
+      <TodayView me={me} date={date} />
     </article>
   );
 }
