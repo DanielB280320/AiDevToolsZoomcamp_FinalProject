@@ -41,12 +41,9 @@ METHODS = ("get", "post", "put", "patch", "delete")
 KNOWN_ACCESS = {"public", "authenticated", "athlete", "coach", "owner", "owner-or-coach", "author"}
 ATHLETE_SCOPED = {"owner", "owner-or-coach"}
 
-# Not implemented yet. #50 deletes its entries; the test
+# Not implemented yet. The owning issue adds its entry; the test
 # `test_not_yet_implemented_entries_are_really_missing` fails when an entry is implemented.
-NOT_YET_IMPLEMENTED: set[tuple[str, str]] = {
-    ("POST", "/me/delete"),  # #50
-    ("GET", "/me/export"),  # #50
-}
+NOT_YET_IMPLEMENTED: set[tuple[str, str]] = set()
 
 
 # ───────────── the contract ─────────────

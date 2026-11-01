@@ -108,3 +108,9 @@ class Me(ResponseModel):
     active_coach: UserRef | None
     pending_coach_link_id: uuid.UUID | None
     unread_notification_count: Annotated[int, Field(ge=0)]
+
+
+class DeleteAccountRequest(RequestModel):
+    """`POST /me/delete` body (D48): the current password."""
+
+    password: Annotated[str, Field(min_length=1, max_length=128)]

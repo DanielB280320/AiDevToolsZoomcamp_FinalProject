@@ -52,7 +52,7 @@ export async function logIn(body: LogInRequest): Promise<Me> {
  * in place instead of removed: components that read it (the header) keep observing the same cache
  * entry, so they see the change. Removing it would leave them showing the old user.
  */
-function dropUserDataExceptMe(queryClient: QueryClient) {
+export function dropUserDataExceptMe(queryClient: QueryClient) {
   queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== meQueryKey[0] });
 }
 

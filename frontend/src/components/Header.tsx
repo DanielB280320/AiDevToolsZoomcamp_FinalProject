@@ -52,6 +52,9 @@ export function Header() {
         {me && (
           <div className="flex items-center gap-3">
             <Bell unread={me.unread_notification_count} />
+            <Link to={paths.account} className="font-semibold text-chalk underline-offset-4 hover:underline">
+              {t("nav.account")}
+            </Link>
             <SignOutButton />
           </div>
         )}

@@ -5,9 +5,34 @@
     "skipToContent": "Skip to content"
   },
   "nav": {
+    "account": "Account",
     "signOut": "Sign out",
     "signingOut": "Signing out…",
     "signOutFailed": "You're still signed in: FitWise couldn't be reached. Check your connection and try again."
+  },
+  "account": {
+    "title": "Your account",
+    "export": {
+      "title": "Export my data",
+      "lead": "Download everything FitWise holds about you as a ZIP: profile, plan versions, set logs, meal logs, body metrics, extra activities and suggestions.",
+      "button": "Export my data",
+      "exporting": "Preparing your export…",
+      "failed": "The export could not be created. Try again."
+    },
+    "delete": {
+      "title": "Delete account",
+      "formLabel": "Confirm account deletion",
+      "lead": "This permanently deletes your account and all your data. It cannot be undone. Any coach link ends and your notes and logs are removed.",
+      "open": "Delete account",
+      "confirmLead": "Enter your password to confirm.",
+      "password": "Password",
+      "submit": "Delete my account permanently",
+      "submitting": "Deleting…",
+      "cancel": "Cancel",
+      "wrongPassword": "That password is not correct. Nothing was deleted.",
+      "required": "Enter your password.",
+      "failed": "Your account could not be deleted. Try again."
+    }
   },
   "footer": {
     "disclaimer": "FitWise provides general fitness and nutrition estimates, not medical advice. Consult a professional before starting a new training or diet program."
