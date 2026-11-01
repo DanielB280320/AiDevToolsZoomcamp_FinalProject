@@ -21,7 +21,18 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.errors import ProblemError
-from app.models import Food, Meal, MealDay, MealItem, Notification, Plan, PlannedMeal, User
+from app.models import (
+    Food,
+    Meal,
+    MealDay,
+    MealItem,
+    MealLog,
+    MealLogItem,
+    Notification,
+    Plan,
+    PlannedMeal,
+    User,
+)
 from app.schemas import notifications as out
 from app.schemas.problem import FieldError
 
@@ -77,8 +88,9 @@ def discard_unread_for_suggestions(
 
 
 def users_with_content_removed_by(db: Session, deleted_user_id: uuid.UUID) -> list[uuid.UUID]:
-    """The other users whose meals lose an item (a custom food of the deleted user) or whose meal
-    plans lose a planned meal (a meal of the deleted user). Run before the delete."""
+    """The other users whose meals lose an item (a custom food of the deleted user), whose meal
+    plans lose a planned meal (a meal of the deleted user) or whose logged meals lose an item
+    (D85). Run before the delete."""
     owners = select(Meal.owner_id).where(
         Meal.id.in_(
             select(MealItem.meal_id)
@@ -94,7 +106,13 @@ def users_with_content_removed_by(db: Session, deleted_user_id: uuid.UUID) -> li
         .join(Meal, Meal.id == PlannedMeal.meal_id)
         .where(Meal.owner_id == deleted_user_id)
     )
-    found = set(db.scalars(owners)) | set(db.scalars(planners))
+    loggers = (
+        select(MealLog.athlete_id)
+        .join(MealLogItem, MealLogItem.meal_log_id == MealLog.id)
+        .join(Food, Food.id == MealLogItem.food_id)
+        .where(Food.owner_id == deleted_user_id)
+    )
+    found = set(db.scalars(owners)) | set(db.scalars(planners)) | set(db.scalars(loggers))
     found.discard(deleted_user_id)
     if not found:
         return []
