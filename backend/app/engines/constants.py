@@ -249,3 +249,15 @@ ADAPTIVE_TOLERANCE_PCT: dict[str, float] = {
 ADAPTIVE_MIN_WEIGH_INS_PER_WEEK = 4
 # F14.3 size of one suggested step (kcal/day).
 ADAPTIVE_STEP_KCAL = 150
+
+# --- F16.5 Coach "needs attention" (issue #48, decisions D83) ---------------------------------
+# Training adherence below this ratio over the last 7 days triggers `low_adherence`
+# (exactly 0.70 does not).
+ATTENTION_LOW_ADHERENCE_RATIO = 0.70
+# Days in the adherence window, today included.
+ATTENTION_ADHERENCE_WINDOW_DAYS = 7
+# A deload suggestion pending, or applied at most this many days ago, triggers `deload`.
+ATTENTION_DELOAD_WINDOW_DAYS = 14
+# No set, meal or weigh-in log for this many days or more triggers `inactive`.
+ATTENTION_INACTIVE_DAYS = 3
+# --- end F16.5 ---------------------------------------------------------------------------------

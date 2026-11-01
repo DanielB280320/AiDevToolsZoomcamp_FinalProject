@@ -306,6 +306,7 @@ def test_qa_coach_progression_accept_writes_targets_to_a_coach_authored_version(
     _assert_coach_authored(world, plan, changes)
     accepted = [c for c in changes if c.change.get("kind") == "suggestion_accepted"]
     assert [c.change.get("suggestion_id") for c in accepted] == [sid]
+    assert len(changes) == 1, "one PlanChange row per decision (D65(3))"
     with Session(world.engine) as db:
         decided = db.get(Suggestion, uuid.UUID(sid))
         assert decided is not None and decided.planned_exercise_id is not None
@@ -320,6 +321,22 @@ def test_qa_coach_progression_accept_writes_targets_to_a_coach_authored_version(
             assert (None if got is None else float(got)) == (
                 None if want is None else float(want)
             ), key
+
+
+def test_progression_accept_records_the_decision_time_not_the_previous_versions(
+    world: World,  # noqa: F811
+) -> None:
+    sid = new_suggestion(world)
+    before, _ = _active_plan_and_changes(world)
+    world.app.state.clock.advance(hours=3)
+    decided_at = world.app.state.clock.now()
+    r = world.cleo.client.post(f"{API}/suggestions/{sid}/accept")
+    assert r.status_code == 200, r.text
+    plan, changes = _active_plan_and_changes(world)
+    assert plan.created_at == before.created_at  # the calendar template keeps its start (D65(3))
+    (change,) = [c for c in changes if c.change.get("kind") == "suggestion_accepted"]
+    assert change.created_at == decided_at
+    assert change.created_at > plan.created_at
 
 
 @pytest.mark.parametrize("kind", ["recalc", "calories"])

@@ -317,6 +317,21 @@ def test_athlete_withdraws_pending_and_coach_is_notified(w: World) -> None:
     problem(act(w.cleo, link["id"], "approve"), 409, "link_not_pending")
 
 
+def test_coach_ending_pending_request_declines_it_and_notifies_the_athlete(w: World) -> None:
+    link = request(w)
+    r = act(w.cleo, link["id"], "end")
+    assert r.status_code == 200 and r.json()["status"] == "declined"
+    assert_matches_schema(r.json(), "CoachLink")
+    ana_notes = {n.type: n for n in notes(w, w.ana)}
+    assert set(ana_notes) == {"link_request_declined"}
+    assert ana_notes["link_request_declined"].payload == {
+        "link_id": link["id"],
+        "actor": {"id": str(w.cleo.id), "role": "coach"},
+    }
+    assert w.ana.client.get("/api/v1/me").json()["pending_coach_link_id"] is None
+    problem(act(w.cleo, link["id"], "end"), 409, "link_not_pending")
+
+
 @pytest.mark.parametrize("who", ["ana", "cleo"])
 def test_either_side_ends_active_link(w: World, who: str) -> None:
     link = request(w)

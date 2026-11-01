@@ -92,11 +92,11 @@ describe("session cache and header state", () => {
 
     await signIn(user, "ben@example.com");
 
-    expect(await screen.findByText("Hi, Ben")).toBeInTheDocument();
+    // A coach has no day of their own: Today sends them to the client list (#48).
+    expect(await screen.findByRole("heading", { level: 1, name: en.coach.clients.title })).toBeInTheDocument();
     expect(screen.queryByText("Hi, Ana")).not.toBeInTheDocument();
-    expect(screen.getByText(en.today.placeholder.coach)).toBeInTheDocument();
     expect(signOutButton()).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/today");
+    expect(router.state.location.pathname).toBe("/coach/clients");
   });
 
   it("shows sign-out after sign-up and today's date in the zone the user chose", async () => {

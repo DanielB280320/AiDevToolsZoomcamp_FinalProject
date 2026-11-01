@@ -1136,9 +1136,11 @@ export interface paths {
         put?: never;
         /**
          * End a link (either side)
-         * @description Either party; an athlete may also withdraw a `pending` request. Access is revoked
-         *     immediately — subsequent coach calls on that athlete return `403`. Link must be `pending` or
-         *     `active` (409 otherwise). Notifies the other party.
+         * @description Either party; an athlete may also withdraw a `pending` request (status `ended`). A coach
+         *     ending a `pending` request declines it: status `declined` and the athlete gets the
+         *     link-declined notification. Access is revoked immediately — subsequent coach calls on that
+         *     athlete return `403`. Link must be `pending` or `active` (409 otherwise). Notifies the
+         *     other party.
          */
         post: operations["endCoachLink"];
         delete?: never;
@@ -2435,6 +2437,8 @@ export interface components {
         AttentionReason: "low_adherence" | "deload" | "inactive";
         CoachAthleteSummary: {
             athlete: components["schemas"]["UserRef"];
+            units: components["schemas"]["Units"];
+            timezone: components["schemas"]["Timezone"];
             link_id: components["schemas"]["Id"];
             linked_since: components["schemas"]["Timestamp"];
             needs_attention: boolean;

@@ -378,10 +378,10 @@ describe("Body", () => {
 });
 
 describe("Page access and 360 px layout", () => {
-  it("tells a coach that athlete charts come later, without calling the API", async () => {
+  it("tells a coach that charts are on each client's page, without calling the API", async () => {
     server.use(meOk(meFixture({ role: "coach" })));
     renderApp("/progress");
-    expect(await screen.findByText(/arrive with the coach dashboard/)).toBeInTheDocument();
+    expect(await screen.findByText(/shown on each client's page/)).toBeInTheDocument();
   });
 
   it("keeps every chart and the heat map within a 360 px viewport", async () => {

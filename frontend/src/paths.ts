@@ -11,6 +11,10 @@ export const paths = {
   progress: "/progress",
   notifications: "/notifications",
   coach: "/coach",
+  coachClients: "/coach/clients",
+  /** A client's views in the coach context (F16); `tail` is `/week`, `/plan`, ... */
+  coachClient: (athleteId: string, tail = "") => `/coach/clients/${athleteId}${tail}`,
+  coachClientPattern: "/coach/clients/:athleteId",
   sessionChart: (sessionId: string) => `/progress/session/${sessionId}`,
   sessionChartPattern: "/progress/session/:sessionId",
   workout: (sessionId: string) => `/workout/${sessionId}`,

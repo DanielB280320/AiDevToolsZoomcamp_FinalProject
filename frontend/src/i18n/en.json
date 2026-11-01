@@ -117,10 +117,7 @@
     "retry": "Try again"
   },
   "today": {
-    "greeting": "Hi, {{name}}",
-    "placeholder": {
-      "coach": "Your athletes and their latest days will appear here."
-    }
+    "greeting": "Hi, {{name}}"
   },
   "notFound": {
     "title": "This page doesn't exist",
@@ -223,7 +220,8 @@
       "attention": "{{notes}} coach notes are waiting for you.",
       "startWorkout": "Start workout",
       "continueWorkout": "Continue workout",
-      "viewWorkout": "View workout"
+      "viewWorkout": "View workout",
+      "notLogged": "Not logged"
     }
   },
   "suggestions": {
@@ -255,6 +253,13 @@
       "invalidOverrides": "Those values aren't allowed for this suggestion.",
       "invalidNumber": "Enter whole numbers (weight may have decimals).",
       "generic": "Something went wrong. Try again."
+    },
+    "decided": {
+      "title": "Recent decisions",
+      "accepted": "Accepted",
+      "rejected": "Rejected",
+      "acceptedBy": "Accepted by {{name}} (coach)",
+      "rejectedBy": "Rejected by {{name}} (coach)"
     }
   },
   "onboarding": {
@@ -627,7 +632,7 @@
     "empty": "No weigh-ins yet.",
     "bodyFatValue": "{{value}} % body fat",
     "loadFailed": "FitWise couldn't load your weigh-ins.",
-    "coachNotice": "Only the athlete can log weigh-ins. Coaches review them from the athlete's view.",
+    "coachNotice": "Only the athlete can log weigh-ins. Coaches read them here.",
     "errors": {
       "futureDate": "The date can't be in the future.",
       "invalidDate": "Enter a valid date.",
@@ -665,7 +670,7 @@
     "kcal": "{{value}} kcal",
     "none": "—",
     "estimated": "estimated",
-    "coachNotice": "Charts for your linked athletes arrive with the coach dashboard.",
+    "coachNotice": "Charts are shown on each client's page.",
     "forbidden": {
       "title": "You don't have access to this data.",
       "detail": "Charts are only available to the athlete who owns them."
@@ -772,7 +777,7 @@
     "title": "Plan",
     "loading": "Loading your plan…",
     "status": "Version {{version}}, {{source}}",
-    "coachNotice": "Only the athlete can edit a plan for now. Coach editing arrives with coach linking.",
+    "coachNotice": "Plans are edited from a client's page. Open a client from the client list.",
     "save": "Save changes",
     "saving": "Saving…",
     "saveOverLatest": "Save over the latest plan",
@@ -1021,6 +1026,58 @@
       "noAthletes": "No linked athletes yet.",
       "endLink": "End link",
       "endLinkFor": "End link with {{name}}"
+    },
+    "nav": {
+      "label": "Coach",
+      "clients": "Clients",
+      "profile": "Profile and requests"
+    },
+    "clients": {
+      "title": "Clients",
+      "lead": "Athletes linked to you. Those who need attention come first.",
+      "caption": "Your clients, athletes who need attention first",
+      "columns": {
+        "client": "Client",
+        "adherence": "Training, last 7 days",
+        "lastLog": "Last log",
+        "pending": "Pending suggestions"
+      },
+      "needsAttention": "Needs attention",
+      "reasons": {
+        "low_adherence": "Low adherence",
+        "deload": "Deload",
+        "inactive": "No recent logs"
+      },
+      "percent": "{{value}} %",
+      "noAdherence": "–",
+      "noAdherenceLabel": "No session was planned in the last 7 days",
+      "noLogs": "No logs yet",
+      "emptyTitle": "No linked athletes yet",
+      "emptyBody": "Athletes find you by name or exact email on their Coach page and send a request. Approve it on your coach profile page and they appear here. Make sure your profile is discoverable.",
+      "emptyLink": "Open your coach profile and requests"
+    },
+    "client": {
+      "bannerLabel": "Athlete you are viewing",
+      "viewing": "Viewing {{name}}",
+      "back": "Back to clients",
+      "navLabel": "Client views",
+      "sessionDetail": "Session detail",
+      "tabs": {
+        "today": "Today",
+        "week": "Week",
+        "month": "Month",
+        "body": "Body",
+        "plan": "Plan",
+        "progress": "Progress",
+        "profile": "Profile"
+      },
+      "notLinked": {
+        "title": "Not available",
+        "body": "You are not linked to this athlete, or the link has ended. No data is shown."
+      },
+      "profile": {
+        "title": "Profile"
+      }
     }
   }
 }

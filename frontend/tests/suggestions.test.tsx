@@ -66,8 +66,11 @@ function fakeSuggestions(initial: Schemas["Suggestion"][], decideStatus = 200) {
     });
   server.use(
     http.get(apiUrl("/athletes/:athleteId/suggestions"), ({ request }) => {
+      // The "recent decisions" list asks for accepted / rejected; only the pending list is counted.
+      if (new URL(request.url).searchParams.get("status") !== "pending") {
+        return HttpResponse.json({ items: [], weigh_in_hint: null });
+      }
       listCalls += 1;
-      expect(new URL(request.url).searchParams.get("status")).toBe("pending");
       return HttpResponse.json({ items: pending, weigh_in_hint: null });
     }),
     decide("accept"),

@@ -7,6 +7,7 @@ every deploy ([spec §13](../docs/spec.md#13-cicd-github-actions)).
 | Spec file | Journey | Budget |
 |---|---|---|
 | `smoke.spec.ts` | Sign up a new athlete (unique `smoke+<timestamp>-<random>@example.test`), accept the disclaimer, see Today with the display name and today's date in the user's time zone, sign out, sign in again, see Today | < 60 s (the test timeout) |
+| `coach-dashboard.spec.ts` | A coach signs in, sees the client list, opens a linked athlete (Today, Month, Progress), accepts one suggestion and rejects another, edits the plan; the athlete sees both decisions as made by the coach and "Edited by <coach>". A second test checks the coach context at 360 px (no horizontal scroll, 44 px targets) | < 60 s each |
 
 ## Run it locally
 

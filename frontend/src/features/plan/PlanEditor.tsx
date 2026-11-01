@@ -9,10 +9,13 @@ import { MealEditor } from "./MealEditor";
 import { TrainingEditor } from "./TrainingEditor";
 import { VersionHistory } from "./VersionHistory";
 
+/** Whose plan is edited: the signed-in athlete, or a client in the coach context (F8, F16). */
+export type PlanOwner = Pick<Me, "id" | "units" | "timezone">;
+
 type Tab = "training" | "meals" | "history";
 const TABS: Tab[] = ["training", "meals", "history"];
 
-function Editor({ plan, me }: { plan: Plan; me: Me }) {
+function Editor({ plan, me }: { plan: Plan; me: PlanOwner }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("training");
   // A new epoch rebuilds both drafts from the latest plan (after a save, a reload or a regeneration).
@@ -156,7 +159,7 @@ function Editor({ plan, me }: { plan: Plan; me: Me }) {
 }
 
 /** The plan editor of the signed-in athlete (F8). Coaches get a notice only until coach editing lands (D75(8)). */
-export function PlanEditor({ me }: { me: Me }) {
+export function PlanEditor({ me }: { me: PlanOwner }) {
   const { t } = useTranslation();
   const query = usePlan(me.id);
   if (!query.data) return <QueryState isPending={query.isPending} isError={query.isError} onRetry={() => void query.refetch()} />;

@@ -511,7 +511,7 @@ describe("Plan editor: viewer", () => {
       }),
     );
     renderApp("/plan");
-    expect(await screen.findByText(/Only the athlete can edit a plan/)).toBeInTheDocument();
+    expect(await screen.findByText(/Plans are edited from a client's page/)).toBeInTheDocument();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
     expect(planRequests).toBe(0);

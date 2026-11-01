@@ -34,7 +34,6 @@ from app.errors import ProblemError
 from app.models import (
     Exercise,
     Plan,
-    PlanChange,
     PlannedExercise,
     SetLog,
     TrainingDay,
@@ -485,17 +484,10 @@ def _apply_to_plan(
         days=days,
         now=old.created_at,
         revision=old.revision + 1,
+        change={"kind": "suggestion_accepted", "suggestion_id": str(row.id)},
+        change_at=now,
     )
     new.updated_at = now
-    db.add(
-        PlanChange(
-            plan_id=new.id,
-            author_id=actor.id,
-            author_role=actor.role,
-            change={"kind": "suggestion_accepted", "suggestion_id": str(row.id)},
-            created_at=now,
-        )
-    )
     day_map = {o.id: n for o, n in zip(old_days, new.training_days, strict=True)}
     planned_map: dict[uuid.UUID, uuid.UUID] = {}
     for o, n in zip(old_days, new.training_days, strict=True):

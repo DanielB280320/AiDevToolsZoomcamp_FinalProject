@@ -10,7 +10,7 @@ from app.models import User
 from app.schemas import coach as out
 from app.schemas.base import NoNul
 from app.schemas.problem import Problem
-from app.services import coach_links
+from app.services import coach_dashboard, coach_links
 from app.services.clock import ClockDep
 
 router = APIRouter(tags=["Coach"])
@@ -40,6 +40,16 @@ def update_profile(
     body: out.CoachProfileInput, coach: CoachUser, db: SessionDep
 ) -> out.CoachProfile:
     return coach_links.update_profile(db, coach, body)
+
+
+@router.get(
+    "/coach/athletes",
+    operation_id="listCoachAthletes",
+    response_model=out.CoachAthleteList,
+    responses={401: _PROBLEM, 403: _PROBLEM},
+)
+def list_athletes(coach: CoachUser, db: SessionDep, clock: ClockDep) -> out.CoachAthleteList:
+    return coach_dashboard.list_athletes(db, coach, clock.now())
 
 
 @router.get(

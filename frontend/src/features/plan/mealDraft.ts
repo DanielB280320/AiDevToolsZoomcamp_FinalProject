@@ -51,7 +51,7 @@ export function mealDraftFromPlan(days: MealDay[]): DraftMealDay[] {
       uid: newUid(),
       weekday,
       existed: day !== undefined,
-      editedBy: day?.edited_by?.display_name ?? null,
+      editedBy: day?.edited_by?.role === "coach" ? day.edited_by.display_name : null,
       meals: day ? day.meals.map(fromPlanned) : [],
     };
   });

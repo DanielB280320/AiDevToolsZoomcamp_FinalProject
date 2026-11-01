@@ -61,13 +61,12 @@ describe("Today page", () => {
     expect(heading).toHaveTextContent("October 23, 2026");
   });
 
-  it.each<["athlete" | "coach", string]>([
-    ["coach", en.today.placeholder.coach],
-  ])("shows the M1 placeholder for a %s", async (role, text) => {
-    server.use(meOk(meFixture({ role })));
+  it("sends a coach from Today to the client list", async () => {
+    server.use(meOk(meFixture({ role: "coach" })));
 
-    renderApp("/today");
+    const { router } = renderApp("/today");
 
-    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: en.coach.clients.title })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/coach/clients");
   });
 });
