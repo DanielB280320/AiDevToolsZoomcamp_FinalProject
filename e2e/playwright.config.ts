@@ -13,6 +13,10 @@ const baseURL = (process.env.E2E_BASE_URL || process.env.BASE_URL || "http://loc
 
 const isCI = Boolean(process.env.CI);
 
+// Only for an overloaded machine (a shared laptop or WSL): E2E_SLOW=5 multiplies every timeout.
+// Never set in CI, dev or prod, where the budgets below are the acceptance criteria.
+const slow = Math.max(1, Number(process.env.E2E_SLOW) || 1);
+
 export default defineConfig({
   testDir: ".",
   testMatch: "**/*.spec.ts",
@@ -24,8 +28,8 @@ export default defineConfig({
   retries: 0,
   workers: isCI ? 1 : undefined,
   // Whole-test budget. The smoke journey must finish in < 60 s against a local stack (#65).
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  timeout: 60_000 * slow,
+  expect: { timeout: 10_000 * slow },
   reporter: isCI ? [["list"], ["html", { open: "never" }]] : [["list"]],
   use: {
     baseURL,
@@ -34,8 +38,8 @@ export default defineConfig({
     ...devices["Pixel 7"],
     locale: "en-US",
     timezoneId: "Pacific/Auckland",
-    navigationTimeout: 15_000,
-    actionTimeout: 10_000,
+    navigationTimeout: 15_000 * slow,
+    actionTimeout: 10_000 * slow,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
