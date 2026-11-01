@@ -32,6 +32,7 @@ all targets.
 | `make scan` | Security scans: `scan-secrets` (gitleaks, full history; run from a regular clone), `scan-deps` (pip-audit, npm audit), `scan-images` (Trivy, HIGH/CRITICAL with a fix) |
 | `make up-obs` | The app plus the observability stack (OTel Collector, Prometheus, Loki, Tempo, Grafana at `http://localhost:${GRAFANA_PORT}`, default 3030); the backend exports to it. `make check-obs` verifies metric/exemplar/trace/log correlation and the privacy gate; `make down-obs` / `make clean-obs` stop it. See [observability/README.md](observability/README.md) |
 | `make rollback-compat` | Rollback guard: builds the previous release's backend image (`PREV_REF`, default the merge-base with `origin/main`) and this tree's, migrates with the new one, rolls back without the migration step and checks `readyz` (own Compose project, nothing published) |
+| `make seed-demo` | Load the demo athlete + coach with 8 weeks of history into the running stack (see "Demo data" below). Refuses in prod |
 | `make build TAG=<sha>` | Build `<IMAGE_PREFIX>-backend:<TAG>` and `<IMAGE_PREFIX>-frontend:<TAG>` |
 
 ### CI
@@ -88,6 +89,24 @@ COMPOSE_PROJECT_NAME=fitwise-21 HTTP_PORT=8121 TEST_DB_PORT=15421 make up test
 
 On Windows/WSL with Docker Desktop, pick ports below 49152: Windows reserves the dynamic range
 above it and Docker Desktop may fail to publish there.
+
+## Demo data
+
+With the stack running (`make up`), `make seed-demo` loads one athlete with 8 weeks of training,
+meal and weight history plus one linked coach. It is a backend command (`python -m app.cli.seed_demo`)
+run after the migration step, never on app start. Running it again changes nothing; if an earlier run
+failed half-way, the next run rebuilds the two demo accounts. It refuses to run when `APP_ENV` or
+`FITWISE_ENV` is `prod`, and it logs counts only.
+
+Test data only, never use these credentials anywhere real:
+
+| Role | Email | Password |
+|---|---|---|
+| Athlete | `demo.athlete@fitwise.test` | `demo-password-123` |
+| Coach | `demo.coach@fitwise.test` | `demo-password-123` |
+
+The history ends yesterday (athlete time zone Europe/Madrid) and is relative to the day you run it,
+so re-seed a fresh database (`make clean`, `make up`, `make seed-demo`) when it gets old.
 
 ## Feature flags
 

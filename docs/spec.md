@@ -650,7 +650,7 @@ Coverage target: ≥ 90 % lines for `backend/app/engines/`, ≥ 75 % backend ove
 
 - `make up` → `docker compose up --build --wait`: Postgres, a one-shot **migration step** (`alembic upgrade head`, then the idempotent F4.1 seed), backend, frontend (nginx serving the built SPA and proxying `/api`). The backend starts only after the migration step succeeds, and it **only starts the app**. It never migrates or seeds on start ([D50](#19-decisions-log), [ADR 0009](adr/0009-separate-migration-step.md)).
 - `make up-obs` adds the observability stack locally.
-- Seeded demo data command: `make seed-demo` (one athlete with 8 weeks of history, one coach).
+- Seeded demo data command: `make seed-demo` runs `python -m app.cli.seed_demo` in the running backend container, after the migration step and never on app start. It loads one athlete (onboarded, targets, generated training and meal plan, time zone Europe/Madrid) with 8 weeks of history up to today and one coach with an `active` link to them, all through the same services the API uses. History: at least 20 finished sessions with set logs (some partial, some missed), meal logs on at least 40 days, at least 8 weigh-ins, extra activities, and pending and decided progression suggestions. It is idempotent (a finished demo is left untouched; a half-built one from a failed run is rebuilt), refuses to run when `APP_ENV` or `FITWISE_ENV` is `prod`, and logs counts only. Credentials (test data) are in the README.
 - Health checks on every service; `docker compose up --wait` succeeds only when all are healthy.
 
 ## 12. Deployment (AWS)
