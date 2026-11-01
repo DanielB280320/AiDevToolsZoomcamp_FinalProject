@@ -73,18 +73,24 @@ jar.clear()
 step("log in", "POST", "/auth/login", {"email": email, "password": password}, {200})
 aid = me["id"]
 
+today = datetime.now(ZoneInfo(TZ)).date()
+
+# Train six days a week, resting on the day after today, so the plan (which
+# starts today) always has a session today whatever weekday CI runs on.
+WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+rest_day = WEEKDAYS[(today.weekday() + 1) % 7]
+preferred_days = [d for d in WEEKDAYS if d != rest_day]
+
 step("onboarding", "POST", f"/athletes/{aid}/onboarding", {
     "profile": {
         "sex": "female", "height_cm": 165, "lifestyle": "lightly_active", "goal": "cutting",
         "experience": "beginner", "days_per_week": 6,
-        "preferred_days": ["mon", "tue", "wed", "thu", "fri", "sat"], "session_minutes": 45,
+        "preferred_days": preferred_days, "session_minutes": 45,
         "equipment": "full_gym", "avoided_exercise_ids": [], "diet": "omnivore", "allergies": [],
         "meals_per_day": 4,
     },
     "body_metric": {"weight_kg": 72.5, "body_fat_method": "entered", "body_fat_pct": 28},
 }, {201})
-
-today = datetime.now(ZoneInfo(TZ)).date()
 
 # A session to log into: today, or the closest day in the last week that has one.
 session = None

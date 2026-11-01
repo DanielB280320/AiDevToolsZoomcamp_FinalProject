@@ -1,6 +1,6 @@
 """Calendar response/request schemas (openapi.yaml `DayView`, `CalendarDay`, `Session`, ...).
 
-Fields owned by later issues (meals #37, energy #38, suggestions #85, notes #49, set logs #29)
+Fields owned by later issues (meals #37, energy #38, suggestions #85, set logs #29)
 are present as the contract requires but empty / zero / null until those land.
 """
 
@@ -11,6 +11,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field
 
 from app.schemas.base import RequestModel, ResponseModel
+from app.schemas.notes import Note
 from app.schemas.plans import ExerciseSummary, ProgressionRule, Weekday
 from app.schemas.setlog import SetLog
 
@@ -101,7 +102,7 @@ class DayView(ResponseModel):
     nutrition_completion: Ratio | None
     pending_suggestions: list[Any]
     weigh_in_hint: None = None
-    notes: list[Any]
+    notes: list[Note]
     meal_warning: str | None = None
 
 

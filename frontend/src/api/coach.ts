@@ -16,10 +16,11 @@ export type AttentionReason = Schemas["AttentionReason"];
 export const coachAthletesKey = ["coach-athletes"] as const;
 
 /** The coach's clients in the order the API returns them: needs attention first (`listCoachAthletes`, F16.5). */
-export function useCoachAthletes(enabled = true) {
+export function useCoachAthletes(enabled = true, refetchInterval: number | false = false) {
   return useQuery({
     queryKey: coachAthletesKey,
     enabled,
+    refetchInterval,
     queryFn: async ({ signal }) => {
       const { data, error, response } = await api.GET("/coach/athletes", { signal });
       if (data) return data.items;

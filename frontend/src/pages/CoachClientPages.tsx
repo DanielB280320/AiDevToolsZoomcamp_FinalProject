@@ -9,6 +9,7 @@ import { ProgressView } from "../features/charts/ProgressView";
 import { SessionChartView } from "../features/charts/SessionChartView";
 import { ClientProfile } from "../features/coach/ClientProfile";
 import { useClientScope } from "../features/coach/clientScope";
+import { SessionNotes } from "../features/notes/SessionNotes";
 import { PlanEditor } from "../features/plan/PlanEditor";
 import { localDay } from "../lib/today";
 import { paths } from "../paths";
@@ -125,6 +126,7 @@ export function CoachClientSessionPage() {
       <div className="mt-4 min-w-0">
         <SessionChartView athleteId={scope.athleteId} sessionId={sessionId} units={scope.units} />
       </div>
+      <SessionNotes athleteId={scope.athleteId} sessionId={sessionId} />
     </article>
   );
 }

@@ -7,6 +7,8 @@
 * `OwnerAccess` / `OwnerOrCoachAccess` (path `{athlete_id}`), `OwnerSession` / `OwnerOrCoachSession`
   (path `{session_id}`) and `OwnerOrCoachSuggestion` (path `{suggestion_id}`) -> an `AthleteAccess`
   per the operation's `x-fitwise-access` (rules in `app.services.access`, the single place).
+* `CoachAccess` (path `{athlete_id}`) -> the linked coach; athletes get 403 `wrong_role`. The
+  `author` operations use `OwnerOrCoachAccess` and then check authorship in the service.
 """
 
 import uuid
@@ -117,8 +119,17 @@ def _suggestion_access(
     return dependency
 
 
+def _coach_access(athlete_id: str, user: CurrentUser, db: SessionDep) -> AthleteAccess:
+    """`x-fitwise-access: coach` on an athlete path: only a coach with an active link (an athlete,
+    even on themselves, gets 403 `wrong_role`: notes are one-way, F16)."""
+    if user.role != "coach":
+        raise ProblemError(403, "wrong_role", "Only coaches can do this.")
+    return access.resolve(db, user, athlete_id, "owner-or-coach")
+
+
 OwnerAccess = Annotated[AthleteAccess, Depends(_athlete_access("owner"))]
 OwnerOrCoachAccess = Annotated[AthleteAccess, Depends(_athlete_access("owner-or-coach"))]
 OwnerSession = Annotated[AthleteAccess, Depends(_session_access("owner"))]
 OwnerOrCoachSession = Annotated[AthleteAccess, Depends(_session_access("owner-or-coach"))]
 OwnerOrCoachSuggestion = Annotated[AthleteAccess, Depends(_suggestion_access("owner-or-coach"))]
+CoachAccess = Annotated[AthleteAccess, Depends(_coach_access)]

@@ -188,7 +188,7 @@ describe("inbox", () => {
     expect(screen.queryByTestId("bell-badge")).not.toBeInTheDocument();
   });
 
-  it.each(["coach_note", "link_request_received", "link_ended", "plan_edited_by_coach"] as const)(
+  it.each(["link_request_received", "link_ended", "plan_edited_by_coach"] as const)(
     "renders a generic row for %s and does not navigate",
     async (type) => {
       const user = userEvent.setup();
@@ -199,6 +199,27 @@ describe("inbox", () => {
       expect(router.state.location.pathname).toBe("/notifications");
     },
   );
+});
+
+describe("coach_note", () => {
+  it("opens the note's day: marks it read, then navigates to Today for that date", async () => {
+    const user = userEvent.setup();
+    const calls = fakeNotifications([note("coach_note", { payload: { note_id: "note-1", date: "2026-10-20" } })]);
+    const { router } = renderApp("/notifications");
+    await user.click(await screen.findByRole("button", { name: new RegExp(en.notifications.types.coach_note) }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/today"));
+    expect(router.state.location.search).toBe("?date=2026-10-20");
+    expect(calls.read).toHaveLength(1);
+  });
+
+  it("falls back to Today when the note has no day (an exercise note without a session)", async () => {
+    const user = userEvent.setup();
+    fakeNotifications([note("coach_note", { payload: { note_id: "note-2" } })]);
+    const { router } = renderApp("/notifications");
+    await user.click(await screen.findByRole("button", { name: new RegExp(en.notifications.types.coach_note) }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/today"));
+    expect(router.state.location.search).toBe("");
+  });
 });
 
 describe("Today banners", () => {

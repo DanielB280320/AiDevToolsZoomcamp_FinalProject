@@ -6,7 +6,7 @@ no / pending / declined / ended link and a stranger athlete call it against real
 (plan, session, set log, suggestion, meal log, activity); the access query is never mocked. A
 denied call must also leave the database byte-for-byte unchanged.
 
-Operations that do not exist yet sit in `NOT_YET_IMPLEMENTED`; #48 and #49 remove their entries.
+Operations that do not exist yet sit in `NOT_YET_IMPLEMENTED`; the owning issue removes them.
 """
 
 import datetime as dt
@@ -41,15 +41,11 @@ METHODS = ("get", "post", "put", "patch", "delete")
 KNOWN_ACCESS = {"public", "authenticated", "athlete", "coach", "owner", "owner-or-coach", "author"}
 ATHLETE_SCOPED = {"owner", "owner-or-coach"}
 
-# Not implemented yet. #49 (notes) deletes its entries; the test
+# Not implemented yet. #50 deletes its entries; the test
 # `test_not_yet_implemented_entries_are_really_missing` fails when an entry is implemented.
 NOT_YET_IMPLEMENTED: set[tuple[str, str]] = {
     ("POST", "/me/delete"),  # #50
     ("GET", "/me/export"),  # #50
-    ("GET", "/athletes/{athlete_id}/notes"),
-    ("POST", "/athletes/{athlete_id}/notes"),
-    ("PUT", "/athletes/{athlete_id}/notes/{note_id}"),
-    ("DELETE", "/athletes/{athlete_id}/notes/{note_id}"),
 }
 
 
@@ -388,6 +384,7 @@ BUILDERS: dict[str, Builder] = {
     "DELETE /athletes/{athlete_id}/activities/{activity_id}": lambda w: Request(
         {"activity_id": new_activity(w)}
     ),
+    "GET /athletes/{athlete_id}/notes": lambda w: Request(),
     "GET /athletes/{athlete_id}/suggestions": lambda w: Request(),
     "POST /suggestions/{suggestion_id}/accept": lambda w: Request(
         {"suggestion_id": new_suggestion(w)}

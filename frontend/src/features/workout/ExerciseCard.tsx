@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 
 import type { SessionExercise, SessionSet, SetLogInput, ExerciseSummary } from "../../api/workout";
 import type { UnitSystem } from "../../lib/units";
+import type { CoachNote } from "../../api/notes";
+import { NoteThread } from "../notes/NoteThread";
 import { SetEditor } from "./SetEditor";
 import { describeValues } from "./values";
 
@@ -13,6 +15,9 @@ export interface SetSaver {
 
 interface Props {
   exercise: SessionExercise;
+  /** Coach notes on this exercise (read-only for the athlete). */
+  notes?: CoachNote[];
+  athleteId?: string;
   units: UnitSystem;
   locked: boolean;
   pending: boolean;
@@ -142,6 +147,9 @@ export function ExerciseCard(props: Props) {
         {exercise.exercise.name}
       </h2>
       <p className="text-step--1 text-slate">{t("workout.restPlanned", { count: exercise.rest_seconds })}</p>
+      {props.athleteId && (
+        <NoteThread athleteId={props.athleteId} notes={props.notes ?? []} label={exercise.exercise.name} />
+      )}
       <ol>
         {exercise.sets.map((set) => (
           <SetRow key={set.set_no} {...props} set={set} />

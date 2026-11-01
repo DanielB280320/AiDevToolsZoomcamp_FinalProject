@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate, Outlet, useParams } from "react-router";
 
-import { coachAthletesKey, useCoachAthletes } from "../api/coach";
+import { type CoachAthleteSummary, coachAthletesKey, useCoachAthletes } from "../api/coach";
 import { isApiError } from "../api/errors";
 import { useSignedInUser } from "../components/RequireAuth";
 import { QueryState } from "../features/calendar/QueryState";
@@ -11,7 +11,7 @@ import { ClientNav } from "../features/coach/ClientNav";
 import type { ClientScope } from "../features/coach/clientScope";
 import { paths } from "../paths";
 
-function NotLinked() {
+function NotLinked({ onCheck }: { onCheck: () => void }) {
   const { t } = useTranslation();
   return (
     <article className="max-w-[40rem]" data-testid="not-linked">
@@ -19,7 +19,14 @@ function NotLinked() {
       <p role="alert" className="mt-3 border-l-4 border-iron pl-3">
         {t("coach.client.notLinked.body")}
       </p>
-      <p className="mt-4">
+      <p className="mt-4 flex flex-wrap items-center gap-x-6">
+        <button
+          type="button"
+          onClick={onCheck}
+          className="inline-flex min-h-11 items-center font-semibold text-spruce underline underline-offset-4"
+        >
+          {t("coach.client.notLinked.check")}
+        </button>
         <Link to={paths.coachClients} className="inline-flex min-h-11 items-center font-semibold text-spruce underline underline-offset-4">
           {t("coach.client.back")}
         </Link>
@@ -32,15 +39,20 @@ function NotLinked() {
  * Any request of the coach context that answers `403 not_linked` (the link ended after the list
  * loaded, or the id was never linked) turns the shell into the not-linked page and drops the
  * cached client list, so the ended client disappears from it too. Watching the query and mutation
- * caches covers every view, present and future, without each one handling the error.
+ * caches covers every view, present and future, without each one handling the error. The page does
+ * not stick: once the list of active links, fetched after the error, holds the client under a new
+ * link (a re-link while the shell stays mounted), the client's views come back without leaving the page.
+ * The list is refetched on a timer and by "Check again" while the page shows.
  */
-function useNotLinkedGuard(athleteId: string | undefined): boolean {
+function useNotLinkedGuard(athleteId: string | undefined): { at: number; linkId: string | undefined } | null {
   const queryClient = useQueryClient();
-  const [hit, setHit] = useState<string | null>(null);
+  const [hit, setHit] = useState<{ id: string; at: number; linkId: string | undefined } | null>(null);
   useEffect(() => {
     const onError = (error: unknown) => {
       if (isApiError(error) && error.problem.code === "not_linked") {
-        setHit(athleteId ?? "");
+        const known = queryClient.getQueryData<CoachAthleteSummary[]>(coachAthletesKey);
+        const linkId = known?.find((c) => c.athlete.id === athleteId)?.link_id;
+        setHit({ id: athleteId ?? "", at: Date.now(), linkId });
         void queryClient.invalidateQueries({ queryKey: coachAthletesKey });
       }
     };
@@ -55,8 +67,11 @@ function useNotLinkedGuard(athleteId: string | undefined): boolean {
       unsubscribeMutations();
     };
   }, [queryClient, athleteId]);
-  return hit !== null && hit === (athleteId ?? "");
+  return hit !== null && hit.id === (athleteId ?? "") ? hit : null;
 }
+
+/** How often the not-linked page looks for a new link while the shell stays mounted. */
+const RELINK_POLL_MS = 15_000;
 
 /**
  * Coach context (spec F16): a persistent banner with the client's name and a way back, the
@@ -67,14 +82,21 @@ export function CoachClientShell() {
   const { t } = useTranslation();
   const me = useSignedInUser();
   const { athleteId } = useParams();
-  const clients = useCoachAthletes(me.role === "coach");
-  const notLinked = useNotLinkedGuard(athleteId);
+  const [polling, setPolling] = useState(false);
+  const clients = useCoachAthletes(me.role === "coach", polling ? RELINK_POLL_MS : false);
+  const hit = useNotLinkedGuard(athleteId);
   if (me.role !== "coach") return <Navigate to={paths.today} replace />;
   if (!clients.data) {
     return <QueryState isPending={clients.isPending} isError={clients.isError} onRetry={() => void clients.refetch()} />;
   }
   const client = clients.data.find((c) => c.athlete.id === athleteId);
-  if (!client || notLinked) return <NotLinked />;
+  // The error stands until a list fetched after it holds the client under a new link (a re-link).
+  // The same link id means the list is just stale: its data still answers 403.
+  const relinked = hit !== null && clients.dataUpdatedAt > hit.at && client !== undefined && client.link_id !== hit.linkId;
+  const notLinked = hit !== null && !relinked;
+  const showNotLinked = !client || notLinked;
+  if (showNotLinked !== polling) setPolling(showNotLinked);
+  if (showNotLinked) return <NotLinked onCheck={() => void clients.refetch()} />;
   const scope: ClientScope = {
     athleteId: client.athlete.id,
     displayName: client.athlete.display_name,

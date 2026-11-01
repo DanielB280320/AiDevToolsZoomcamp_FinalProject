@@ -217,7 +217,6 @@
       "targetBalance": "Target balance (kcal)",
       "balance": "Balance (kcal)",
       "estimated": "All calorie numbers are estimates.",
-      "attention": "{{notes}} coach notes are waiting for you.",
       "startWorkout": "Start workout",
       "continueWorkout": "Continue workout",
       "viewWorkout": "View workout",
@@ -948,6 +947,21 @@
       "meal": "{{slot}}: {{name}} ({{kcal}} kcal)"
     }
   },
+  "notes": {
+    "dayTitle": "Coach notes for this day",
+    "sessionTitle": "Coach notes on this workout",
+    "listLabel": "Coach notes: {{label}}",
+    "add": "Add a note: {{label}}",
+    "by": "Coach {{name}}",
+    "save": "Save note",
+    "cancel": "Cancel",
+    "edit": "Edit note",
+    "editLabel": "Edit your note",
+    "delete": "Delete note",
+    "failed": "That didn't save. Try again.",
+    "dayLabel": "this day",
+    "sessionLabel": "this workout"
+  },
   "notifications": {
     "title": "Notifications",
     "unreadTag": "Unread",
@@ -972,6 +986,7 @@
       "seeAll": "See all notifications"
     },
     "types": {
+      "coach_note": "Your coach left you a note.",
       "progression_suggestion": "A new progression suggestion is ready for your training.",
       "calorie_suggestion": "A new calorie target suggestion is ready.",
       "recalc_prompt": "Your weigh-in suggests recalculating your targets.",
@@ -1073,7 +1088,8 @@
       },
       "notLinked": {
         "title": "Not available",
-        "body": "You are not linked to this athlete, or the link has ended. No data is shown."
+        "body": "You are not linked to this athlete, or the link has ended. No data is shown.",
+        "check": "Check again"
       },
       "profile": {
         "title": "Profile"
