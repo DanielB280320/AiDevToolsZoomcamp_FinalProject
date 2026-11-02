@@ -24,6 +24,7 @@ function planned(
 ): Schemas["PlannedMeal"] {
   return {
     id,
+    meal_key: `key-${id}`,
     slot,
     order: 1,
     meal: { id: `m-${id}`, name, slots: [slot] },

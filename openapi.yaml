@@ -935,6 +935,56 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
+  /athletes/{athlete_id}/plan/meals/{meal_key}/swaps:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+      - name: meal_key
+        in: path
+        required: true
+        description: Stable identity of a planned meal in the active plan (`PlannedMeal.meal_key`, D73).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Plan]
+      operationId: getMealSwaps
+      summary: Alternatives for a planned meal (similar kcal)
+      description: |
+        Up to 3 other meals for the same slot whose kcal, at the portion factor that matches the
+        planned meal (0.75-1.5, F7), are within +-10 % of the planned meal's kcal at its current
+        portion (D86). Same filters as F7: the plan's slot, diet and allergies; meals already used
+        twice in the week and meals already in that day are left out. Closest kcal first, ties by
+        meal id; the same request gives the same list; fewer than 3 (or none) are returned as-is.
+        Read-only: to apply one, send it through `updateMealPlan` without the meal's `id` (a new
+        meal, new `meal_key`, no logs, D73). `date` (optional) is the calendar day being edited:
+        a date before today in the athlete's time zone gives `422 past_day` (F8.1), a date on
+        another weekday than the meal's `422 wrong_weekday`.
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Alternatives, possibly empty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MealSwapList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
   /athletes/{athlete_id}/plan/regenerate:
     parameters:
       - $ref: '#/components/parameters/AthleteId'
@@ -3775,10 +3825,14 @@ components:
             $ref: '#/components/schemas/FoodGrams'
     PlannedMeal:
       type: object
-      required: [id, slot, order, meal, portion_factor, items, totals]
+      required: [id, meal_key, slot, order, meal, portion_factor, items, totals]
       properties:
         id:
           $ref: '#/components/schemas/Id'
+        meal_key:
+          type: string
+          format: uuid
+          description: Stable identity across plan versions (D73); use it for the swaps endpoint.
         slot:
           $ref: '#/components/schemas/MealSlot'
         order:
@@ -3794,6 +3848,40 @@ components:
             $ref: '#/components/schemas/MealItem'
         totals:
           $ref: '#/components/schemas/Macros'
+    MealSwap:
+      type: object
+      required: [meal_id, name, portion_factor, items, totals]
+      properties:
+        meal_id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+        portion_factor:
+          type: number
+          minimum: 0.75
+          maximum: 1.5
+        items:
+          type: array
+          description: Foods with grams already scaled by `portion_factor`.
+          items:
+            $ref: '#/components/schemas/MealItem'
+        totals:
+          $ref: '#/components/schemas/Macros'
+    MealSwapList:
+      type: object
+      required: [meal_key, alternatives, reason]
+      properties:
+        meal_key:
+          type: string
+          format: uuid
+        alternatives:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/MealSwap'
+        reason:
+          type: string
+          description: Why these meals (or why none) were suggested.
     MealDayInput:
       type: object
       additionalProperties: false

@@ -473,6 +473,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/athletes/{athlete_id}/plan/meals/{meal_key}/swaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+                /** @description Stable identity of a planned meal in the active plan (`PlannedMeal.meal_key`, D73). */
+                meal_key: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Alternatives for a planned meal (similar kcal)
+         * @description Up to 3 other meals for the same slot whose kcal, at the portion factor that matches the
+         *     planned meal (0.75-1.5, F7), are within +-10 % of the planned meal's kcal at its current
+         *     portion (D86). Same filters as F7: the plan's slot, diet and allergies; meals already used
+         *     twice in the week and meals already in that day are left out. Closest kcal first, ties by
+         *     meal id; the same request gives the same list; fewer than 3 (or none) are returned as-is.
+         *     Read-only: to apply one, send it through `updateMealPlan` without the meal's `id` (a new
+         *     meal, new `meal_key`, no logs, D73). `date` (optional) is the calendar day being edited:
+         *     a date before today in the athlete's time zone gives `422 past_day` (F8.1), a date on
+         *     another weekday than the meal's `422 wrong_weekday`.
+         */
+        get: operations["getMealSwaps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/athletes/{athlete_id}/plan/regenerate": {
         parameters: {
             query?: never;
@@ -1895,6 +1928,11 @@ export interface components {
         };
         PlannedMeal: {
             id: components["schemas"]["Id"];
+            /**
+             * Format: uuid
+             * @description Stable identity across plan versions (D73); use it for the swaps endpoint.
+             */
+            meal_key: string;
             slot: components["schemas"]["MealSlot"];
             order: number;
             meal: components["schemas"]["MealSummary"];
@@ -1902,6 +1940,21 @@ export interface components {
             /** @description Foods with grams already scaled by `portion_factor`. */
             items: components["schemas"]["MealItem"][];
             totals: components["schemas"]["Macros"];
+        };
+        MealSwap: {
+            meal_id: components["schemas"]["Id"];
+            name: string;
+            portion_factor: number;
+            /** @description Foods with grams already scaled by `portion_factor`. */
+            items: components["schemas"]["MealItem"][];
+            totals: components["schemas"]["Macros"];
+        };
+        MealSwapList: {
+            /** Format: uuid */
+            meal_key: string;
+            alternatives: components["schemas"]["MealSwap"][];
+            /** @description Why these meals (or why none) were suggested. */
+            reason: string;
         };
         MealDayInput: {
             weekday: components["schemas"]["Weekday"];
@@ -3507,6 +3560,38 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getMealSwaps: {
+        parameters: {
+            query?: {
+                date?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+                /** @description Stable identity of a planned meal in the active plan (`PlannedMeal.meal_key`, D73). */
+                meal_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alternatives, possibly empty. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MealSwapList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
         };
     };

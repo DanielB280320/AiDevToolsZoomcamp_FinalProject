@@ -1,4 +1,4 @@
-import type { Meal, MealDay, MealPlanUpdate, PlannedMeal, Weekday } from "../../api/plan";
+import type { Meal, MealDay, MealPlanUpdate, MealSwap, PlannedMeal, Weekday } from "../../api/plan";
 import { WEEKDAYS } from "../../api/plan";
 import type { MealSlot } from "../../api/meals";
 import { parseDecimal } from "../../lib/units";
@@ -14,6 +14,8 @@ export interface DraftMeal {
   uid: string;
   /** Present for a meal that already exists: sending it keeps the meal's logs (D73, D75(6)). */
   id?: string;
+  /** Identity of a saved meal (D73); swaps are asked for it. Absent for meals not saved yet. */
+  mealKey?: string;
   slot: MealSlot;
   mealId: string;
   mealName: string;
@@ -36,6 +38,7 @@ const gramsText = (grams: number): string => String(Math.round(grams * 10) / 10)
 const fromPlanned = (m: PlannedMeal): DraftMeal => ({
   uid: newUid(),
   id: m.id,
+  mealKey: m.meal_key,
   slot: m.slot,
   mealId: m.meal.id,
   mealName: m.meal.name,
@@ -72,6 +75,19 @@ export function draftFromLibraryMeal(meal: Meal, slot: MealSlot, portion: string
   };
 }
 
+/** A swap alternative as a new meal (D86): no id, so it gets a new meal_key and no logs (D73). */
+export function draftFromSwap(swap: MealSwap, slot: MealSlot): DraftMeal {
+  return {
+    uid: newUid(),
+    slot,
+    mealId: swap.meal_id,
+    mealName: swap.name,
+    portion: String(swap.portion_factor),
+    foods: swap.items.map((i) => ({ foodId: i.food.id, name: i.food.name, grams: gramsText(i.grams) })),
+    gramsEdited: false,
+  };
+}
+
 /** Copy the meals of one weekday onto another (D87): no ids, so every copy gets a new meal_key (D73). */
 export function duplicateMealDay(days: DraftMealDay[], from: Weekday, to: Weekday): DraftMealDay[] {
   const source = days.find((d) => d.weekday === from);
@@ -84,6 +100,7 @@ export function duplicateMealDay(days: DraftMealDay[], from: Weekday, to: Weekda
           meals: source.meals.map((m) => {
             const fresh: DraftMeal = { ...m, uid: newUid(), foods: m.foods.map((f) => ({ ...f })) };
             delete fresh.id;
+            delete fresh.mealKey;
             return fresh;
           }),
         }

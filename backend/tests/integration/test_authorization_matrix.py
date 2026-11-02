@@ -368,6 +368,9 @@ BUILDERS: dict[str, Builder] = {
     "GET /athletes/{athlete_id}/plan": lambda w: Request(),
     "PUT /athletes/{athlete_id}/plan/training": lambda w: Request(json=_training_body(plan(w))),
     "PUT /athletes/{athlete_id}/plan/meals": lambda w: Request(json=_meals_body(plan(w))),
+    "GET /athletes/{athlete_id}/plan/meals/{meal_key}/swaps": lambda w: Request(
+        {"meal_key": plan(w)["meal_days"][0]["meals"][0]["meal_key"]}
+    ),
     "POST /athletes/{athlete_id}/plan/regenerate": lambda w: Request(json={"scope": "training"}),
     "GET /athletes/{athlete_id}/plan/versions": lambda w: Request(),
     "GET /athletes/{athlete_id}/plan/versions/{version}": lambda w: Request({"version": "1"}),
@@ -589,7 +592,7 @@ def filled(op: Operation) -> str:
         k: str(uuid.uuid4())
         for k in (
             "athlete_id", "session_id", "set_log_id", "meal_log_id", "activity_id",
-            "suggestion_id", "exercise_id", "link_id", "notification_id", "note_id",
+            "suggestion_id", "exercise_id", "link_id", "notification_id", "note_id", "meal_key",
         )
     }  # fmt: skip
     return API + op.path.format_map(random_ids | {"version": "1", "date": "2026-10-22"})

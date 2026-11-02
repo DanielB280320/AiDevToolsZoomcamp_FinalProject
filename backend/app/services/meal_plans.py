@@ -72,6 +72,8 @@ def candidates(session: Session, athlete_id: uuid.UUID) -> list[MealCandidate]:
                 allergens=meal_allergens(food.allergen_tags for _, food in pairs),
                 kcal=totals.kcal,
                 protein_g=totals.protein_g,
+                carbs_g=totals.carbs_g,
+                fat_g=totals.fat_g,
             )
         )
     return result
@@ -128,10 +130,11 @@ def meal_day_views(
     return [_day_view(day, meals, foods, users) for day in days]
 
 
-def _planned_view(
-    planned: PlannedMeal, meal: Meal, rows: Sequence[tuple[MealItem, Food]]
-) -> out.PlannedMeal:
-    scaled = [(food, round(item.grams * planned.portion_factor, 1)) for item, food in rows]
+def scaled_items(
+    rows: Sequence[tuple[MealItem, Food]], factor: float
+) -> tuple[list[MealItemOut], Macros]:
+    """A meal's foods with grams scaled by `factor`, and their totals."""
+    scaled = [(food, round(item.grams * factor, 1)) for item, food in rows]
     computed = meal_macros([(_per_100g(food), grams) for food, grams in scaled])
     items = [
         MealItemOut(
@@ -145,14 +148,35 @@ def _planned_view(
         for (food, grams), macros in zip(scaled, computed.items, strict=True)
     ]
     totals = computed.totals
+    return items, _macros(totals.kcal, totals.protein_g, totals.carbs_g, totals.fat_g)
+
+
+def meal_rows(session: Session, meal_id: uuid.UUID) -> list[tuple[MealItem, Food]]:
+    """The foods of one meal in order."""
+    return [
+        (item, food)
+        for item, food in session.execute(
+            select(MealItem, Food)
+            .join(Food, Food.id == MealItem.food_id)
+            .where(MealItem.meal_id == meal_id)
+            .order_by(MealItem.position)
+        )
+    ]
+
+
+def _planned_view(
+    planned: PlannedMeal, meal: Meal, rows: Sequence[tuple[MealItem, Food]]
+) -> out.PlannedMeal:
+    items, totals = scaled_items(rows, planned.portion_factor)
     return out.PlannedMeal(
         id=planned.id,
+        meal_key=planned.meal_key,  # type: ignore[arg-type]
         slot=planned.slot,  # type: ignore[arg-type]
         order=planned.position,
         meal=out.MealSummary(id=meal.id, name=meal.name, slots=meal.slots),  # type: ignore[arg-type]
         portion_factor=planned.portion_factor,
         items=items,
-        totals=_macros(totals.kcal, totals.protein_g, totals.carbs_g, totals.fat_g),
+        totals=totals,
     )
 
 

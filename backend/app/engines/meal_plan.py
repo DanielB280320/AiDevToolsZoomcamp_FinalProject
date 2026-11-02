@@ -55,6 +55,8 @@ class MealCandidate:
     allergens: Collection[str]
     kcal: float
     protein_g: float
+    carbs_g: float = 0.0
+    fat_g: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,6 +8,7 @@ export type TrainingDay = Schemas["TrainingDay"];
 export type PlannedExercise = Schemas["PlannedExercise"];
 export type MealDay = Schemas["MealDay"];
 export type PlannedMeal = Schemas["PlannedMeal"];
+export type MealSwap = Schemas["MealSwap"];
 export type TrainingPlanUpdate = Schemas["TrainingPlanUpdate"];
 export type MealPlanUpdate = Schemas["MealPlanUpdate"];
 export type PlanVersionSummary = Schemas["PlanVersionSummary"];
@@ -160,5 +161,21 @@ export function useCreateMeal() {
       throw apiError(response, error);
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["meals"] }),
+  });
+}
+
+/** Alternatives with similar kcal for a planned meal of the saved plan (D86); read-only. */
+export function useMealSwaps(athleteId: string, mealKey: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["meal-swaps", athleteId, mealKey],
+    enabled,
+    queryFn: async ({ signal }) => {
+      const { data, error, response } = await api.GET("/athletes/{athlete_id}/plan/meals/{meal_key}/swaps", {
+        params: { path: { athlete_id: athleteId, meal_key: mealKey } },
+        signal,
+      });
+      if (data) return data;
+      throw apiError(response, error);
+    },
   });
 }

@@ -205,6 +205,10 @@ MEAL_DAY_ATTEMPTS = 60
 MEAL_PORTION_DECIMALS = 2
 # F7 (D68) passes of proportional rescaling that bring the day total onto the target.
 MEAL_SCALE_PASSES = 6
+# F7/F8 (D86) meal swap suggestions: at most this many alternatives, each within this fraction of
+# the planned meal's kcal (at its current portion) after the 0.75-1.5 portion rescale.
+SWAP_MAX_ALTERNATIVES = 3
+SWAP_KCAL_BAND = 0.10
 # F14/D74 portion factors after a targets change stay within these bounds (inside the database
 # check 0 < factor <= 3 and the editor's 0.25 minimum); a larger change is clamped, never an error.
 RESCALE_PORTION_MIN = 0.25

@@ -57,8 +57,8 @@ function planFixture(over: Partial<Schemas["Plan"]> = {}): Schemas["Plan"] {
         edited_by: null,
         totals: macros,
         meals: [
-          { id: "pm-oat", slot: "breakfast", order: 0, meal: { id: "meal-oat", name: "Oat bowl", slots: ["breakfast"] }, portion_factor: 1, totals: macros, items: [{ ...macros, food: OATS, grams: 80 }] },
-          { id: "pm-rice", slot: "lunch", order: 1, meal: { id: "meal-rice", name: "Chicken rice", slots: ["lunch"] }, portion_factor: 1.5, totals: macros, items: [{ ...macros, food: { id: "food-rice", name: "Rice", source: "seed" }, grams: 150 }] },
+          { id: "pm-oat", meal_key: "key-oat", slot: "breakfast", order: 0, meal: { id: "meal-oat", name: "Oat bowl", slots: ["breakfast"] }, portion_factor: 1, totals: macros, items: [{ ...macros, food: OATS, grams: 80 }] },
+          { id: "pm-rice", meal_key: "key-rice", slot: "lunch", order: 1, meal: { id: "meal-rice", name: "Chicken rice", slots: ["lunch"] }, portion_factor: 1.5, totals: macros, items: [{ ...macros, food: { id: "food-rice", name: "Rice", source: "seed" }, grams: 150 }] },
         ],
       },
     ],
@@ -630,5 +630,77 @@ describe("Plan editor: duplicate a day (D87)", () => {
     const tueSent = calls.meals[0]!.meal_days.find((d) => d.weekday === "tue")!;
     expect(tueSent.meals).toHaveLength(2);
     expect(tueSent.meals.every((m) => m.id === undefined)).toBe(true);
+  });
+});
+
+describe("Plan editor: swap a meal (D86)", () => {
+  const mealsRegion = () => within(screen.getByRole("region", { name: "Meals" }));
+  const swapList = (alternatives: Schemas["MealSwap"][]): Schemas["MealSwapList"] => ({ meal_key: "key-rice", alternatives, reason: "ok" });
+  const toast: Schemas["MealSwap"] = {
+    meal_id: "meal-toast",
+    name: "Eggs on toast",
+    portion_factor: 1.2,
+    items: [{ ...macros, food: { id: "food-egg", name: "Egg", source: "seed" }, grams: 120 }],
+    totals: { ...macros, kcal: 590 },
+  };
+  async function openMeals() {
+    const user = await openPlan();
+    await user.click(screen.getByRole("tab", { name: "Meals" }));
+    await screen.findByRole("heading", { name: "Monday", level: 3 });
+    return user;
+  }
+  function swaps(list: Schemas["MealSwapList"]) {
+    const asked: string[] = [];
+    server.use(
+      http.get(apiUrl("/athletes/:athleteId/plan/meals/:mealKey/swaps"), ({ params }) => {
+        asked.push(String(params.mealKey));
+        return HttpResponse.json(list);
+      }),
+    );
+    return asked;
+  }
+
+  it("lists the alternatives of a saved meal and saves the chosen one as a new meal", async () => {
+    const { calls } = fakePlan();
+    const asked = swaps(swapList([toast]));
+    const user = await openMeals();
+    await user.click(mealsRegion().getByRole("button", { name: "Swap Chicken rice" }));
+    expect(await screen.findByText("Eggs on toast")).toBeInTheDocument();
+    expect(screen.getByText("590 kcal at 1.2x")).toBeInTheDocument();
+    expect(asked).toEqual(["key-rice"]);
+
+    await user.click(screen.getByRole("button", { name: "Use Eggs on toast" }));
+    await waitFor(() => expect(calls.meals).toHaveLength(1));
+    const [mon] = calls.meals[0]!.meal_days;
+    expect(mon!.meals).toEqual([
+      { id: "pm-oat", slot: "breakfast", meal_id: "meal-oat", portion_factor: 1 },
+      { slot: "lunch", meal_id: "meal-toast", portion_factor: 1.2 }, // no id: new meal_key, no logs (D73)
+    ]);
+  });
+
+  it("says so when there is no alternative and saves nothing", async () => {
+    const { calls } = fakePlan();
+    swaps(swapList([]));
+    const user = await openMeals();
+    await user.click(mealsRegion().getByRole("button", { name: "Swap Oat bowl" }));
+    expect(await screen.findByText(/No similar meals fit/)).toBeInTheDocument();
+    expect(calls.meals).toHaveLength(0);
+  });
+
+  it("waits for a clean draft: unsaved changes disable Swap", async () => {
+    fakePlan();
+    swaps(swapList([toast]));
+    const user = await openMeals();
+    await user.click(mealsRegion().getByRole("button", { name: "Remove Oat bowl" }));
+    expect(mealsRegion().getByRole("button", { name: "Swap Chicken rice" })).toBeDisabled();
+    expect(mealsRegion().getAllByText("Save your changes to see swaps.").length).toBeGreaterThan(0);
+  });
+
+  it("shows an error when the alternatives cannot be loaded", async () => {
+    fakePlan();
+    server.use(http.get(apiUrl("/athletes/:athleteId/plan/meals/:mealKey/swaps"), () => problem(422, "past_day")));
+    const user = await openMeals();
+    await user.click(mealsRegion().getByRole("button", { name: "Swap Oat bowl" }));
+    expect(await screen.findByText("Couldn't load alternatives. Try again.")).toBeInTheDocument();
   });
 });

@@ -59,12 +59,27 @@ class MealSummary(ResponseModel):
 
 class PlannedMeal(ResponseModel):
     id: uuid.UUID
+    meal_key: uuid.UUID
     slot: MealSlot
     order: int
     meal: MealSummary
     portion_factor: float
     items: list[MealItem]
     totals: Macros
+
+
+class MealSwap(ResponseModel):
+    meal_id: uuid.UUID
+    name: str
+    portion_factor: float
+    items: list[MealItem]  # foods with grams already scaled by `portion_factor`
+    totals: Macros
+
+
+class MealSwapList(ResponseModel):
+    meal_key: uuid.UUID
+    alternatives: Annotated[list[MealSwap], Field(max_length=3)]
+    reason: str
 
 
 class MealDay(ResponseModel):
