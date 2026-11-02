@@ -812,6 +812,15 @@
     "invalid": "Some plan fields need fixing. See the messages next to each field.",
     "otherTabUnsaved": "You have unsaved changes in the other tab. Save or discard them first, because saving renews the plan.",
     "noResults": "No results.",
+    "duplicate": {
+      "button": "Duplicate day",
+      "open": "Duplicate {{weekday}}",
+      "target": "Copy to",
+      "copy": "Copy",
+      "confirmTitle": "Replace {{weekday}}?",
+      "confirmBody": "{{weekday}} already has content. Copying replaces it in your draft. Nothing changes until you save, and past sessions and logs are never changed.",
+      "confirm": "Yes, replace {{weekday}}"
+    },
     "editedBy": "Edited by {{name}}",
     "weekday": {
       "mon": "Mon",

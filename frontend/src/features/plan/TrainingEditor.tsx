@@ -6,12 +6,14 @@ import { useExerciseSearch, type Exercise } from "../../api/onboarding";
 import { type Plan, type ProgressionRule, useSaveTraining, WEEKDAYS, type Weekday } from "../../api/plan";
 import { type UnitSystem, weightUnit } from "../../lib/units";
 import { BUTTON, FieldError, ICON_BUTTON, SelectInput, TextInput } from "./fields";
+import { DuplicateDay } from "./DuplicateDay";
 import { SaveBar } from "./SaveBar";
 import {
   buildTrainingUpdate,
   type LocalError,
   dayPath,
   draftFromPlan,
+  duplicateTrainingDay,
   type DraftDay,
   type DraftExercise,
   exercisePath,
@@ -249,6 +251,7 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
                   />
                 ))}
               </ul>
+              <DuplicateDay idPrefix={heading} from={day.weekday} hasContent={(w) => days.some((x) => x.weekday === w)} onCopy={(w) => edit(duplicateTrainingDay(days, day.uid, w))} />
               <ExercisePicker units={units} onPick={(e) => patchDay(d, { exercises: [...day.exercises, e] })} />
             </li>
           );

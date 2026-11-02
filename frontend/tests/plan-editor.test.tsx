@@ -525,3 +525,110 @@ describe("Plan editor: viewer", () => {
     expect(await screen.findByRole("heading", { name: "Plan", level: 1 })).toBeInTheDocument();
   });
 });
+
+describe("Plan editor: duplicate a day (D87)", () => {
+  const thursday = (): Schemas["TrainingDay"] => ({
+    ...planFixture().training_days[0]!,
+    id: "td-thu",
+    weekday: "thu",
+    name: "Legs",
+    exercises: [{ ...planFixture().training_days[0]!.exercises[0]!, id: "pe-thu", exercise: { ...BENCH, id: "ex-squat", name: "Squat" } }],
+  });
+  const training = () => within(screen.getByRole("region", { name: "Training" }));
+  const mealsRegion = () => within(screen.getByRole("region", { name: "Meals" }));
+  async function openMeals() {
+    const user = await openPlan();
+    await user.click(screen.getByRole("tab", { name: "Meals" }));
+    await screen.findByRole("heading", { name: "Monday", level: 3 });
+    return user;
+  }
+
+  it("copies a training day to an empty weekday, with the same targets and no ids, leaving Monday as it is", async () => {
+    const { calls } = fakePlan();
+    const user = await openPlan();
+    await user.click(training().getByRole("button", { name: "Duplicate Monday" }));
+    await user.selectOptions(training().getByLabelText("Copy to"), "thu");
+    await user.click(training().getByRole("button", { name: "Copy" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Thu: Push" })).toBeInTheDocument();
+    await user.click(training().getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(calls.training).toHaveLength(1));
+    const [mon, thu] = calls.training[0]!.training_days;
+    expect(calls.training[0]!.training_days).toHaveLength(2);
+    expect(mon).toMatchObject({ id: "td-mon", weekday: "mon", name: "Push" });
+    expect(mon!.exercises.map((e) => e.id)).toEqual(["pe-bench", "pe-plank"]);
+    expect(thu).toMatchObject({ weekday: "thu", name: "Push" });
+    expect(thu).not.toHaveProperty("id");
+    expect(thu!.exercises.map((e) => e.id)).toEqual([undefined, undefined]);
+    const targets = (e: Schemas["PlannedExerciseInput"]) => ({ ...e, id: undefined });
+    expect(thu!.exercises.map(targets)).toEqual(mon!.exercises.map(targets));
+    expect(thu!.exercises[0]).toMatchObject({ sets: 3, reps_min: 8, reps_max: 10, target_weight_kg: 60, rest_seconds: 90, rule: "double", increment_kg: 2.5 });
+  });
+
+  it("asks before replacing a day with content, and cancelling changes nothing", async () => {
+    const base = planFixture();
+    const { calls } = fakePlan({ plan: { ...base, training_days: [...base.training_days, thursday()] } });
+    const user = await openPlan();
+    await user.click(training().getByRole("button", { name: "Duplicate Monday" }));
+    await user.selectOptions(training().getByLabelText("Copy to"), "thu");
+    await user.click(training().getByRole("button", { name: "Copy" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Replace Thursday?" });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Thu: Legs" })).toBeInTheDocument();
+    expect(training().getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(calls.training).toHaveLength(0);
+
+    await user.click(training().getByRole("button", { name: "Duplicate Monday" }));
+    await user.selectOptions(training().getByLabelText("Copy to"), "thu");
+    await user.click(training().getByRole("button", { name: "Copy" }));
+    await user.click(screen.getByRole("button", { name: "Yes, replace Thursday" }));
+    expect(await screen.findByRole("heading", { name: "Thu: Push" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Thu: Legs" })).not.toBeInTheDocument();
+    await user.click(training().getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(calls.training).toHaveLength(1));
+    const days = calls.training[0]!.training_days;
+    expect(days).toHaveLength(2);
+    expect(days[1]).toMatchObject({ id: "td-thu", weekday: "thu", name: "Push" });
+    expect(days[1]!.exercises.every((e) => e.id === undefined)).toBe(true);
+  });
+
+  it("copies the meals of a day without ids, so the copies get new meal keys", async () => {
+    const { calls } = fakePlan();
+    const user = await openMeals();
+    await user.click(mealsRegion().getByRole("button", { name: "Duplicate Monday" }));
+    await user.selectOptions(mealsRegion().getByLabelText("Copy to"), "wed");
+    await user.click(mealsRegion().getByRole("button", { name: "Copy" }));
+    await user.click(mealsRegion().getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(calls.meals).toHaveLength(1));
+    const [mon, wed] = calls.meals[0]!.meal_days;
+    expect(mon).toMatchObject({ weekday: "mon" });
+    expect(mon!.meals.map((m) => m.id)).toEqual(["pm-oat", "pm-rice"]);
+    expect(wed).toMatchObject({ weekday: "wed" });
+    expect(wed!.meals).toEqual([
+      { slot: "breakfast", meal_id: "meal-oat", portion_factor: 1 },
+      { slot: "lunch", meal_id: "meal-rice", portion_factor: 1.5 },
+    ]);
+  });
+
+  it("confirms before replacing a meal day with meals, and cancelling keeps it", async () => {
+    const base = planFixture();
+    const tue = { ...base.meal_days[0]!, id: "md-tue", weekday: "tue" as const, meals: [{ ...base.meal_days[0]!.meals[0]!, id: "pm-tue" }] };
+    const { calls } = fakePlan({ plan: { ...base, meal_days: [...base.meal_days, tue] } });
+    const user = await openMeals();
+    await user.click(mealsRegion().getByRole("button", { name: "Duplicate Monday" }));
+    await user.click(mealsRegion().getByRole("button", { name: "Copy" })); // default target is Tuesday
+    await user.click(within(screen.getByRole("alertdialog", { name: "Replace Tuesday?" })).getByRole("button", { name: "Cancel" }));
+    expect(mealsRegion().getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(calls.meals).toHaveLength(0);
+
+    await user.click(mealsRegion().getByRole("button", { name: "Duplicate Monday" }));
+    await user.click(mealsRegion().getByRole("button", { name: "Copy" }));
+    await user.click(screen.getByRole("button", { name: "Yes, replace Tuesday" }));
+    await user.click(mealsRegion().getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(calls.meals).toHaveLength(1));
+    const tueSent = calls.meals[0]!.meal_days.find((d) => d.weekday === "tue")!;
+    expect(tueSent.meals).toHaveLength(2);
+    expect(tueSent.meals.every((m) => m.id === undefined)).toBe(true);
+  });
+});
