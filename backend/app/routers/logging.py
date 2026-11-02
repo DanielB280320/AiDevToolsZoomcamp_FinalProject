@@ -3,8 +3,9 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, Request, Response, UploadFile
 
+from app import demo_faults
 from app.dependencies import OwnerAccess, OwnerSession, SessionDep, TelemetryDep
 from app.engines.constants import IMPORT_MAX_BYTES
 from app.errors import ProblemError
@@ -105,6 +106,7 @@ def delete_set_log(
 @router.post(
     "/sessions/{session_id}/finish",
     operation_id="finishSession",
+    dependencies=[Depends(demo_faults.finish_session_fault)],  # S1 demo build only; off (D91)
     response_model=FinishSessionResult,
     responses={**_COMMON, 404: _PROBLEM, 409: _PROBLEM, 422: _PROBLEM},
 )

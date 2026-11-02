@@ -23,13 +23,13 @@ The scenarios show the agent end to end. They run after the logging endpoints ex
 
 | # | Fault | Alert | Expected mitigation | Follow-up PR |
 |---|---|---|---|---|
-| S1 | **Bad release**: a build where finishing a workout raises an error is promoted to prod through "Promote to production" | KeyJourneyErrors on `/api/v1/sessions/{session_id}/finish` | `oncall/ops/rollback.sh` (previous tag) | Fix plus a regression test, promoted through "Promote to production" |
+| S1 ([demo-s1.md](demo-s1.md)) | **Bad release**: a build where finishing a workout raises an error is promoted to prod through "Promote to production" | KeyJourneyErrors on `/api/v1/sessions/{session_id}/finish` | `oncall/ops/rollback.sh` (previous tag) | Fix plus a regression test, promoted through "Promote to production" |
 | S2 | **Faulty engine version**: `progression_engine=v2` is enabled and v2 fails on bodyweight exercises (demo-only fault in `backend/app/engines/progression_v2.py`, off unless the flag is set; default `v1`) | KeyJourneyErrors | `oncall/ops/flag.sh progression_engine v1` | Fix v2 plus a test |
 | S3 (optional) | **Latency fault**: the `fault_injection_latency_ms` flag adds a delay to the logging endpoints | KeyJourneyLatency | `oncall/ops/flag.sh fault_injection_latency_ms 0` | Runbook note |
 
 How to trigger the faults (owner or DevOps, never the agent):
 
-- S1: merge a PR that makes `finish` raise, let CI build it, run "Promote to production" and approve. Prod then serves the faulty tag; after the rollback the poller leaves it alone.
+- S1: the drill PR flips the demo constant (`scripts/demo-s1-enable.sh`, D91), CI builds it, run "Promote to production" and approve. Prod then serves the faulty tag; after the rollback the poller leaves it alone. Step by step in [demo-s1.md](demo-s1.md).
 - S2: `oncall/ops/flag.sh progression_engine v2` on the prod host, then finish a session with a bodyweight exercise.
 - S3: `oncall/ops/flag.sh fault_injection_latency_ms 1500` on the prod host, then log a few sets. Reset with the same command and `0` after the demo.
 
