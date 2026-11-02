@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { SessionExercise, SessionSet, SetLogInput, ExerciseSummary } from "../../api/workout";
 import type { UnitSystem } from "../../lib/units";
 import type { CoachNote } from "../../api/notes";
+import { PrBadge } from "../../components/PrBadge";
 import { NoteThread } from "../notes/NoteThread";
 import { SetEditor } from "./SetEditor";
 import { describeValues } from "./values";
@@ -144,7 +145,7 @@ export function ExerciseCard(props: Props) {
   return (
     <section aria-labelledby={`ex-${exercise.exercise.id}`} className="mt-6 border-t-4 border-iron pt-3">
       <h2 id={`ex-${exercise.exercise.id}`} className="font-display text-step-2 font-bold">
-        {exercise.exercise.name}
+        {exercise.exercise.name} {exercise.is_pr && <PrBadge />}
       </h2>
       <p className="text-step--1 text-slate">{t("workout.restPlanned", { count: exercise.rest_seconds })}</p>
       {props.athleteId && (

@@ -8,6 +8,7 @@ import { EnergySummary } from "./EnergySummary";
 import { QueryState } from "./QueryState";
 import { StatusBadge } from "./StatusBadge";
 import { badgeKind } from "./status";
+import { PrBadge } from "../../components/PrBadge";
 import { paths } from "../../paths";
 import { NoteThread, dayNotes, exerciseNotes, sessionNotes } from "../notes/NoteThread";
 import { MealsSection } from "../meals/MealsSection";
@@ -51,7 +52,9 @@ function ExerciseRow({
   return (
     <li className="border-b border-line py-2">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="font-semibold">{exercise.exercise.name}</span>
+        <span className="font-semibold">
+          {exercise.exercise.name} {exercise.is_pr && <PrBadge />}
+        </span>
         <span className="text-right text-step--1 text-slate">
           {t("calendar.today.sets", { count: exercise.sets.length })}
           {target && ` · ${target}`}

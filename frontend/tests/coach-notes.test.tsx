@@ -69,6 +69,7 @@ function trainingDay(notes: Schemas["Note"][]) {
         calibration_hint: null,
         completion: null,
         pending_suggestion_id: null,
+        is_pr: false,
       },
     ],
   });
@@ -113,6 +114,7 @@ describe("notes: athlete view", () => {
                 calibration_hint: null,
                 completion: null,
                 pending_suggestion_id: null,
+                is_pr: false,
               },
             ],
           }),

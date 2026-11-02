@@ -46,6 +46,7 @@ function squatExercise(overrides: Partial<Schemas["SessionExercise"]> = {}): Sch
     calibration_hint: null,
     completion: null,
     pending_suggestion_id: null,
+    is_pr: false,
     ...overrides,
   };
 }

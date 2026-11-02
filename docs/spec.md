@@ -430,6 +430,7 @@ Available to the athlete and to the linked coach (same views).
 - [ ] F15.2 Exercise history shows the planned target at the time of each session, not the current target.
 - [ ] F15.3 Charts render with empty-state messages when there is no data.
 - [ ] F15.4 Charts use the user's display units.
+- [ ] F15.5 Personal-record badges (#56, D88): the exercise block of the session (`GET /sessions/{id}`, `finishSession`) carries `is_pr`, true when the session's top set of that exercise beats every earlier finished session, with the same ranking as the exercise chart (heaviest weight then reps; longest for timed; reps for bodyweight). It is computed on read, never stored, so editing or deleting the record-setting set changes it. The first-ever logged set counts; skipped sets and ties do not. A badge shows on Today's session card, the workout summary and the session detail, for the athlete and the linked coach.
 
 ### F16. Coach mode — *Must*
 
@@ -746,7 +747,7 @@ Fault-injection flags exist only for demonstrations, are off by default and are 
 
 ### 16.1 Priorities
 - **Must (MVP):** F1–F18, §10–§15.
-- **Should (if time allows, may be promoted):** meal swap suggestions ("similar kcal" alternatives), duplicate-a-day in the plan editor (built in #55, see F8), PR (personal record) badges, CSV import of past workouts (built in #57, see F10.5; D89, D90). Groomed as #54 (D86), #55 (D87), #56 (D88) and #57 (D89); scheduled under M4 (#54, #55, #56) and M6 (#57).
+- **Should (if time allows, may be promoted):** meal swap suggestions ("similar kcal" alternatives), duplicate-a-day in the plan editor (built in #55, see F8), PR (personal record) badges (built in #56, see F15; D88), CSV import of past workouts (built in #57, see F10.5; D89, D90). Groomed as #54 (D86), #55 (D87), #56 (D88) and #57 (D89); scheduled under M4 (#54, #55, #56) and M6 (#57).
 - **Could:** different targets on training vs. rest days, more templates, notes reactions, dark mode.
 
 ### 16.2 Delivery order (walking skeleton first)
