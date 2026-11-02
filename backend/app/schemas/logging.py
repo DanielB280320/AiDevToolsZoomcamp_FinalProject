@@ -56,3 +56,10 @@ class DayEnergyUpdate(ResponseModel):
 
 class ActivityResult(DayEnergyUpdate):
     activity: Activity
+
+
+class WorkoutImportResult(ResponseModel):
+    """`WorkoutImportResult` in openapi.yaml (F10.5, D89): set counts only, never row content."""
+
+    imported: Annotated[int, Field(ge=0)]
+    skipped: Annotated[int, Field(ge=0)]

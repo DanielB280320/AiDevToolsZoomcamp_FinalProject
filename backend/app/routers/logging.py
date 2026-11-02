@@ -3,9 +3,11 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response, UploadFile
 
 from app.dependencies import OwnerAccess, OwnerSession, SessionDep, TelemetryDep
+from app.engines.constants import IMPORT_MAX_BYTES
+from app.errors import ProblemError
 from app.models import Suggestion as Row
 from app.schemas.logging import (
     ActivityInput,
@@ -14,17 +16,20 @@ from app.schemas.logging import (
     FinishSessionRequest,
     FinishSessionResult,
     SetLogInput,
+    WorkoutImportResult,
 )
 from app.schemas.meal_log import MealLogInput, MealLogResult
 from app.schemas.problem import Problem
 from app.schemas.setlog import SetLog
-from app.services import calendar, meal_log, suggestions, training_log
+from app.services import calendar, meal_log, suggestions, training_log, workout_import
 from app.services.clock import ClockDep, local_today
 from app.services.flags import FlagsDep
 from app.telemetry import Telemetry
 
 router = APIRouter(tags=["Logging"])
 
+# Multipart framing around the file (boundary, part headers).
+_MULTIPART_SLACK = 4096
 _PROBLEM: dict[str, Any] = {"model": Problem}
 _COMMON: dict[int | str, dict[str, Any]] = {400: _PROBLEM, 401: _PROBLEM, 403: _PROBLEM}
 
@@ -194,3 +199,24 @@ def log_meal(
 )
 def delete_meal_log(access: OwnerAccess, meal_log_id: uuid.UUID, db: SessionDep) -> DayEnergyUpdate:
     return meal_log.delete_meal_log(db, access.athlete, meal_log_id)
+
+
+@router.post(
+    "/athletes/{athlete_id}/imports/workouts",
+    operation_id="importWorkouts",
+    response_model=WorkoutImportResult,
+    responses={**_COMMON, 409: _PROBLEM, 413: _PROBLEM, 422: _PROBLEM},
+)
+def import_workouts(
+    access: OwnerAccess,
+    file: UploadFile,
+    request: Request,
+    db: SessionDep,
+    clock: ClockDep,
+) -> WorkoutImportResult:
+    """Import past sets from a CSV, all or nothing (F10.5, D89). Athlete only."""
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > IMPORT_MAX_BYTES + _MULTIPART_SLACK:
+        raise ProblemError(413, "file_too_large", "The file may be at most 2 MB.")
+    raw = file.file.read(IMPORT_MAX_BYTES + 1)
+    return workout_import.import_workouts(db, access.athlete, raw, clock.now())

@@ -71,6 +71,7 @@ export function sessionFixture(date: string, overrides: Partial<Schemas["Session
     plan_version: 1,
     training_day_id: "c0a8f2de-7b3b-4d0e-9d5e-6a3f4c1b2e03",
     training_day_name: "Upper A",
+    imported: false,
     date,
     original_date: null,
     status: "planned",

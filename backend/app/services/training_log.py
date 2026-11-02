@@ -92,40 +92,49 @@ def planned_results(
 
 
 def session_completion(
-    training_day: TrainingDay, exercises: dict[uuid.UUID, Exercise], logs: Sequence[SetLog]
+    planned_list: Sequence[PlannedExercise],
+    exercises: dict[uuid.UUID, Exercise],
+    logs: Sequence[SetLog],
 ) -> tuple[Completion, dict[uuid.UUID, Completion]]:
     """Overall completion and per planned exercise (keyed by the planned exercise id)."""
     all_sets: list[PlannedSetResult] = []
     per_exercise: dict[uuid.UUID, Completion] = {}
-    for planned in training_day.exercises:
+    for planned in planned_list:
         sets = planned_results(planned, exercises[planned.exercise_id], logs)
         per_exercise[planned.id] = completion(sets)
         all_sets.extend(sets)
     return completion(all_sets), per_exercise
 
 
-def load_day(db: Session, row: TrainingSession) -> tuple[TrainingDay, dict[uuid.UUID, Exercise]]:
-    """The session's training day and every exercise it or its set logs refer to."""
-    training_day = db.scalar(
-        select(TrainingDay)
-        .where(TrainingDay.id == row.training_day_id)
-        .options(selectinload(TrainingDay.exercises))
+def load_day(
+    db: Session, row: TrainingSession
+) -> tuple[TrainingDay | None, dict[uuid.UUID, Exercise]]:
+    """The session's training day (`None` for an imported, plan-less session) and every
+    exercise it or its set logs refer to."""
+    training_day = (
+        None
+        if row.training_day_id is None
+        else db.scalar(
+            select(TrainingDay)
+            .where(TrainingDay.id == row.training_day_id)
+            .options(selectinload(TrainingDay.exercises))
+        )
     )
-    assert training_day is not None  # noqa: S101 - FK guarantees it
-    ids = {p.exercise_id for p in training_day.exercises}
+    assert (training_day is None) == (row.training_day_id is None)  # noqa: S101 - FK
+    ids = {p.exercise_id for p in training_day.exercises} if training_day else set()
     ids |= set(db.scalars(select(SetLog.exercise_id).where(SetLog.session_id == row.id)))
     exercises = {e.id: e for e in db.scalars(select(Exercise).where(Exercise.id.in_(ids)))}
     return training_day, exercises
 
 
 def session_kcal(
-    training_day: TrainingDay,
+    planned_list: Sequence[PlannedExercise],
     exercises: dict[uuid.UUID, Exercise],
     logs: Sequence[SetLog],
     weight_kg: float,
 ) -> int:
     """F13.2 kcal of the performed sets (extra sets and exercises included)."""
-    rest = {p.exercise_id: p.rest_seconds for p in training_day.exercises}
+    rest = {p.exercise_id: p.rest_seconds for p in planned_list}
     grouped: dict[uuid.UUID, list[SetLog]] = defaultdict(list)
     for log in logs:
         if not log.skipped:
@@ -151,22 +160,24 @@ def session_kcal(
     return logged_kcal(parts, weight_kg).kcal
 
 
-def _recompute(db: Session, row: TrainingSession) -> None:
+def recompute(db: Session, row: TrainingSession) -> None:
     """Refresh the stored completion, and kcal once the session is finished."""
     logs = list(db.scalars(select(SetLog).where(SetLog.session_id == row.id)))
     training_day, exercises = load_day(db, row)
-    overall, _ = session_completion(training_day, exercises, logs)
-    row.completion = overall.ratio if logs or row.status == "done" else None
+    planned_list = list(training_day.exercises) if training_day else []
+    overall, _ = session_completion(planned_list, exercises, logs)
+    # An imported session has no plan to be complete against (D89).
+    row.completion = overall.ratio if (logs or row.status == "done") and training_day else None
     if row.status == "done":
         weight = body_weight(db, row.athlete_id, row.date)
-        row.kcal = None if weight is None else session_kcal(training_day, exercises, logs, weight)
+        row.kcal = None if weight is None else session_kcal(planned_list, exercises, logs, weight)
 
 
 # ───────────── sessions ─────────────
 
 
 def _locked_session(
-    db: Session, user: User, session_id: uuid.UUID, now: dt.datetime
+    db: Session, user: User, session_id: uuid.UUID, now: dt.datetime, *, deleting: bool = False
 ) -> TrainingSession:
     session_of(db, user, session_id)  # 403 for another athlete's or unknown ids
     row = db.scalar(
@@ -176,6 +187,9 @@ def _locked_session(
         .execution_options(populate_existing=True)
     )
     assert row is not None  # noqa: S101 - just found it
+    # Imported sets may be deleted at any time (D89): the file may be years old.
+    if deleting and row.imported:
+        return row
     if row.status == "done" and now >= editable_until(row, user):
         raise ProblemError(409, "edit_window_closed", "This session can no longer be edited.")
     return row
@@ -231,7 +245,11 @@ def log_set(
     row = _locked_session(db, user, session_id, now)
     exercise = _visible_exercise(db, user, body.exercise_id)
     training_day, _ = load_day(db, row)
-    candidates = [p for p in training_day.exercises if p.exercise_id == body.exercise_id]
+    candidates = [
+        p
+        for p in (training_day.exercises if training_day else [])
+        if p.exercise_id == body.exercise_id
+    ]
     planned: PlannedExercise | None
     if body.planned_exercise_id is not None:
         planned = next((p for p in candidates if p.id == body.planned_exercise_id), None)
@@ -272,7 +290,7 @@ def log_set(
         row.status = "in_progress"
         row.started_at = now
     db.flush()
-    _recompute(db, row)
+    recompute(db, row)
     db.commit()
     return log, created
 
@@ -280,13 +298,13 @@ def log_set(
 def delete_set(
     db: Session, user: User, session_id: uuid.UUID, set_log_id: uuid.UUID, now: dt.datetime
 ) -> None:
-    row = _locked_session(db, user, session_id, now)
+    row = _locked_session(db, user, session_id, now, deleting=True)
     log = db.get(SetLog, set_log_id)
     if log is None or log.session_id != row.id:
         raise ProblemError(404, "set_log_not_found", "That set log does not exist.")
     db.delete(log)
     db.flush()
-    _recompute(db, row)
+    recompute(db, row)
     db.commit()
 
 
@@ -312,7 +330,7 @@ def finish_session(
     row.started_at = started
     row.finished_at = when
     db.flush()
-    _recompute(db, row)
+    recompute(db, row)
     db.commit()
     return row, first
 

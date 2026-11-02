@@ -41,8 +41,9 @@ class TrainingSession(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     athlete_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"))
-    plan_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("plan.id"), index=True)
-    training_day_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("training_day.id"))
+    # Null for an imported session (D89): a past workout with no plan behind it.
+    plan_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("plan.id"), index=True)
+    training_day_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("training_day.id"))
     # Calendar day in the athlete's time zone (not an instant).
     date: Mapped[dt.date] = mapped_column(Date)
     # Planned date before a move; null when the session is on its template day.
@@ -53,6 +54,8 @@ class TrainingSession(Base):
     completion: Mapped[float | None] = mapped_column(Numeric(5, 4, asdecimal=False))
     kcal: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    # True for a session created by the CSV import of past workouts (D89, F10.5).
+    imported: Mapped[bool] = mapped_column(Boolean, server_default=false())
 
 
 class SetLog(Base):

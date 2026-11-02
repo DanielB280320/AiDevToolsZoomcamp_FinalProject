@@ -311,6 +311,7 @@ class Request:
     values: dict[str, str] = field(default_factory=dict)
     json: Any = None
     params: dict[str, Any] | None = None
+    files: dict[str, Any] | None = None
 
 
 Builder = Callable[[World], Request]
@@ -341,6 +342,18 @@ def _move(w: World) -> Request:
 
 def _session_chart(w: World) -> Request:
     return Request({"session_id": new_session(w)["id"]})
+
+
+def _import_workouts(w: World) -> Request:
+    """A one-set CSV on a fresh past day, so every successful call imports a new session."""
+    w.week += 1
+    day = dt.date(2025, 1, 6) + dt.timedelta(weeks=w.week)
+    with Session(w.engine) as db:
+        name = db.scalars(
+            select(Exercise.name).where(Exercise.owner_id.is_(None), Exercise.type == "timed")
+        ).first()
+    csv = f"date,exercise,set,reps,weight_kg,duration_seconds,distance_m\n{day},{name},1,,,60,\n"
+    return Request(files={"file": ("workouts.csv", csv.encode(), "text/csv")})
 
 
 BUILDERS: dict[str, Builder] = {
@@ -378,6 +391,7 @@ BUILDERS: dict[str, Builder] = {
         {"meal_log_id": new_meal_log(w)}
     ),
     "POST /athletes/{athlete_id}/activities": lambda w: Request(json=activity_body(w)),
+    "POST /athletes/{athlete_id}/imports/workouts": _import_workouts,
     "DELETE /athletes/{athlete_id}/activities/{activity_id}": lambda w: Request(
         {"activity_id": new_activity(w)}
     ),
@@ -402,7 +416,7 @@ BUILDERS: dict[str, Builder] = {
 def send(w: World, client: TestClient, op: Operation, req: Request, athlete: str) -> Any:
     values = {"athlete_id": athlete, **req.values}
     url = API + op.path.format(**values)
-    return client.request(op.method, url, json=req.json, params=req.params)
+    return client.request(op.method, url, json=req.json, params=req.params, files=req.files)
 
 
 def test_every_athlete_scoped_operation_has_a_builder() -> None:

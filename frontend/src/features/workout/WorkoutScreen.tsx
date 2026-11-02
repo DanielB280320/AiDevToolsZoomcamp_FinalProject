@@ -99,7 +99,7 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
 
   return (
     <div>
-      <h1 className="font-display text-step-4 font-bold leading-tight">{data.training_day_name}</h1>
+      <h1 className="font-display text-step-4 font-bold leading-tight">{data.training_day_name ?? t("workout.imported")}</h1>
       <p className="mt-1 text-slate">
         {data.status === "done" ? t("workout.statusDone") : t("workout.progress", { value: percent(data.completion) })}
       </p>

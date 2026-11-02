@@ -1420,6 +1420,92 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /athletes/{athlete_id}/imports/workouts:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    post:
+      tags: [Logging]
+      operationId: importWorkouts
+      summary: Import past workouts from a CSV
+      description: |
+        Imports historical sets (F10.5, D89). Athlete only: a coach gets `403 wrong_role`, a
+        stranger `403 not_linked`.
+
+        Format: UTF-8, comma-separated, header row
+        `date,exercise,set,reps,weight_kg,duration_seconds,distance_m`. `date` is `YYYY-MM-DD`
+        in the athlete's time zone and not in the future; weight is always kg. `exercise`
+        matches a catalog exercise visible to the athlete by case-insensitive exact name.
+        Strength needs `reps` and `weight_kg`, bodyweight needs `reps`, timed needs
+        `duration_seconds` (`distance_m` optional). At most 2 MB (`413 file_too_large`) and
+        5,000 data rows (`422 too_many_rows`).
+
+        All or nothing: any invalid row returns `422 invalid_import` and nothing is written.
+        `errors[]` lists up to 20 rows as `field: rows.<n>` (row 1 is the header, the first data
+        row is 2) with a fixed reason; row content and exercise names are never echoed. A date
+        that already has a session that was not imported is rejected the same way.
+
+        Each imported date gets one finished, plan-less session (`imported: true`) whose sets
+        have no targets. Imported sessions count in history, the exercise chart (no target line)
+        and PR flags, but never run the progression engine or create suggestions. Re-uploading
+        the same file imports 0 and reports every row in `skipped` (idempotent by date,
+        exercise, set number). Imported sets can be deleted with `deleteSetLog` at any time.
+      x-fitwise-access: owner
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The CSV file.
+      responses:
+        '200':
+          description: Imported. Counts are sets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkoutImportResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: A workout changed while importing (`import_conflict`); nothing was written, try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '413':
+          description: The file is larger than 2 MB (`file_too_large`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: |
+            `invalid_import` (see above; `errors[].field` is `rows.<n>`) or `too_many_rows`.
+            Nothing was written.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: /problems/invalid_import
+                title: Unprocessable Entity
+                status: 422
+                code: invalid_import
+                detail: 'Nothing was imported: fix the listed rows and try again.'
+                errors:
+                  - field: rows.3
+                    code: invalid_row
+                    message: unknown exercise
+
   # ───────────────────────────── Suggestions ─────────────────────────────
   /athletes/{athlete_id}/suggestions:
     parameters:
@@ -2570,6 +2656,7 @@ components:
           plan_version: 1
           training_day_id: 8091a2b3-c4d5-4e6f-8071-8293a4b5c6d7
           training_day_name: Full body A
+          imported: false
           date: '2026-11-03'
           original_date: null
           status: done
@@ -2703,7 +2790,8 @@ components:
             `outside_week`, `date_in_past`,
             `edit_window_closed`, `suggestion_already_decided`, `invalid_overrides`, `link_exists`, `link_not_pending`,
             `validation_error`, `underage`, `disclaimer_required`, `rate_limited`,
-            `off_unavailable`, `not_ready`. New codes may be added.
+            `off_unavailable`, `not_ready`, `invalid_import`, `too_many_rows`, `file_too_large`,
+            `import_conflict`. New codes may be added.
         errors:
           type: array
           description: Field-level errors — invalid parameters (400) or invalid request-body fields (422). `field` is the parameter name or the body path.
@@ -3987,20 +4075,32 @@ components:
             - type: 'null'
     Session:
       type: object
-      required: [id, athlete_id, plan_id, plan_version, training_day_id, training_day_name, date, original_date, status, started_at, finished_at, editable_until, completion, kcal, estimated, exercises]
+      required: [id, athlete_id, plan_id, plan_version, training_day_id, training_day_name, imported, date, original_date, status, started_at, finished_at, editable_until, completion, kcal, estimated, exercises]
       properties:
         id:
           $ref: '#/components/schemas/Id'
         athlete_id:
           $ref: '#/components/schemas/Id'
         plan_id:
-          $ref: '#/components/schemas/Id'
+          description: '`null` for an imported session (no plan behind it).'
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
         plan_version:
-          type: integer
+          oneOf:
+            - type: integer
+            - type: 'null'
         training_day_id:
-          $ref: '#/components/schemas/Id'
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
         training_day_name:
-          type: string
+          oneOf:
+            - type: string
+            - type: 'null'
+        imported:
+          description: Created by the CSV import of past workouts (F10.5); has no plan and no set targets.
+          type: boolean
         date:
           $ref: '#/components/schemas/LocalDate'
         original_date:
@@ -4157,6 +4257,18 @@ components:
           const: true
         created_at:
           $ref: '#/components/schemas/Timestamp'
+    WorkoutImportResult:
+      type: object
+      required: [imported, skipped]
+      properties:
+        imported:
+          type: integer
+          minimum: 0
+          description: Sets written.
+        skipped:
+          type: integer
+          minimum: 0
+          description: Rows whose set (date, exercise, set number) already existed.
     ActivityResult:
       allOf:
         - $ref: '#/components/schemas/DayEnergyUpdate'
@@ -4634,7 +4746,9 @@ components:
         date:
           $ref: '#/components/schemas/LocalDate'
         training_day_name:
-          type: string
+          oneOf:
+            - type: string
+            - type: 'null'
         status:
           $ref: '#/components/schemas/SessionStatus'
         completion:

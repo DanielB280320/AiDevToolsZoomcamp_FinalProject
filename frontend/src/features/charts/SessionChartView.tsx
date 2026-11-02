@@ -79,7 +79,7 @@ function SessionBody({ data, units }: { data: SessionChart; units: UnitSystem })
   return (
     <div>
       <p className="text-slate">
-        {data.training_day_name} · {formatDay(data.date, i18n.language, DAY_FORMAT.weekdayDayMonth)}
+        {data.training_day_name ?? t("workout.imported")} · {formatDay(data.date, i18n.language, DAY_FORMAT.weekdayDayMonth)}
         {completion !== null && ` · ${t("charts.session.completion", { value: completion })}`}
         {data.kcal !== null && ` · ${t("charts.session.kcal", { value: data.kcal })}`}
       </p>

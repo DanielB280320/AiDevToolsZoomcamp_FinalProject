@@ -261,3 +261,13 @@ ATTENTION_DELOAD_WINDOW_DAYS = 14
 # No set, meal or weigh-in log for this many days or more triggers `inactive`.
 ATTENTION_INACTIVE_DAYS = 3
 # --- end F16.5 ---------------------------------------------------------------------------------
+
+# --- F10.5 CSV import of past workouts (issue #57, decision D89) ------------------------------
+IMPORT_MAX_BYTES = 2 * 1024 * 1024
+IMPORT_MAX_ROWS = 5000
+# Row errors listed in the 422 response; the rest are only counted.
+IMPORT_MAX_ERRORS = 20
+IMPORT_COLUMNS = ("date", "exercise", "set", "reps", "weight_kg", "duration_seconds", "distance_m")
+# Earliest day an import may reach back to.
+IMPORT_MIN_DATE_YEAR = 1970
+# --- end F10.5 ---------------------------------------------------------------------------------

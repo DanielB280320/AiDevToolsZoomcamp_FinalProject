@@ -152,6 +152,7 @@ def _log_session(
     row = db.get(TrainingSession, session_id)
     assert row is not None  # noqa: S101 - just materialised
     day, _ = training_log.load_day(db, row)
+    assert day is not None  # noqa: S101 - demo sessions come from the plan
     for planned in day.exercises:
         for set_no in range(1, planned.sets + 1):
             skip = partial and set_no == planned.sets and planned.sets > 1
