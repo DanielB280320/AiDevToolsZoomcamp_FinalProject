@@ -2024,6 +2024,8 @@ export interface components {
             completion: components["schemas"]["Ratio"] | null;
             /** @description Set when a suggestion for this exercise is pending — the session uses current targets and shows a banner (F11). */
             pending_suggestion_id: components["schemas"]["Id"] | null;
+            /** @description The top set of this exercise in this session beats every earlier finished session (F15, D88); same ranking as the exercise chart. Computed on read. */
+            is_pr: boolean;
         };
         Session: {
             id: components["schemas"]["Id"];

@@ -4035,7 +4035,7 @@ components:
             - type: 'null'
     SessionExercise:
       type: object
-      required: [planned_exercise_id, exercise, order, is_extra, rule, sets, reps_min, reps_max, rest_seconds, calibration_hint, completion, pending_suggestion_id]
+      required: [planned_exercise_id, exercise, order, is_extra, rule, sets, reps_min, reps_max, rest_seconds, calibration_hint, completion, pending_suggestion_id, is_pr]
       properties:
         planned_exercise_id:
           oneOf:
@@ -4073,6 +4073,9 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Id'
             - type: 'null'
+        is_pr:
+          description: The top set of this exercise in this session beats every earlier finished session (F15, D88); same ranking as the exercise chart. Computed on read.
+          type: boolean
     Session:
       type: object
       required: [id, athlete_id, plan_id, plan_version, training_day_id, training_day_name, imported, date, original_date, status, started_at, finished_at, editable_until, completion, kcal, estimated, exercises]

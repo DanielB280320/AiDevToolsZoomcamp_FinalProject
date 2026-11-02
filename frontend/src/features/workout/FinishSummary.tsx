@@ -3,6 +3,7 @@ import { Link } from "react-router";
 
 import type { FinishSessionResult } from "../../api/workout";
 import type { UnitSystem } from "../../lib/units";
+import { PrBadge } from "../../components/PrBadge";
 import { paths } from "../../paths";
 import { PendingSuggestions } from "../suggestions/PendingSuggestions";
 
@@ -26,6 +27,7 @@ export function FinishSummary({
     session.started_at && session.finished_at
       ? Math.max(1, Math.round((Date.parse(session.finished_at) - Date.parse(session.started_at)) / 60_000))
       : null;
+  const records = session.exercises.filter((e) => e.is_pr);
   return (
     <section aria-labelledby="finish-title" className="mt-2 border-t-4 border-spruce pt-3">
       <h2 id="finish-title" className="font-display text-step-3 font-bold">
@@ -48,6 +50,17 @@ export function FinishSummary({
         </div>
       </dl>
       <p className="mt-2 text-step--1 text-slate">{t("workout.summary.estimated")}</p>
+
+      {records.length > 0 && (
+        <ul aria-label={t("workout.summary.prs")} className="mt-4">
+          {records.map((e) => (
+            <li key={e.exercise.id} className="flex items-center gap-2 py-1 font-semibold">
+              <PrBadge />
+              {e.exercise.name}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <PendingSuggestions
         athleteId={athleteId}

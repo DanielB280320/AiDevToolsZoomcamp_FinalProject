@@ -67,6 +67,7 @@ class SessionExercise(ResponseModel):
     calibration_hint: str | None
     completion: Ratio | None
     pending_suggestion_id: uuid.UUID | None
+    is_pr: bool
 
 
 class Session(ResponseModel):

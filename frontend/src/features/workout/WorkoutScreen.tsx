@@ -51,6 +51,7 @@ function addedExercise(exercise: ExerciseSummary): SessionExercise {
     calibration_hint: null,
     completion: null,
     pending_suggestion_id: null,
+    is_pr: false,
   };
 }
 

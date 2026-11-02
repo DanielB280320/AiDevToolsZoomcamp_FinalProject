@@ -13,6 +13,7 @@ Nothing here logs: every value is health data (spec section 6.5).
 import datetime as dt
 import uuid
 from collections import defaultdict
+from collections.abc import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -115,6 +116,60 @@ def session_chart(
 # ───────────── exercise over time ─────────────
 
 
+def _group_by_session(
+    rows: Iterable[tuple[SetLog, dt.date]],
+) -> dict[uuid.UUID, tuple[dt.date, list[engine.LoggedSet]]]:
+    by_session: dict[uuid.UUID, tuple[dt.date, list[engine.LoggedSet]]] = {}
+    for log, day in rows:  # full history, so a personal record accounts for earlier sessions
+        by_session.setdefault(log.session_id, (day, []))[1].append(
+            engine.LoggedSet(
+                log.set_no,
+                engine.SetValues(
+                    log.target_reps,
+                    log.target_weight_kg,
+                    log.target_seconds,
+                    log.reps,
+                    log.weight_kg,
+                    log.seconds,
+                ),
+            )
+        )
+    return by_session
+
+
+def personal_records(
+    db: Session, athlete_id: uuid.UUID, session: TrainingSession, timed: dict[uuid.UUID, bool]
+) -> set[uuid.UUID]:
+    """Exercise ids (keys of `timed`) whose top set in `session` is a personal record (D88).
+
+    Computed on read with the F15 chart ranking (`engine.exercise_history`) over the athlete's
+    finished sessions plus this one, so an edit or delete of the record-setting set shows at once.
+    """
+    if not timed:
+        return set()
+    rows = db.execute(
+        select(SetLog, TrainingSession.date)
+        .join(TrainingSession, TrainingSession.id == SetLog.session_id)
+        .where(
+            TrainingSession.athlete_id == athlete_id,
+            SetLog.exercise_id.in_(list(timed)),
+            SetLog.skipped.is_(False),
+            (TrainingSession.status == "done") | (TrainingSession.id == session.id),
+        )
+        .order_by(TrainingSession.date, TrainingSession.id)
+    ).all()
+    records: set[uuid.UUID] = set()
+    for exercise_id, is_timed in timed.items():
+        mine = [(log, day) for log, day in rows if log.exercise_id == exercise_id]
+        history = engine.exercise_history(
+            ((str(sid), day, sets) for sid, (day, sets) in _group_by_session(mine).items()),
+            timed=is_timed,
+        )
+        if any(p.session_id == str(session.id) and p.is_pr for p in history):
+            records.add(exercise_id)
+    return records
+
+
 def exercise_chart(
     db: Session, user: User, exercise_id: uuid.UUID, weeks: int, now: dt.datetime
 ) -> out.ExerciseChart:
@@ -132,21 +187,7 @@ def exercise_chart(
             SetLog.skipped.is_(False),
         )
     ).all()
-    by_session: dict[uuid.UUID, tuple[dt.date, list[engine.LoggedSet]]] = {}
-    for log, day in rows:  # full history, so a personal record accounts for earlier sessions
-        by_session.setdefault(log.session_id, (day, []))[1].append(
-            engine.LoggedSet(
-                log.set_no,
-                engine.SetValues(
-                    log.target_reps,
-                    log.target_weight_kg,
-                    log.target_seconds,
-                    log.reps,
-                    log.weight_kg,
-                    log.seconds,
-                ),
-            )
-        )
+    by_session = _group_by_session(rows)
     history = engine.exercise_history(
         ((str(sid), day, sets) for sid, (day, sets) in by_session.items()),
         timed=exercise.type == "timed",

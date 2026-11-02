@@ -206,6 +206,7 @@ describe("Pending-suggestion banner", () => {
     calibration_hint: null,
     completion: null,
     pending_suggestion_id: pending,
+    is_pr: false,
   });
 
   function renderWorkout(pending: string | null) {

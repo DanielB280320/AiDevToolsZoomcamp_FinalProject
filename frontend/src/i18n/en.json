@@ -541,6 +541,7 @@
     }
   },
   "workout": {
+    "pr": "New PR",
     "progress": "Completion so far: {{value}}",
     "statusDone": "Finished. You can still edit sets until the end of tomorrow.",
     "locked": "This workout can no longer be edited.",
@@ -591,6 +592,7 @@
       "overAnnounce": "Rest is over. Ready for {{name}}."
     },
     "summary": {
+      "prs": "Personal records in this workout",
       "title": "Workout finished",
       "completion": "Completion",
       "kcal": "Burned (kcal)",

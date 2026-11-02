@@ -314,6 +314,14 @@ def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) 
             "log": log,
         }
 
+    from app.services import charts  # imported late, like training_log
+
+    records = charts.personal_records(
+        db,
+        row.athlete_id,
+        row,
+        {eid: ex.type == "timed" for eid, ex in exercises.items() if eid in logs_by_exercise},
+    )
     items: list[out.SessionExercise] = []
     planned_exercise_ids: set[uuid.UUID] = set()
     for planned in planned_list:
@@ -343,6 +351,7 @@ def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) 
                     ),
                     "completion": per_exercise[planned.id].ratio if done else None,
                     "pending_suggestion_id": pending.get(planned.id),
+                    "is_pr": planned.exercise_id in records,
                 },
                 from_attributes=True,
             )
@@ -367,6 +376,7 @@ def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) 
                     "calibration_hint": None,
                     "completion": None,
                     "pending_suggestion_id": None,
+                    "is_pr": exercise_id in records,
                 },
                 from_attributes=True,
             )
