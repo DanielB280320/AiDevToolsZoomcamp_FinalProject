@@ -72,6 +72,25 @@ export function draftFromLibraryMeal(meal: Meal, slot: MealSlot, portion: string
   };
 }
 
+/** Copy the meals of one weekday onto another (D87): no ids, so every copy gets a new meal_key (D73). */
+export function duplicateMealDay(days: DraftMealDay[], from: Weekday, to: Weekday): DraftMealDay[] {
+  const source = days.find((d) => d.weekday === from);
+  if (!source || from === to) return days;
+  return days.map((day) =>
+    day.weekday === to
+      ? {
+          ...day,
+          editedBy: null,
+          meals: source.meals.map((m) => {
+            const fresh: DraftMeal = { ...m, uid: newUid(), foods: m.foods.map((f) => ({ ...f })) };
+            delete fresh.id;
+            return fresh;
+          }),
+        }
+      : day,
+  );
+}
+
 /** Field path of a meal in the request: the API reports `meal_days[i].meals[j].…` by request position. */
 export const mealPath = (dayIndex: number, mealIndex: number, field?: string): string =>
   `meal_days[${dayIndex}].meals[${mealIndex}]${field ? `.${field}` : ""}`;

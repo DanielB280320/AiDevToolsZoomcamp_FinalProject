@@ -88,6 +88,26 @@ export function newDraftDay(weekday: Weekday, name: string): DraftDay {
   return { uid: newUid(), weekday, name, editedBy: null, exercises: [] };
 }
 
+/** A copy of a training day for another weekday (D87): no ids, so the server creates new exercises. */
+export function duplicateTrainingDay(days: DraftDay[], sourceUid: string, weekday: Weekday): DraftDay[] {
+  const source = days.find((d) => d.uid === sourceUid);
+  if (!source || source.weekday === weekday) return days;
+  const target = days.find((d) => d.weekday === weekday);
+  const copy: DraftDay = {
+    uid: target?.uid ?? newUid(),
+    ...(target?.id ? { id: target.id } : {}),
+    weekday,
+    name: source.name,
+    editedBy: null,
+    exercises: source.exercises.map((e) => {
+      const fresh: DraftExercise = { ...e, uid: newUid() };
+      delete fresh.id;
+      return fresh;
+    }),
+  };
+  return target ? days.map((d) => (d === target ? copy : d)) : [...days, copy];
+}
+
 /** Field path used by the API in `errors[].field`, so server and local messages land in the same place. */
 export const exercisePath = (day: number, exercise: number, field?: string): string =>
   `training_days[${day}].exercises[${exercise}]${field ? `.${field}` : ""}`;

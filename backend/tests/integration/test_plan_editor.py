@@ -17,9 +17,11 @@ from app.models import (
     BodyMetric,
     Exercise,
     Meal,
+    MealDay,
     MealItem,
     Plan,
     PlanChange,
+    PlannedMeal,
     SetLog,
     Suggestion,
     TrainingSession,
@@ -564,6 +566,44 @@ def test_removing_a_logged_meal_moves_its_log_to_extras_and_a_new_meal_has_none(
     assert all(m["log"] is None for m in after["meals"])
     assert len(after["extra_meal_logs"]) == 1
     assert after["energy"]["eaten"]["kcal"] == logged["totals"]["kcal"]  # still counted, visible
+
+
+def test_a_duplicated_meal_day_gets_new_keys_and_never_shows_the_source_logs(athlete: Api) -> None:
+    """#55 (D87): the editor copies a day by sending its meals without ids onto another weekday."""
+    logged = _day(athlete.client)["meals"][0]["planned_meal"]
+    log = _log(athlete.client, logged["id"])["meal_log"]
+    plan = _plan(athlete.client)
+    body = _meals_body(plan)
+    thursday = _thursday(body)
+    friday = next(d for d in body["meal_days"] if d["weekday"] == "fri")
+    friday["meals"] = [
+        {k: v for k, v in m.items() if k != "id"} for m in copy.deepcopy(thursday["meals"])
+    ]
+    response = _put(athlete.client, "meals", body)
+    assert response.status_code == 200, response.text
+    assert response.json()["source"] == "custom"
+
+    thu = _day(athlete.client)
+    assert [m["log"]["id"] if m["log"] else None for m in thu["meals"]].count(log["id"]) == 1
+    assert thu["extra_meal_logs"] == []
+    fri = _day(athlete.client, FRI)
+    assert len(fri["meals"]) == len(thu["meals"])
+    assert all(m["log"] is None for m in fri["meals"])
+    assert fri["extra_meal_logs"] == []
+    with Session(athlete.app.state.engine) as session:
+        keys = [
+            row.meal_key
+            for row in session.scalars(
+                select(PlannedMeal)
+                .join(MealDay, PlannedMeal.meal_day_id == MealDay.id)
+                .where(MealDay.plan_id == uuid.UUID(response.json()["id"]))
+            )
+        ]
+        assert len(keys) == len(set(keys)) and None not in keys
+        changes = session.scalars(
+            select(PlanChange).where(PlanChange.plan_id == uuid.UUID(response.json()["id"]))
+        ).all()
+        assert len(changes) == 1 and changes[0].author_role == "athlete"
 
 
 def test_the_past_keeps_its_meals_after_a_meal_edit(athlete: Api) -> None:

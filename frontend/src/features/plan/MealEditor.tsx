@@ -5,8 +5,9 @@ import type { MealSlot } from "../../api/meals";
 import { isApiError } from "../../api/errors";
 import { useSaveMeals, type MealDay, type Weekday } from "../../api/plan";
 import { BUTTON, FieldError, ICON_BUTTON, SelectInput, TextInput } from "./fields";
+import { DuplicateDay } from "./DuplicateDay";
 import { MealPicker, SLOTS } from "./MealPicker";
-import { buildMealUpdate, draftFromLibraryMeal, mealDraftFromPlan, mealPath, requestIndex, type DraftMeal, type DraftMealDay } from "./mealDraft";
+import { buildMealUpdate, draftFromLibraryMeal, duplicateMealDay, mealDraftFromPlan, mealPath, requestIndex, type DraftMeal, type DraftMealDay } from "./mealDraft";
 import { FIELD, type LocalError } from "./trainingDraft";
 import { SaveBar } from "./SaveBar";
 import type { EditorProps } from "./TrainingEditor";
@@ -126,6 +127,7 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
                   );
                 })}
               </ul>
+              <DuplicateDay idPrefix={title} from={day.weekday} hasContent={(w) => (days.find((x) => x.weekday === w)?.meals.length ?? 0) > 0} onCopy={(w) => edit(duplicateMealDay(days, day.weekday, w))} />
               {open ? (
                 <MealPicker
                   slot={pickerSlot(day, open.replace)}

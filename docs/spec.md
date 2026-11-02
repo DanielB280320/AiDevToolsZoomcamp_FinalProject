@@ -282,6 +282,7 @@ The generated plan is a starting point. Athletes (and their linked coach) can ed
 
 - Training: add/remove/reorder training days and exercises; set sets, target reps (fixed or range), target weight or duration, rest time, progression rule (`linear`, `double`, `manual`) and increment per exercise; enable/disable deload.
 - Meals: add/remove/replace meals per slot and day; change grams; create custom foods/meals.
+- Duplicate a day (D87): each editor (training, meals) has a "Duplicate day" control that copies a day to one other weekday in the draft. A target with content is replaced only after a confirm dialog. Copies have no ids, so exercises and meals are new and copied meals get new `meal_key`s (D73); logs of the source day never appear on the copy. It saves like any other edit (`PUT /plan/training` / `PUT /plan/meals`, `source = custom`, one plan change).
 - "Regenerate suggested plan": creates a new plan version from the current profile; previous versions are kept (read-only) for history.
 - Any manual edit sets the plan `source` to `custom`. Edits by a coach are labelled "edited by <coach name>".
 
@@ -744,7 +745,7 @@ Fault-injection flags exist only for demonstrations, are off by default and are 
 
 ### 16.1 Priorities
 - **Must (MVP):** F1–F18, §10–§15.
-- **Should (if time allows, may be promoted):** meal swap suggestions ("similar kcal" alternatives), duplicate-a-day in the plan editor, PR (personal record) badges, CSV import of past workouts. Groomed as #54 (D86), #55 (D87), #56 (D88) and #57 (D89); scheduled under M4 (#54, #55, #56) and M6 (#57).
+- **Should (if time allows, may be promoted):** meal swap suggestions ("similar kcal" alternatives), duplicate-a-day in the plan editor (built in #55, see F8), PR (personal record) badges, CSV import of past workouts. Groomed as #54 (D86), #55 (D87), #56 (D88) and #57 (D89); scheduled under M4 (#54, #55, #56) and M6 (#57).
 - **Could:** different targets on training vs. rest days, more templates, notes reactions, dark mode.
 
 ### 16.2 Delivery order (walking skeleton first)
