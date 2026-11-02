@@ -17,7 +17,7 @@ the drill's traffic needs no account and no health data. It carries no message, 
 see only the class name (`DemoFaultError`), like any other unhandled error.
 """
 
-from app.config import get_settings
+from app.dependencies import SettingsDep
 
 # Deliberately not `Final`: the unit tests flip it for the duration of one test.
 S1_FINISH_RAISES: bool = False
@@ -27,6 +27,6 @@ class DemoFaultError(RuntimeError):
     """Raised on `finish` by the S1 demo build in prod; never while `S1_FINISH_RAISES` is False."""
 
 
-def finish_session_fault() -> None:
-    if S1_FINISH_RAISES and get_settings().app_env == "prod":
+def finish_session_fault(settings: SettingsDep) -> None:
+    if S1_FINISH_RAISES and settings.app_env == "prod":
         raise DemoFaultError
