@@ -130,6 +130,10 @@ Same as [CLAUDE.md — Definition of done](../CLAUDE.md#definition-of-done): all
 | Promote to **prod** | `Promote to production` workflow with a SHA already running on dev; requires approval in the `production` environment | Owner approves; DevOps prepares |
 | **Rollback** | Automatic on the host when its post-deploy health check fails (pull-based deploy, ADR 0010); manual `Rollback production` workflow (moves the `deploy/prod` ref back); or the on-call agent's `rollback.sh` on the host | Automatic / owner / on-call agent |
 
+### Rolling back past an import migration (D90)
+
+After rolling back past migration `a9c3e7f1b402` (CSV import, #57), the previous release returns 500 when an imported (plan-less) session is opened by id. The manual step is `DELETE FROM session WHERE imported;` on the production database; the sets cascade and athletes can upload the CSV again. It deletes user data, so it is never automated, it is not on the on-call allow-list, and the owner confirms it each time. Runbook: [demo-s1.md](runbooks/demo-s1.md#6-rollback-caveats-read-before-step-5).
+
 ### Rollback-compat CI job
 
 The job "Rollback compatibility (previous image on the new schema)" runs `scripts/rollback-compat.sh` (`make rollback-compat`) whenever a PR touches migrations, the backend image, the start path or compose files. It builds the PR's image (N) and the previous release's image (N-1, `HEAD^1`), migrates with N, then rolls back the way the hosts do (N-1 on N's schema, no migration step). It checks:
