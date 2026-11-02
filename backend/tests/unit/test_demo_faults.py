@@ -18,7 +18,11 @@ SETS = f"/api/v1/sessions/{uuid.UUID(int=1)}/sets"
 
 
 def settings(app_env: str) -> Settings:
-    return make_settings("postgresql+psycopg://x:x@127.0.0.1:1/x", app_env=app_env)
+    return make_settings(
+        "postgresql+psycopg://x:x@127.0.0.1:1/x",
+        app_env=app_env,
+        user_hash_salt="unit-test-salt-0123456789",  # dev and prod require one
+    )
 
 
 def client(app_env: str = "prod") -> TestClient:
