@@ -35,7 +35,7 @@ class SessionChartExercise(ResponseModel):
 class SessionChart(ResponseModel):
     session_id: uuid.UUID
     date: dt.date
-    training_day_name: str
+    training_day_name: str | None
     status: SessionStatus
     completion: Ratio | None
     kcal: int | None

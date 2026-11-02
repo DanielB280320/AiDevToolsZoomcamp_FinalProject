@@ -177,12 +177,13 @@ def refresh_for_session(
         .with_for_update()
         .execution_options(populate_existing=True)
     )
-    if session is None or session.status != "done":
+    # An imported session has no plan to progress from (D89): no run, no suggestions.
+    if session is None or session.status != "done" or session.imported:
         return []
     engine = engine_for(engine_version)
     version = engine_version if engine_version in ENGINES else DEFAULT_ENGINE
     day = db.get(TrainingDay, session.training_day_id)
-    assert day is not None  # noqa: S101 - FK guarantees it
+    assert day is not None  # noqa: S101 - FK guarantees it for a planned session
     planned_list = list(day.exercises)
     exercises = {
         e.id: e
@@ -504,6 +505,7 @@ def _apply_to_plan(
             ~untouched.exists(),
         )
     ):
+        assert session.training_day_id is not None  # noqa: S101 - planned sessions have a day
         session.plan_id = new.id
         session.training_day_id = day_map[session.training_day_id].id
     for pending in db.scalars(

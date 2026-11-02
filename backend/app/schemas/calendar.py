@@ -72,10 +72,11 @@ class SessionExercise(ResponseModel):
 class Session(ResponseModel):
     id: uuid.UUID
     athlete_id: uuid.UUID
-    plan_id: uuid.UUID
-    plan_version: int
-    training_day_id: uuid.UUID
-    training_day_name: str
+    plan_id: uuid.UUID | None
+    plan_version: int | None
+    training_day_id: uuid.UUID | None
+    training_day_name: str | None
+    imported: bool
     date: dt.date
     original_date: dt.date | None
     status: SessionStatus

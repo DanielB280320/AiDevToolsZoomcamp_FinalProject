@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 
 import { useDeleteAccount, useExportData } from "../api/account";
 import { isApiError } from "../api/errors";
+import { rowErrors, useImportWorkouts } from "../api/importWorkouts";
 import { FormAlert, SubmitButton, TextField } from "../components/form/fields";
 import { paths } from "../paths";
 
@@ -31,6 +32,97 @@ function ExportSection() {
       {exportData.isError && (
         <p role="alert" className="mt-3 font-semibold text-alert">
           {t("account.export.failed")}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function ImportSection() {
+  const { t } = useTranslation();
+  const importer = useImportWorkouts();
+  const [file, setFile] = useState<File | null>(null);
+  const [missing, setMissing] = useState(false);
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (importer.isPending) return;
+    if (file === null) {
+      setMissing(true);
+      return;
+    }
+    setMissing(false);
+    importer.mutate(file);
+  };
+
+  const problem = importer.isError && isApiError(importer.error) ? importer.error.problem : null;
+  const rows = problem?.code === "invalid_import" ? rowErrors(problem.fieldErrors) : [];
+  let failure: string | null = null;
+  if (importer.isError && rows.length === 0) {
+    failure =
+      problem?.code === "file_too_large"
+        ? t("account.import.tooLarge")
+        : problem?.code === "too_many_rows"
+          ? t("account.import.tooManyRows")
+          : t("account.import.failed");
+  }
+
+  return (
+    <section aria-labelledby="import-title" className="border-t-2 border-iron/20 pt-6">
+      <h2 id="import-title" className="font-display text-step-2 font-bold">
+        {t("account.import.title")}
+      </h2>
+      <p className="mt-2 text-slate">{t("account.import.lead")}</p>
+      <form noValidate onSubmit={onSubmit} aria-label={t("account.import.title")} className="mt-4 flex flex-col gap-4">
+        <div>
+          <label htmlFor="import-file" className="font-semibold">
+            {t("account.import.file")}
+          </label>
+          <input
+            id="import-file"
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(event) => {
+              setFile(event.target.files?.[0] ?? null);
+              setMissing(false);
+              importer.reset();
+            }}
+            aria-invalid={missing || undefined}
+            aria-describedby={missing ? "import-file-error" : undefined}
+            className="mt-1.5 block w-full"
+          />
+          {missing && (
+            <p id="import-file-error" className="mt-1.5 text-step--1 font-semibold text-alert">
+              {t("account.import.chooseFile")}
+            </p>
+          )}
+        </div>
+        <div>
+          <SubmitButton pending={importer.isPending}>
+            {importer.isPending ? t("account.import.importing") : t("account.import.button")}
+          </SubmitButton>
+        </div>
+      </form>
+      {importer.isSuccess && (
+        <p role="status" className="mt-3 font-semibold text-spruce-dark">
+          {t("account.import.done", { imported: importer.data.imported, skipped: importer.data.skipped })}
+        </p>
+      )}
+      {rows.length > 0 && (
+        <div role="alert" className="mt-3 text-alert">
+          <p className="font-semibold">{t("account.import.rowsHeading")}</p>
+          <ul className="mt-1 list-disc pl-6">
+            {rows.map((error) => (
+              <li key={`${error.row}-${error.reason}`}>
+                {error.row === null ? error.reason : t("account.import.row", { row: error.row, reason: error.reason })}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {failure !== null && (
+        <p role="alert" className="mt-3 font-semibold text-alert">
+          {failure}
         </p>
       )}
     </section>
@@ -117,6 +209,7 @@ export function AccountPage() {
     <article className="flex max-w-[40rem] flex-col gap-8">
       <h1 className="font-display text-step-4 font-bold">{t("account.title")}</h1>
       <ExportSection />
+      <ImportSection />
       <DeleteSection />
     </article>
   );

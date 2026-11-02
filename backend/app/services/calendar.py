@@ -202,7 +202,7 @@ def training_days(
     tpl = _template(db, user)
     rows = db.execute(
         select(TrainingSession, TrainingDay.name)
-        .join(TrainingDay, TrainingDay.id == TrainingSession.training_day_id)
+        .outerjoin(TrainingDay, TrainingDay.id == TrainingSession.training_day_id)
         .where(
             TrainingSession.athlete_id == user.id,
             or_(
@@ -277,16 +277,16 @@ def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) 
     from app.services import training_log  # imported late: training_log builds on this module
 
     training_day, exercises = training_log.load_day(db, row)
-    plan = db.get(Plan, row.plan_id)
-    assert plan is not None  # noqa: S101 - FK guarantees it
+    plan = db.get(Plan, row.plan_id) if row.plan_id is not None else None
     logs = list(db.scalars(select(SetLog).where(SetLog.session_id == row.id)))
-    _, per_exercise = training_log.session_completion(training_day, exercises, logs)
+    planned_list = list(training_day.exercises) if training_day else []
+    _, per_exercise = training_log.session_completion(planned_list, exercises, logs)
     logs_by_exercise: dict[uuid.UUID, dict[int, SetLog]] = {}
     for log in sorted(logs, key=lambda x: (x.logged_at, x.set_no)):
         logs_by_exercise.setdefault(log.exercise_id, {})[log.set_no] = log
 
     pending = suggestions.pending_by_planned_exercise(
-        db, row.athlete_id, [p.id for p in training_day.exercises]
+        db, row.athlete_id, [p.id for p in planned_list]
     )
 
     def summary(exercise: Exercise) -> dict[str, Any]:
@@ -316,7 +316,7 @@ def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) 
 
     items: list[out.SessionExercise] = []
     planned_exercise_ids: set[uuid.UUID] = set()
-    for planned in training_day.exercises:
+    for planned in planned_list:
         exercise = exercises[planned.exercise_id]
         planned_exercise_ids.add(planned.exercise_id)
         done = logs_by_exercise.get(planned.exercise_id, {})
@@ -347,7 +347,7 @@ def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) 
                 from_attributes=True,
             )
         )
-    extra_order = max((p.position for p in training_day.exercises), default=0)
+    extra_order = max((p.position for p in planned_list), default=0)
     for exercise_id, done in logs_by_exercise.items():
         if exercise_id in planned_exercise_ids:
             continue
@@ -376,9 +376,10 @@ def session_view(db: Session, user: User, row: TrainingSession, today: dt.date) 
             "id": row.id,
             "athlete_id": row.athlete_id,
             "plan_id": row.plan_id,
-            "plan_version": plan.version,
+            "plan_version": plan.version if plan else None,
             "training_day_id": row.training_day_id,
-            "training_day_name": training_day.name,
+            "training_day_name": training_day.name if training_day else None,
+            "imported": row.imported,
             "date": row.date,
             "original_date": row.original_date,
             "status": _status(row.status, row.date, today),

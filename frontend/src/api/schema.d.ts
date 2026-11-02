@@ -822,6 +822,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/athletes/{athlete_id}/imports/workouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import past workouts from a CSV
+         * @description Imports historical sets (F10.5, D89). Athlete only: a coach gets `403 wrong_role`, a
+         *     stranger `403 not_linked`.
+         *
+         *     Format: UTF-8, comma-separated, header row
+         *     `date,exercise,set,reps,weight_kg,duration_seconds,distance_m`. `date` is `YYYY-MM-DD`
+         *     in the athlete's time zone and not in the future; weight is always kg. `exercise`
+         *     matches a catalog exercise visible to the athlete by case-insensitive exact name.
+         *     Strength needs `reps` and `weight_kg`, bodyweight needs `reps`, timed needs
+         *     `duration_seconds` (`distance_m` optional). At most 2 MB (`413 file_too_large`) and
+         *     5,000 data rows (`422 too_many_rows`).
+         *
+         *     All or nothing: any invalid row returns `422 invalid_import` and nothing is written.
+         *     `errors[]` lists up to 20 rows as `field: rows.<n>` (row 1 is the header, the first data
+         *     row is 2) with a fixed reason; row content and exercise names are never echoed. A date
+         *     that already has a session that was not imported is rejected the same way.
+         *
+         *     Each imported date gets one finished, plan-less session (`imported: true`) whose sets
+         *     have no targets. Imported sessions count in history, the exercise chart (no target line)
+         *     and PR flags, but never run the progression engine or create suggestions. Re-uploading
+         *     the same file imports 0 and reports every row in `skipped` (idempotent by date,
+         *     exercise, set number). Imported sets can be deleted with `deleteSetLog` at any time.
+         */
+        post: operations["importWorkouts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/athletes/{athlete_id}/suggestions": {
         parameters: {
             query?: never;
@@ -1379,7 +1422,8 @@ export interface components {
              *     `outside_week`, `date_in_past`,
              *     `edit_window_closed`, `suggestion_already_decided`, `invalid_overrides`, `link_exists`, `link_not_pending`,
              *     `validation_error`, `underage`, `disclaimer_required`, `rate_limited`,
-             *     `off_unavailable`, `not_ready`. New codes may be added.
+             *     `off_unavailable`, `not_ready`, `invalid_import`, `too_many_rows`, `file_too_large`,
+             *     `import_conflict`. New codes may be added.
              */
             code: string;
             /** @description Field-level errors — invalid parameters (400) or invalid request-body fields (422). `field` is the parameter name or the body path. */
@@ -1984,10 +2028,13 @@ export interface components {
         Session: {
             id: components["schemas"]["Id"];
             athlete_id: components["schemas"]["Id"];
-            plan_id: components["schemas"]["Id"];
-            plan_version: number;
-            training_day_id: components["schemas"]["Id"];
-            training_day_name: string;
+            /** @description `null` for an imported session (no plan behind it). */
+            plan_id: components["schemas"]["Id"] | null;
+            plan_version: number | null;
+            training_day_id: components["schemas"]["Id"] | null;
+            training_day_name: string | null;
+            /** @description Created by the CSV import of past workouts (F10.5); has no plan and no set targets. */
+            imported: boolean;
             date: components["schemas"]["LocalDate"];
             /** @description Planned date before a move; `null` if not moved. */
             original_date: components["schemas"]["LocalDate"] | null;
@@ -2057,6 +2104,12 @@ export interface components {
             /** @constant */
             estimated: true;
             created_at: components["schemas"]["Timestamp"];
+        };
+        WorkoutImportResult: {
+            /** @description Sets written. */
+            imported: number;
+            /** @description Rows whose set (date, exercise, set number) already existed. */
+            skipped: number;
         };
         ActivityResult: components["schemas"]["DayEnergyUpdate"] & {
             activity: components["schemas"]["Activity"];
@@ -2294,7 +2347,7 @@ export interface components {
         SessionChart: {
             session_id: components["schemas"]["Id"];
             date: components["schemas"]["LocalDate"];
-            training_day_name: string;
+            training_day_name: string | null;
             status: components["schemas"]["SessionStatus"];
             completion: components["schemas"]["Ratio"] | null;
             kcal: components["schemas"]["Kcal"] | null;
@@ -3886,6 +3939,88 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    importWorkouts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The CSV file.
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Imported. Counts are sets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkoutImportResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description A workout changed while importing (`import_conflict`); nothing was written, try again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The file is larger than 2 MB (`file_too_large`). */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description `invalid_import` (see above; `errors[].field` is `rows.<n>`) or `too_many_rows`.
+             *     Nothing was written.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "/problems/invalid_import",
+                     *       "title": "Unprocessable Entity",
+                     *       "status": 422,
+                     *       "code": "invalid_import",
+                     *       "detail": "Nothing was imported: fix the listed rows and try again.",
+                     *       "errors": [
+                     *         {
+                     *           "field": "rows.3",
+                     *           "code": "invalid_row",
+                     *           "message": "unknown exercise"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     listSuggestions: {

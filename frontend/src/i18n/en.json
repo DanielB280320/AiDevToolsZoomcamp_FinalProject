@@ -32,6 +32,20 @@
       "wrongPassword": "That password is not correct. Nothing was deleted.",
       "required": "Enter your password.",
       "failed": "Your account could not be deleted. Try again."
+    },
+    "import": {
+      "title": "Import past workouts",
+      "lead": "Upload a CSV of past sets to add them to your history and charts. Columns: date, exercise, set, reps, weight_kg, duration_seconds, distance_m. Dates are YYYY-MM-DD, weights are in kg, and exercise names must match the catalog. If any row is invalid, nothing is imported.",
+      "file": "CSV file",
+      "button": "Import workouts",
+      "importing": "Importing…",
+      "chooseFile": "Choose a CSV file first.",
+      "done": "Imported {{imported}} sets, skipped {{skipped}} already imported.",
+      "rowsHeading": "Nothing was imported. Fix these rows and try again:",
+      "row": "Row {{row}}: {{reason}}",
+      "tooLarge": "The file is larger than 2 MB. Split it and try again.",
+      "tooManyRows": "The file has more than 5,000 rows. Split it and try again.",
+      "failed": "The import failed. Try again."
     }
   },
   "footer": {
@@ -593,7 +607,8 @@
       "edit_window_closed": "This workout can no longer be edited.",
       "invalid_set": "Those values don't fit this exercise. Check them and try again.",
       "generic": "That didn't save. Try again."
-    }
+    },
+    "imported": "Imported workout"
   },
   "meals": {
     "eatenAsPlanned": "Eaten as planned",
