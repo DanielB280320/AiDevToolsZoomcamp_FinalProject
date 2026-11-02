@@ -1,19 +1,22 @@
 """Plan endpoints (openapi.yaml, tag Plan): read, custom-mode edits, regenerate, versions."""
 
+import datetime as dt
+import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, Query
 
 from app.dependencies import OwnerOrCoachAccess, SessionDep
 from app.schemas.plans import (
     MealPlanUpdate,
+    MealSwapList,
     Plan,
     PlanVersionList,
     RegeneratePlanRequest,
     TrainingPlanUpdate,
 )
 from app.schemas.problem import Problem
-from app.services import plan_edit, plans
+from app.services import meal_swaps, plan_edit, plans
 from app.services.clock import ClockDep
 
 router = APIRouter(prefix="/athletes/{athlete_id}/plan", tags=["Plan"])
@@ -63,6 +66,23 @@ def update_meal_plan(
 ) -> Plan:
     """Replace the meal template; stores a new `custom` version (F8)."""
     return plan_edit.update_meals(session, access.actor, access.athlete.id, body, clock.now())
+
+
+@router.get(
+    "/meals/{meal_key}/swaps",
+    operation_id="getMealSwaps",
+    response_model=MealSwapList,
+    responses={**_COMMON, 404: _PROBLEM, 422: _PROBLEM},
+)
+def get_meal_swaps(
+    access: OwnerOrCoachAccess,
+    meal_key: uuid.UUID,
+    session: SessionDep,
+    clock: ClockDep,
+    date: Annotated[dt.date | None, Query()] = None,
+) -> MealSwapList:
+    """Up to 3 alternatives within +-10 % kcal for a planned meal (D86); read-only."""
+    return meal_swaps.swaps(session, access.athlete, meal_key, date, clock.now())
 
 
 @router.post(

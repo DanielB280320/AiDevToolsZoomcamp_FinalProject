@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 
 import type { MealSlot } from "../../api/meals";
 import { isApiError } from "../../api/errors";
-import { useSaveMeals, type MealDay, type Weekday } from "../../api/plan";
+import { useSaveMeals, type MealDay, type MealSwap, type Weekday } from "../../api/plan";
 import { BUTTON, FieldError, ICON_BUTTON, SelectInput, TextInput } from "./fields";
 import { DuplicateDay } from "./DuplicateDay";
 import { MealPicker, SLOTS } from "./MealPicker";
-import { buildMealUpdate, draftFromLibraryMeal, duplicateMealDay, mealDraftFromPlan, mealPath, requestIndex, type DraftMeal, type DraftMealDay } from "./mealDraft";
+import { MealSwaps } from "./MealSwaps";
+import { buildMealUpdate, draftFromLibraryMeal, draftFromSwap, duplicateMealDay, mealDraftFromPlan, mealPath, requestIndex, type DraftMeal, type DraftMealDay } from "./mealDraft";
 import { FIELD, type LocalError } from "./trainingDraft";
 import { SaveBar } from "./SaveBar";
 import type { EditorProps } from "./TrainingEditor";
@@ -30,6 +31,7 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
   const [local, setLocal] = useState<Record<string, LocalError>>({});
   const [server, setServer] = useState<Record<string, string>>({});
   const [picker, setPicker] = useState<Picker>(null);
+  const [swapping, setSwapping] = useState<string | null>(null);
   const save = useSaveMeals(athleteId);
   const dirty = JSON.stringify(days) !== initial;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
@@ -43,8 +45,8 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
   const patchMeal = (weekday: Weekday, uid: string, patch: Partial<DraftMeal>) =>
     edit(days.map((day) => (day.weekday === weekday ? { ...day, meals: day.meals.map((m) => (m.uid === uid ? { ...m, ...patch } : m)) } : day)));
 
-  const onSave = () => {
-    const built = buildMealUpdate(days, conflict ? plan.revision : baseRevision);
+  const submit = (draft: DraftMealDay[]) => {
+    const built = buildMealUpdate(draft, conflict ? plan.revision : baseRevision);
     if (!built.body) {
       setLocal(built.errors);
       return;
@@ -58,6 +60,16 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
         else if (isApiError(failure) && failure.problem.code === "invalid_plan") setServer(failure.problem.fieldErrors);
       },
     });
+  };
+  const onSave = () => submit(days);
+  /** Choosing a swap replaces the meal with a new one (D73) and saves right away, like any other edit. */
+  const applySwap = (weekday: Weekday, uid: string, swap: MealSwap) => {
+    const next = days.map((day) =>
+      day.weekday === weekday ? { ...day, editedBy: null, meals: day.meals.map((m) => (m.uid === uid ? draftFromSwap(swap, m.slot) : m)) } : day,
+    );
+    setSwapping(null);
+    edit(next);
+    submit(next);
   };
 
   const failure = save.error;
@@ -120,9 +132,20 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
                           </li>
                         ))}
                       </ul>
-                      <button type="button" className={`${BUTTON} mt-3`} onClick={() => setPicker({ weekday: day.weekday, replace: meal.uid })} aria-label={t("plan.meals.replace", { name: meal.mealName })}>
-                        {t("plan.meals.replaceButton")}
-                      </button>
+                      <div className="mt-3 flex flex-wrap gap-3">
+                        <button type="button" className={BUTTON} onClick={() => setPicker({ weekday: day.weekday, replace: meal.uid })} aria-label={t("plan.meals.replace", { name: meal.mealName })}>
+                          {t("plan.meals.replaceButton")}
+                        </button>
+                        {meal.mealKey && (
+                          <button type="button" className={BUTTON} disabled={dirty || blocked || save.isPending} aria-expanded={swapping === meal.uid} onClick={() => setSwapping(swapping === meal.uid ? null : meal.uid)} aria-label={t("plan.meals.swap.open", { name: meal.mealName })}>
+                            {t("plan.meals.swap.button")}
+                          </button>
+                        )}
+                      </div>
+                      {meal.mealKey && dirty && <p className="mt-1 text-step--1 text-slate">{t("plan.meals.swap.saveFirst")}</p>}
+                      {meal.mealKey && swapping === meal.uid && !dirty && (
+                        <MealSwaps athleteId={athleteId} mealKey={meal.mealKey} mealName={meal.mealName} pending={save.isPending} onPick={(swap) => applySwap(day.weekday, meal.uid, swap)} onClose={() => setSwapping(null)} />
+                      )}
                     </li>
                   );
                 })}
