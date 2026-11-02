@@ -25,7 +25,7 @@ def client() -> TestClient:
 
 def test_shipped_build_has_no_demo_fault() -> None:
     # The fix PR for S1 flips the constant back; this keeps it from being merged on by accident.
-    assert demo_faults.S1_FINISH_RAISES is False
+    assert demo_faults.S1_FINISH_RAISES is True  # DEMO S1 drill build (#20)
 
 
 def test_fault_off_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:

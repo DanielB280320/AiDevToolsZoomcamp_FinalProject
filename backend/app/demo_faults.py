@@ -13,7 +13,7 @@ see only the class name (`DemoFaultError`), like any other unhandled error.
 """
 
 # Deliberately not `Final`: the unit tests flip it for the duration of one test.
-S1_FINISH_RAISES: bool = False
+S1_FINISH_RAISES: bool = True  # DEMO S1 drill build (#20)
 
 
 class DemoFaultError(RuntimeError):
