@@ -53,7 +53,11 @@ def test_v2_equals_v1_for_non_bodyweight(p: ProgressionInput) -> None:
 
 
 @given(_inputs("bodyweight"))
-def test_v2_always_raises_for_bodyweight_with_constant_message(p: ProgressionInput) -> None:
-    with pytest.raises(progression_v2.BodyweightNotSupported) as raised:
-        progression_v2.suggest(p)
-    assert str(raised.value) == "progression engine v2 does not support bodyweight exercises"
+def test_v2_equals_v1_for_bodyweight(p: ProgressionInput) -> None:
+    try:
+        expected = progression.suggest(p)
+    except Exception as exc:  # v2 must fail identically to v1
+        with pytest.raises(type(exc)):
+            progression_v2.suggest(p)
+        return
+    assert progression_v2.suggest(p) == expected

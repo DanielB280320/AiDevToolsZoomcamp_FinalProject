@@ -1,8 +1,8 @@
-"""Progression engine v2: a DEMO-ONLY faulty version (spec §15.3, scenario S2).
+"""Progression engine v2 (experimental, spec §15.3, scenario S2).
 
-v2 behaves exactly like v1 except that it raises `BodyweightNotSupported` for bodyweight
-exercises, so finishing a session that contains one returns a 5xx and trips KeyJourneyErrors.
-It exists only so the on-call agent has a real fault to mitigate (`flag.sh progression_engine v1`).
+v2 behaves exactly like v1, including for bodyweight exercises. It used to raise
+`BodyweightNotSupported` for them, which made finishing such a session return a 5xx and tripped
+KeyJourneyErrors; that is fixed and the exception is no longer raised.
 
 It is reachable only through the `progression_engine` feature flag, which defaults to `v1`; never
 set it to `v2` outside the demo. The error message is a constant: no exercise, weight or rep
@@ -21,6 +21,5 @@ class BodyweightNotSupported(Exception):  # noqa: N818 - reads better as a domai
 
 
 def suggest(p: ProgressionInput) -> Suggestion:
-    if p.exercise_type == "bodyweight":
-        raise BodyweightNotSupported
+    # Bodyweight exercises are handled by v1 (incident #218): v2 no longer raises.
     return progression.suggest(p)
