@@ -6,6 +6,10 @@
 #  - the collector's OTLP/gRPC port is published on the host for the dev collector (the security group
 #    admits only the dev Elastic IP; see deploy/provision.sh), and Grafana on 0.0.0.0:3000 (security
 #    group: owner IP only);
+#  - Prometheus (9090), Loki (3100) and Tempo (3200) are published on 127.0.0.1 ONLY: the on-call
+#    responder (systemd, on the host, not in Docker) captures evidence from them and gives the agent
+#    the same URLs (oncall/responder/config.py defaults). Never 0.0.0.0 (they have no authentication;
+#    the security group does not admit them either). scripts/check-oncall-obs-reach.sh guards this;
 #  - Grafana's public URL comes from GRAFANA_ROOT_URL in the env file.
 # Credentials (GRAFANA_ADMIN_PASSWORD) come from the root-only env file, never from git.
 services:
@@ -18,14 +22,20 @@ services:
     volumes:
       - ${OBS_CONFIG_DIR:?}/prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
   loki:
     volumes:
       - ${OBS_CONFIG_DIR:?}/loki:/etc/loki:ro
       - loki-data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
   tempo:
     volumes:
       - ${OBS_CONFIG_DIR:?}/tempo:/etc/tempo:ro
       - tempo-data:/var/tempo
+    ports:
+      - "127.0.0.1:3200:3200"
   grafana:
     environment:
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
