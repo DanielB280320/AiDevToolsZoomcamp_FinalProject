@@ -248,6 +248,32 @@ Prometheus `query_range`, the alert's own expression for the finish route (5xx i
 
 The ratio crosses 5 % upwards between 19:30 and 19:31 (flag set at 19:30:29Z, first failure about 19:30:40Z), the 20-request guard is met at 19:32 (21), the alert fires at 19:32:10Z, the mitigation lands at 19:32:47Z, and the ratio is 0 from 19:38 once the failing requests leave the window; the alert returns to Normal at 19:38:10Z. The `ALERTS` series is not present in this Prometheus (Grafana-managed rules; the state history above is the source). The rule's state at collection time: `inactive`, health `ok`.
 
+### Transcript excerpt, run 2
+
+From `incidents/20261103T193220Z-c9616e4f3c53/transcript` on `fitwise-prod` (stream-json, mode 0600, 243 events, never copied off the host). Only the events below were extracted on the host with the responder's Python, and the extractor replaced anything shaped like an identifier, trace id, email or token with `<redacted>`; none of these events contained one. Each line is the event's own timestamp (UTC).
+
+(a) The mitigation tool call and its result:
+
+```text
+19:32:47.521Z  tool_use Bash   oncall/ops/flag.sh progression_engine v1
+19:32:49.731Z  tool_result     progression_engine: v2 -> v1 (changed, by oncall-agent at 2026-11-03T19:32:49.348182Z)
+```
+
+(b) The recovery report. The last of the five checks (a read-only PromQL query for the finish route, ratio of 5xx to all requests over 5 min) and its result, then the agent's messages:
+
+```text
+19:42:12.716Z  tool_result     {"status":"success","data":{"resultType":"vector","result":[{"metric":{"route":"/api/v1/sessions/{session_id}/finish"},"value":[1793734932.710,"0"]}]}}
+19:42:13.833Z  assistant       Ratio 0 at 19:42:12 (check 5 of 5). I'll write the issue while the last timer runs.
+19:42:38.108Z  assistant       The finish endpoint has recovered after one mitigation, and the fix PR is open. [...]
+                               - Mitigation: I ran `oncall/ops/flag.sh progression_engine v1` at 19:32:49. This was the only mitigation.
+                               - Recovery: The 5xx ratio on the finish route was 0 at five consecutive checks, 19:38:03 through 19:42:12. I did not run `docker compose ps`.
+                               - Issue: #218.
+                               - PR: #219 makes v2 behave like v1 for bodyweight exercises. It adds two regression tests and removes the two tests that asserted the old failure. The flag and its default (v1) are unchanged.
+19:43:14.902Z  assistant       That was the last background timer finishing. The work was already complete, so nothing further is needed. [...] Recovery: The 5xx ratio on the finish route was 0 at five consecutive checks, 19:38 to 19:42 UTC.
+```
+
+The five checks the agent logged as it went: 0 at 19:38:03, 19:39:06, 19:40:08, 19:41:10 and 19:42:12, after 0.83, 0.625, 0.48 and 0.196 earlier in the window (19:34 to 19:37). The final `result` event of the run is `subtype: success`, `is_error: false`.
+
 ## Health-data redaction checklist
 
 Before anything from this run leaves the host (screenshots, transcript excerpts, issue text, PR text):
