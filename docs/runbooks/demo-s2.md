@@ -171,7 +171,7 @@ scripts/demo-s2-traffic.py --requests 5 --interval 0 --expect ok
 
 On dev, set `DEMO_S2_ALLOW_REMOTE=1` and run the flag commands on the dev host as in step 2. Dev is not in the alert's scope (`env=prod`), so no page is raised there.
 
-## Evidence (live run 2026-11-03)
+## Evidence, run 1 (live run 2026-11-03, history)
 
 Issue [#33](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/issues/33). Times UTC.
 
@@ -201,6 +201,32 @@ Transcript (mode 0600, stays on the host), commands only: `curl` queries to Loki
 ### Gap found: no fix PR
 
 The issue's Follow-up says: "Root-cause fix PR: not opened. `progression_v2.py` is a documented demo-only faulty engine (it raises on bodyweight exercises on purpose) and only reachable through the flag." The agent read the file's docstring, judged the fault intentional and, as the prompt tells it to open a fix PR "only if you can identify the cause in the code", did not open one. So AC "fix PR with a regression test for bodyweight under v2" has no evidence from this run. The fix is a separate decision for the owner: either (a) accept the agent's reasoning and record that the demo fault is by design, with the fix PR written by an Engineer (fix v2 for bodyweight plus a test), or (b) change the S2 expectations in `key-journey-errors.md` / the responder prompt, which is on-call code and needs `install-oncall.sh` at the merge SHA before a rerun. Not changed in this PR.
+
+## Evidence, run 2 (2026-11-03, after PR #217)
+
+Run 1 ended without a fix PR. PR [#217](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/pull/217) (merged as `9cb17d58fed7`) changed the agent's instructions; the host got it through `install-oncall.sh` at that SHA, then S2 was run again with the same steps and safety rules. Times UTC.
+
+| Item | Value |
+|---|---|
+| On-call host code | `install-oncall.sh` at `9cb17d58fed7e1b6735c1c194221a73ac9460f7f` (script fetched from raw.githubusercontent at that SHA); `fitwise-oncall` active; app HEAD `9cb17d58fed7`; the new prompt text is in the checkout |
+| Pre-flight | all passed: build `9b0c039`, flag `v1`, evidence URLs 200 x3, rules inactive and healthy, 0 open markers, guard probe 0/2/2, agent auth `{"is_error":false,"result":"OK"}`, token `set` len 108 without whitespace |
+| Check traffic with flag `v1` | `HTTP 200 x3` |
+| Flag set to v2 (`T0`) | 19:30:27Z (`progression_engine: v1 -> v2 (changed, by owner at 19:30:29Z)`) |
+| Error traffic | from 19:30:44Z, `HTTP 500 x30 (30 errors)`, ended 19:32:47Z; no set traffic |
+| First failing request | about 19:30:40Z |
+| **Alert fired** | **19:32:20Z** (incident `20261103T193220Z-c9616e4f3c53`), about 1 min 40 s after the first failure |
+| Clone refreshed / **mitigation** (`oncall/ops/flag.sh progression_engine v1`) | `9cb17d58fed7` at 19:32:38Z / **19:32:47Z** (flag row `v2 -> v1 by oncall-agent at 19:32:49Z`). Alert to mitigation: 27 s. One mitigation in `mitigation.json` |
+| Recovery traffic | from 19:33:38Z, `HTTP 200 x90` (93 finishes with 200 in the log including the check traffic; no 500) |
+| 5xx ratio | first 0 at 19:38:03Z (agent's check); 0 at the five checks 19:38 to 19:42 |
+| **Alert resolved** / incident closed | **19:38:20Z**. Alert to recovery: 6 min 0 s |
+| `/healthz` poll (every 5 s, 19:30:21Z to 19:43:44Z) | 156 samples, all `200`, one version `9b0c039` |
+| Agent run | exit 0, 637.1 s, not timed out, budget 5, finished 19:43:15Z; 0 permission denials |
+| Incident issue | [#218](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/issues/218) (19:42:26Z) |
+| **Fix PR** | [#219](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/pull/219) (19:42:33Z, branch `oncall/20261103T193220Z-c9616e4f3c53`): `backend/app/engines/progression_v2.py` (v2 handles bodyweight exercises like v1), `backend/tests/unit/test_progression_v2_qa.py`, `backend/tests/integration/test_suggestions.py` (`test_v2_finishes_a_bodyweight_session`, a finish under v2 with a bodyweight exercise; plus an equality test v2 == v1 for bodyweight). CI status at the time of writing: `Backend lint (ruff, mypy)` failed, the other checks ran or were pending. Not touched by the DevOps agent |
+| Transcript (commands only) | `ls` and `head` of the saved JSON, Loki queries, `git -C <clone> grep` and a read of `progression_v2.py`, `oncall/ops/flag.sh progression_engine v1`, a read of the existing v2 test, then `git fetch`, `git checkout -b oncall/<id> refs/remotes/origin/main`, grep for test helpers, `git add`, `git commit`, `git push`, about 25 one-minute recovery queries, `gh issue create`, `gh pr create`. The agent says it could not run the tests, so CI is the first run |
+| Flag after the run | `progression_engine v1` (by `oncall-agent`); `CURRENT_TAG` `9b0c039`, `ROLLED_BACK_FROM` empty |
+| Post-drill checks | journals: 0 hits; one mitigation; the incident-folder grep lists only `agent-settings.json` (the `includeCoAuthoredBy` false positive of run 1) |
+| Grafana screenshot (owner) | alert window for the screenshot: 19:32:20Z to 19:38:20Z (dashboard "Key journey", `env=prod`, route finish); the dashboard time range 19:28 to 19:45Z shows the 500s, the mitigation and the recovery |
 
 ## Health-data redaction checklist
 
