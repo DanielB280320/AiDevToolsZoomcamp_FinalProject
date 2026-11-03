@@ -21,5 +21,5 @@ class BodyweightNotSupported(Exception):  # noqa: N818 - reads better as a domai
 
 
 def suggest(p: ProgressionInput) -> Suggestion:
-    # Bodyweight exercises are handled by v1 (INC 20261103T193220Z-c9616e4f3c53): v2 no longer raises.
+    # Bodyweight exercises are handled by v1 (incident #218): v2 no longer raises.
     return progression.suggest(p)

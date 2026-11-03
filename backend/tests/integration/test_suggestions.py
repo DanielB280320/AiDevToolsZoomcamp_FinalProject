@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.engines import progression
 from app.main import create_app
 from app.models import Exercise, FeatureFlag, PlannedExercise, SetLog, Suggestion, User
 from app.services import suggestions as svc
