@@ -222,11 +222,31 @@ Run 1 ended without a fix PR. PR [#217](https://github.com/DanielB280320/AiDevTo
 | `/healthz` poll (every 5 s, 19:30:21Z to 19:43:44Z) | 156 samples, all `200`, one version `9b0c039` |
 | Agent run | exit 0, 637.1 s, not timed out, budget 5, finished 19:43:15Z; 0 permission denials |
 | Incident issue | [#218](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/issues/218) (19:42:26Z) |
-| **Fix PR** | [#219](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/pull/219) (19:42:33Z, branch `oncall/20261103T193220Z-c9616e4f3c53`): `backend/app/engines/progression_v2.py` (v2 handles bodyweight exercises like v1), `backend/tests/unit/test_progression_v2_qa.py`, `backend/tests/integration/test_suggestions.py` (`test_v2_finishes_a_bodyweight_session`, a finish under v2 with a bodyweight exercise; plus an equality test v2 == v1 for bodyweight). CI status at the time of writing: `Backend lint (ruff, mypy)` failed, the other checks ran or were pending. Not touched by the DevOps agent |
+| **Fix PR** | [#219](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/pull/219) (19:42:33Z, branch `oncall/20261103T193220Z-c9616e4f3c53`; incident #218), **merged as `55f99de`** after CI went green. Files: `backend/app/engines/progression_v2.py` (v2 handles bodyweight exercises like v1), `backend/tests/unit/test_progression_v2_qa.py` (v2 equals v1 for bodyweight), `backend/tests/integration/test_suggestions.py` (`test_v2_finishes_a_bodyweight_session`, a finish under v2 with a bodyweight exercise). The agent could not run tests or lint; its first CI run failed on two ruff errors, fixed before the merge by the Engineer. Promotion of `55f99de` through "Promote to production": pending (handled by the orchestrator; prod keeps serving `9b0c039` with the flag on `v1`) |
 | Transcript (commands only) | `ls` and `head` of the saved JSON, Loki queries, `git -C <clone> grep` and a read of `progression_v2.py`, `oncall/ops/flag.sh progression_engine v1`, a read of the existing v2 test, then `git fetch`, `git checkout -b oncall/<id> refs/remotes/origin/main`, grep for test helpers, `git add`, `git commit`, `git push`, about 25 one-minute recovery queries, `gh issue create`, `gh pr create`. The agent says it could not run the tests, so CI is the first run |
 | Flag after the run | `progression_engine v1` (by `oncall-agent`); `CURRENT_TAG` `9b0c039`, `ROLLED_BACK_FROM` empty |
 | Post-drill checks | journals: 0 hits; one mitigation; the incident-folder grep lists only `agent-settings.json` (the `includeCoAuthoredBy` false positive of run 1) |
-| Grafana screenshot (owner) | alert window for the screenshot: 19:32:20Z to 19:38:20Z (dashboard "Key journey", `env=prod`, route finish); the dashboard time range 19:28 to 19:45Z shows the 500s, the mitigation and the recovery |
+| Alert evidence (text, instead of a screenshot; D93) | See "Alert evidence, run 2" below |
+
+### Alert evidence, run 2 (read-only, collected on prod 2026-11-03, window 19:28 to 19:45Z)
+
+Per D93 the alert evidence is text, not a screenshot. Labels and numbers only; no user identifiers, no secrets.
+
+Grafana alert state history, rule `fitwise-key-journey-errors` (`KeyJourneyErrors`, labels `env=prod`, `route=/api/v1/sessions/{session_id}/finish`, `service=fitwise-backend`, `severity=page`):
+
+| Evaluated at | Transition | Delivered to the responder |
+|---|---|---|
+| 19:32:10Z | Normal (NoData) -> Alerting (values A=0.875, B=0.875, C=1) | 19:32:20Z (`incident_opened`; `group_wait` 10 s) |
+| 19:38:10Z | Alerting -> Normal (A=B=C=0) | 19:38:20Z (`alert_resolved`) |
+
+Prometheus `query_range`, the alert's own expression for the finish route (5xx increase over 5 min divided by all requests over 5 min, `env="prod"`, `method="POST"`), step 30 s, shown every 60 s; the second row is the request count in the same 5-minute window (the alert needs 20 or more):
+
+| Time (Z) | 19:30 | 19:31 | 19:32 | 19:33 | 19:34 | 19:35 | 19:36 | 19:37 | 19:38 | 19:39 to 19:45 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 5xx ratio | no data | 0.50 | 0.85 | 0.909 | 0.833 | 0.625 | 0.48 | 0.196 | 0 | 0 |
+| Requests in window | 0 | n/a | 21 | n/a | 38 | n/a | 53 | n/a | 51 | 57 to 28 |
+
+The ratio crosses 5 % upwards between 19:30 and 19:31 (flag set at 19:30:29Z, first failure about 19:30:40Z), the 20-request guard is met at 19:32 (21), the alert fires at 19:32:10Z, the mitigation lands at 19:32:47Z, and the ratio is 0 from 19:38 once the failing requests leave the window; the alert returns to Normal at 19:38:10Z. The `ALERTS` series is not present in this Prometheus (Grafana-managed rules; the state history above is the source). The rule's state at collection time: `inactive`, health `ok`.
 
 ## Health-data redaction checklist
 
