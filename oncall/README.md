@@ -96,6 +96,7 @@ email through a Loki stub to show that. Its own logs also go through an allow-li
 | `ONCALL_LAUNCHER_CMD` | empty (no-op that logs) | Command line run for each new incident, no shell (test seam; ignored when the agent is enabled) |
 | `ONCALL_LAUNCHER_TIMEOUT_S` | `1260` | Launcher timeout (spec: 20 min plus margin) |
 | `ONCALL_WORKERS` | `4` | Background worker threads |
+| `ONCALL_CLONE_REFRESH_TIMEOUT_S` | `60` | Timeout per git step when the agent clone is refreshed to `origin/main` before a run |
 | `ONCALL_HOST` / `ONCALL_PORT` | `127.0.0.1` / `8099` | Listen address |
 
 The webhook credentials (`ONCALL_WEBHOOK_USER`, `ONCALL_WEBHOOK_PASSWORD`) are shared with Grafana,
@@ -133,9 +134,13 @@ Built per incident by `build_allowlist` (the test `test_allow_list_is_exactly_th
 | `sleep <1-120>` | pacing for the 5-minute recovery check |
 | `gh issue create --repo <repo> --label incident --title ... --body-file <incident>/issue.md` | fixed option order |
 | `git -C <separate clone> ...` (status, diff, log, show, add, commit, checkout, switch, branch, fetch, push) and `gh pr create ... --head oncall/<id> --base main` | push only `origin oncall/<branch>`; never `main`, never force |
-| Read in the incident folder and the clone; Write `issue.md`, `pr.md`, `commit-msg.txt` there; Edit/Write in the clone except `.git`, `.github`, `.claude`, `oncall`, `deploy` | |
+| Read in the incident folder and the clone; Write `issue.md`, `pr.md`, `commit-msg.txt` there; Edit/Write in the clone except `.git`, `.github`, `.claude`, `oncall`, `deploy` | Granted with `Edit(//<abs path>)` rules: Claude Code applies them to both Write and Edit, and ignores `Write(...)` rules (drill S1 attempt 2). `tests/test_claude_permissions.py` runs the real `claude` against a local fake API to prove it |
 
 Everything else is denied: `psql`, `rm`, `sudo`, `docker compose exec/up/down`, `git push origin main`, `gh api`, any pipe, redirect, `;`, `&&`, `$(...)`, WebFetch/WebSearch. Two layers: the settings permission rules (deny wins, `dontAsk` denies the unlisted), and `responder/guard.py`, a `PreToolUse` hook that fails closed and re-checks the exact shape of every call. For git the guard holds a per-subcommand allow-list of options, matched as exact tokens (git accepts abbreviated long options, so there is no prefix matching; `--opt=value` spellings and anything that reads outside the clone or runs another program are simply not listed), and positionals must be relative paths or revisions without `..` segments. A mitigation script spelled any way but `oncall/ops/<flag|rollback|restart>.sh` is refused, not counted. The guard also enforces the single mitigation: the first of the three scripts writes `incidents/<id>/mitigation.json`, later ones are refused. A mitigation that was refused for bad arguments does not use the slot.
+
+### Clone refresh
+
+Before every agent run `refresh_clone` (as the service user, which owns the clone, so git's "dubious ownership" check does not apply to it) runs `git fetch --prune origin`, then `checkout --force --detach origin/main`, `reset --hard origin/main` and `clean -fdq`, each with a timeout (`ONCALL_CLONE_REFRESH_TIMEOUT_S`, default 60). It logs `clone_refreshed` (commit, duration) or `clone_refresh_failed` (fixed reason only, never git's output) and continues if it fails; the prompt then tells the agent the clone may be stale. Otherwise the prompt says the clone is at `origin/main` as of the incident and to search it with `git -C <clone> grep`.
 
 ### Run, limits, evidence
 
@@ -160,5 +165,18 @@ Everything else is denied: `psql`, `rm`, `sudo`, `docker compose exec/up/down`, 
 | Root helper that runs `docker compose` of the current release and validates its arguments again (ps, logs without follow, restart backend/frontend, the flag CLI) | `/opt/fitwise/bin/oncall-compose.sh` (`deploy/oncall-compose.sh`) |
 
 Owner steps the script cannot do (secrets never travel through SSM command lines): prerequisites `python3.12`, `git`, `gh` and `claude` on the host's PATH; on your own machine run `claude setup-token` and copy the token; then edit `/etc/fitwise-oncall.env`: `CLAUDE_CODE_OAUTH_TOKEN=<token>`, `GH_TOKEN=`, `ONCALL_AGENT_ENABLED=1`, and `systemctl restart fitwise-oncall`. Grafana reads `ONCALL_WEBHOOK_PASSWORD` from `/opt/fitwise/.env` (the script copies the same value there); re-run `deploy/obs.sh` so Grafana picks it up. Check: `systemctl is-active fitwise-oncall`, `stat -c '%a %U' /etc/fitwise-oncall.env` (`600 root`), `id fitwise-oncall` (no `docker`).
+
+### Update the responder on the host
+
+The app deploy (`deploy.sh`/`poll.sh`) does not touch `/opt/fitwise-oncall/app`, the venv or the unit file. After merging a change under `oncall/`, `docs/runbooks/` or the unit, re-run the idempotent installer as root at the merge SHA (it fetches, checks out that commit in the root-owned checkout, syncs the venv from `uv.lock`, reinstalls the unit and restarts the service; it keeps `/etc/fitwise-oncall.env` and the clone):
+
+```bash
+SHA=<merge sha of main>
+curl -fsSL "https://raw.githubusercontent.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/$SHA/deploy/install-oncall.sh" -o /root/install-oncall.sh
+DEPLOY_REF=$SHA bash /root/install-oncall.sh
+systemctl is-active fitwise-oncall && git -C /opt/fitwise-oncall/app rev-parse --short=12 HEAD
+```
+
+A change to `deploy/oncall-compose.sh` additionally needs `deploy/bootstrap.sh` (it installs the root helper).
 
 Tests: `make test-oncall` (allow-list, guard, restart.sh, claude invocation with a fake `claude`, timeout, fail-closed config) and `bash scripts/test-oncall-compose.sh` (root helper and shim). A live run with the real `claude` needs the Claude subscription token (`CLAUDE_CODE_OAUTH_TOKEN`, D72) and is the demo (S1-S3, `docs/runbooks/`).

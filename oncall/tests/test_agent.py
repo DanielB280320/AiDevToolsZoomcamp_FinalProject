@@ -31,28 +31,6 @@ SECRET_GH = "ghp_testsecretvalue"
 SECRET_OAUTH = "sk-ant-oat-test-oauth-value"
 
 
-@pytest.fixture
-def agent_settings(settings: Settings, tmp_path: Path) -> Settings:
-    clone = tmp_path / "clone"
-    clone.mkdir()
-    return replace(
-        settings,
-        agent_enabled=True,
-        clone_dir=clone,
-        repo_dir=ROOT,
-        agent_home=tmp_path / "home",
-        github_repo="owner/repo",
-    )
-
-
-@pytest.fixture
-def incident(tmp_path: Path) -> Incident:
-    path = tmp_path / "incidents" / "20261024T100000Z-9d1f0c2a7b3e"
-    path.mkdir(parents=True)
-    (path / "alert.json").write_text(json.dumps(fixture("firing")["alerts"][0]))
-    return Incident(id=path.name, path=path)
-
-
 # --- allow-list ------------------------------------------------------------------------------
 
 
@@ -114,7 +92,13 @@ def test_allow_list_is_exactly_the_documented_set(agent_settings: Settings, inci
     # File access: the incident folder and the clone, nothing else.
     others = [r for r in rules["allow"] if not r.startswith("Bash(")]
     assert all(f"/{inc}" in r or f"/{clone}" in r for r in others)
-    assert f"Write(/{inc}/**)" not in others  # only three named files are writable there
+    # Only three named files are writable in the incident folder, via Edit rules (a Write(...)
+    # rule is not honoured by Claude Code; drill S1 attempt 2).
+    assert f"Edit(/{inc}/**)" not in others
+    assert {r for r in others if r.startswith("Edit(/" + inc)} == {
+        f"Edit(/{inc}/{name})" for name in ("issue.md", "pr.md", "commit-msg.txt")
+    }
+    assert not [r for r in rules["allow"] + rules["deny"] if r.startswith("Write(")]
 
 
 def test_settings_file_uses_dont_ask_and_the_guard_hook(

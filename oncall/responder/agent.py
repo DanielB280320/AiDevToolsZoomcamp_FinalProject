@@ -46,6 +46,7 @@ ENV_PASSTHROUGH = (
     "COMPOSE_PROJECT_NAME",
     "FITWISE_BIN_DIR",
 )
+INCIDENT_FILES = ("issue.md", "pr.md", "commit-msg.txt")
 MITIGATION_SCRIPTS = (
     "oncall/ops/flag.sh *",
     "oncall/ops/rollback.sh",
@@ -104,8 +105,13 @@ def build_allowlist(settings: Settings, incident: Incident) -> dict[str, list[st
     ]
     protected = ("/.git/**", "/.github/**", "/.claude/**", "/oncall/**", "/deploy/**")
     allow = [f"Bash({rule})" for rule in bash]
-    allow += [f"Read(/{inc}/**)", f"Read(/{clone}/**)", f"Edit(/{clone}/**)", f"Write(/{clone}/**)"]
-    allow += [f"Write(/{inc}/{name})" for name in ("issue.md", "pr.md", "commit-msg.txt")]
+    # File writes are permitted with `Edit(...)` rules only: Claude Code applies them to every
+    # built-in file-editing tool (Write, Edit), and a `Write(...)` rule is not honoured. The drill
+    # S1 attempt 2 listed `Write(//<inc>/issue.md)` and the agent's Write of issue.md was refused
+    # in dontAsk mode. `//` is the absolute-path prefix. tests/test_claude_permissions.py runs the
+    # real CLI against these rules.
+    allow += [f"Read(/{inc}/**)", f"Read(/{clone}/**)", f"Edit(/{clone}/**)"]
+    allow += [f"Edit(/{inc}/{name})" for name in INCIDENT_FILES]
     deny = [
         "WebFetch",
         "WebSearch",
@@ -135,8 +141,7 @@ def build_allowlist(settings: Settings, incident: Incident) -> dict[str, list[st
         "Read(/etc/**)",
         "Read(~/**)",
     ]
-    for tool in ("Edit", "Write"):
-        deny += [f"{tool}(/{clone}{part})" for part in protected]
+    deny += [f"Edit(/{clone}{part})" for part in protected]
     return {"allow": allow, "deny": deny}
 
 
@@ -185,13 +190,117 @@ def _runbook(alert: dict[str, Any], settings: Settings) -> tuple[str, str]:
     return "", ""
 
 
-def build_prompt(incident: Incident, alert: dict[str, Any], settings: Settings) -> str:
+_SHA = re.compile(r"[0-9a-f]{7,40}")
+
+
+def _git_env(settings: Settings) -> dict[str, str]:
+    """Environment for the clone refresh: what git needs to fetch, nothing else."""
+    env = {k: os.environ[k] for k in ("PATH", "LANG", "GH_TOKEN") if os.environ.get(k)}
+    env.update(
+        {"HOME": str(settings.agent_home), "GIT_TERMINAL_PROMPT": "0", "GH_PROMPT_DISABLED": "1"}
+    )
+    return env
+
+
+def refresh_clone(settings: Settings, incident_id: str) -> str | None:
+    """Bring the separate clone to origin/main before the agent looks at it (drill S1, attempt 2).
+
+    The clone was five days old and the agent grepped it without fetching, so it could not find
+    the commit that broke production. Runs as the responder's own user (the owner of the clone),
+    one git step at a time with a timeout, and logs only fixed reasons (never git's output, which
+    could contain a URL with credentials). A failed fetch is logged and the run continues on the
+    clone as it is. Returns the short SHA the clone is at, or None when it is not at a known
+    origin/main (fetch failed or not a git clone).
+    """
+    clone = str(settings.clone_dir)
+    env = _git_env(settings)
+
+    def git(*args: str) -> subprocess.CompletedProcess[str] | None:
+        try:
+            return subprocess.run(  # noqa: S603 (fixed argv, no shell)
+                ["git", "-C", clone, *args],  # noqa: S607
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=settings.clone_refresh_timeout_s,
+                stdin=subprocess.DEVNULL,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            log("clone_refresh_failed", incident_id=incident_id, reason="timeout")
+        except OSError as exc:
+            log(
+                "clone_refresh_failed",
+                incident_id=incident_id,
+                reason="git not runnable",
+                error_type=type(exc).__name__,
+            )
+        return None
+
+    started = time.monotonic()
+    fetched = git("fetch", "--quiet", "--prune", "origin")
+    if fetched is None:
+        return None
+    if fetched.returncode != 0:
+        log(
+            "clone_refresh_failed",
+            incident_id=incident_id,
+            reason="fetch failed",
+            exit_code=fetched.returncode,
+        )
+        return None
+    # Leave any branch of an earlier run and drop its leftovers: the working tree is origin/main.
+    for step in (
+        ("checkout", "--force", "--detach", "origin/main"),
+        ("reset", "--hard", "origin/main"),
+        ("clean", "-fdq"),
+    ):
+        done = git(*step)
+        if done is None or done.returncode != 0:
+            if done is not None:
+                log(
+                    "clone_refresh_failed",
+                    incident_id=incident_id,
+                    reason=f"git {step[0]} failed",
+                    exit_code=done.returncode,
+                )
+            return None
+    head = git("rev-parse", "--short=12", "HEAD")
+    sha = head.stdout.strip() if head is not None and head.returncode == 0 else ""
+    sha = sha if _SHA.fullmatch(sha) else ""
+    log(
+        "clone_refreshed",
+        incident_id=incident_id,
+        commit=sha,
+        duration_ms=int((time.monotonic() - started) * 1000),
+    )
+    return sha or None
+
+
+def build_prompt(
+    incident: Incident,
+    alert: dict[str, Any],
+    settings: Settings,
+    clone_head: str | None = None,
+) -> str:
     labels = alert.get("labels") or {}
     annotations = alert.get("annotations") or {}
     name, runbook = _runbook(alert, settings)
     inc = str(incident.path.resolve())
     clone = str(settings.clone_dir.resolve())
     repo = settings.github_repo
+    if clone_head:
+        clone_state = (
+            f"The clone {clone} was refreshed when this incident opened and is at origin/main "
+            f"({clone_head}); no fetch is needed. Search it for the cause "
+            f"(`git -C {clone} grep -n <text>`, `git -C {clone} log`), and compare with the "
+            "release that started failing."
+        )
+    else:
+        clone_state = (
+            f"The refresh of the clone {clone} failed, so it may be out of date: run "
+            f"`git -C {clone} fetch origin` first, and say in the issue if you could not."
+        )
     summary = {
         "alertname": labels.get("alertname"),
         "route": labels.get("route"),
@@ -218,6 +327,9 @@ def build_prompt(incident: Incident, alert: dict[str, Any], settings: Settings) 
 
 ## Saved context
 Folder {inc}/ holds alert.json, prometheus.json, loki.json, tempo.json and capture.json captured when the alert fired. Read them first (Read tool).
+
+## Code
+{clone_state}
 
 ## Hard rules
 - Work in the repository checkout (your current directory) for scripts and in the separate clone {clone} for code. Only the tools and commands in your allow-list work; a refused command is final, do not look for a way around it.
@@ -306,7 +418,8 @@ def run_agent(incident: Incident, settings: Settings) -> int | None:
         _write_private(
             incident.path / "guard.json", json.dumps(guard_context(settings, incident), indent=2)
         )
-        prompt = build_prompt(incident, alert, settings)
+        clone_head = refresh_clone(settings, incident.id)
+        prompt = build_prompt(incident, alert, settings, clone_head)
     except (OSError, ValueError) as exc:
         log("agent_failed", incident_id=incident.id, error_type=type(exc).__name__)
         return None

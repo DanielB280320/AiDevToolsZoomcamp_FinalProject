@@ -16,6 +16,7 @@ ALLOWED_FIELDS = frozenset(
         "alert_status",
         "alerts",
         "backend",
+        "commit",
         "duration_ms",
         "error_type",
         "exit_code",

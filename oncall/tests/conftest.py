@@ -16,7 +16,9 @@ from fastapi.testclient import TestClient
 
 from responder.app import Responder, create_app
 from responder.config import Settings
+from responder.store import Incident
 
+ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).parent / "fixtures"
 USER = "grafana"
 PASSWORD = "test-password"
@@ -160,3 +162,25 @@ def incident_dirs(settings: Settings) -> list[Path]:
     if not settings.incidents_dir.exists():
         return []
     return sorted(p for p in settings.incidents_dir.iterdir() if p.is_dir() and p.name != "open")
+
+
+@pytest.fixture
+def agent_settings(settings: Settings, tmp_path: Path) -> Settings:
+    clone = tmp_path / "clone"
+    clone.mkdir()
+    return replace(
+        settings,
+        agent_enabled=True,
+        clone_dir=clone,
+        repo_dir=ROOT,
+        agent_home=tmp_path / "home",
+        github_repo="owner/repo",
+    )
+
+
+@pytest.fixture
+def incident(tmp_path: Path) -> Incident:
+    path = tmp_path / "incidents" / "20261024T100000Z-9d1f0c2a7b3e"
+    path.mkdir(parents=True)
+    (path / "alert.json").write_text(json.dumps(fixture("firing")["alerts"][0]))
+    return Incident(id=path.name, path=path)
