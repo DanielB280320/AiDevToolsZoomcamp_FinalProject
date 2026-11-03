@@ -157,7 +157,11 @@ def build_settings(settings: Settings, incident: Incident) -> dict[str, Any]:
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "python3",
+                            # The responder's own interpreter (the venv's Python 3.12), never the
+                            # system python3: the host's is 3.9, where the guard's zip(strict=True)
+                            # raises TypeError and the hook fails closed on every gh command (S1
+                            # attempt 3, #20).
+                            "command": sys.executable,
                             "args": [str(GUARD)],
                             "timeout": 15,
                             "onFailure": "block",

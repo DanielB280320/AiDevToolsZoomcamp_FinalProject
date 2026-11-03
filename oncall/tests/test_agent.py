@@ -111,6 +111,9 @@ def test_settings_file_uses_dont_ask_and_the_guard_hook(
     assert hook["onFailure"] == "block"
     assert hook["args"] == [str(GUARD)]
     assert GUARD.is_file()
+    # the hook runs under the responder's interpreter, not whatever `python3` is on PATH
+    assert hook["command"] == sys.executable
+    assert os.path.isabs(hook["command"])
 
 
 def _glob(pattern: str, text: str) -> bool:
