@@ -134,7 +134,7 @@ GIT_OPTIONS: dict[str, tuple[frozenset[str], dict[str, str]]] = {
         {"-e": "text", "-A": "count", "-B": "count", "-C": "count"},
     ),
 }
-GIT_NO_POSITIONALS = {"commit", "fetch"}
+GIT_NO_POSITIONALS = {"commit", "fetch", "branch"}  # `git branch <name>` would create any branch
 _POSITIONAL = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9._/@~^:+-]{0,200}")
 _COUNT = re.compile(r"[0-9]{1,4}")
 WRITE_DENIED_PARTS = (".git", ".github", ".claude", "oncall", "deploy")
@@ -369,8 +369,10 @@ def _git_args(sub: str, args: list[str], ctx: Context) -> None:
             value, kind = args[i + 1], valued[tok]
             if kind == "count" and not _COUNT.fullmatch(value):
                 raise Blocked(f"git {sub}: {tok} needs a number")
-            if kind == "branch" and not BRANCH.fullmatch(value):
-                raise Blocked(f"git {sub}: new branches must be named oncall/<name>")
+            if kind == "branch" and value != f"oncall/{Path(ctx.incident_dir).name}":
+                # Any other name (even origin/main, which shadows the remote ref in short-name
+                # lookups) is refused: the only branch the agent may create is its own.
+                raise Blocked(f"git {sub}: the only new branch allowed is oncall/<incident id>")
             if kind == "msgfile" and value != f"{ctx.incident_dir}/commit-msg.txt":
                 raise Blocked("commit -F may only read commit-msg.txt of this incident")
             i += 2

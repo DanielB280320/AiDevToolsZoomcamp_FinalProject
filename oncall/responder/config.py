@@ -38,6 +38,8 @@ class Settings:
     repo_dir: Path = Path(__file__).resolve().parent.parent.parent
     clone_dir: Path = Path("/var/lib/fitwise-oncall/clone")
     github_repo: str = "DanielB280320/AiDevToolsZoomcamp_FinalProject"
+    clone_refresh_timeout_s: float = 20.0  # per git step of the refresh before each agent run
+    clone_origin_url: str = ""  # expected remote.origin.url of the clone; default from github_repo
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -80,6 +82,7 @@ class Settings:
             repo_dir=Path(e.get("ONCALL_REPO_DIR", str(defaults["repo_dir"].default))),
             clone_dir=Path(e.get("ONCALL_CLONE_DIR", str(defaults["clone_dir"].default))),
             github_repo=e.get("ONCALL_GITHUB_REPO", str(defaults["github_repo"].default)),
+            clone_refresh_timeout_s=float(e.get("ONCALL_CLONE_REFRESH_TIMEOUT_S", "20")),
             webhook_user=e.get("ONCALL_WEBHOOK_USER", "grafana"),
             webhook_password=password,
             incidents_dir=Path(e.get("ONCALL_INCIDENTS_DIR", "incidents")),
