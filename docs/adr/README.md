@@ -7,7 +7,7 @@ Each ADR records one design decision with trade-offs: its context, the decision,
 | [0000](0000-template.md) | Template | n/a |
 | [0001](0001-stack-fastapi-react-postgres.md) | Use FastAPI, React and PostgreSQL as the stack | Accepted |
 | [0002](0002-ec2-docker-compose-deployment.md) | Deploy with Docker Compose on two EC2 instances | Accepted |
-| [0003](0003-plain-http-known-limitation.md) | Serve the MVP over plain HTTP as a documented limitation | Accepted |
+| [0003](0003-plain-http-known-limitation.md) | Serve the MVP over plain HTTP as a documented limitation | Superseded by 0012 |
 | [0004](0004-pure-calculation-engines.md) | Keep calculation engines pure, deterministic and explainable | Accepted |
 | [0005](0005-contract-first-openapi.md) | Make openapi.yaml the API source of truth | Accepted |
 | [0006](0006-self-hosted-observability-on-prod.md) | Self-host the observability stack on the prod EC2 instance | Accepted |
@@ -16,6 +16,7 @@ Each ADR records one design decision with trade-offs: its context, the decision,
 | [0009](0009-separate-migration-step.md) | Run migrations and seed as a separate one-shot step, never on backend start | Accepted |
 | [0010](0010-pull-based-deploy.md) | Deploy by pull: hosts poll the approved tag, CI holds no AWS credentials | Accepted |
 | [0011](0011-user-deletion-vs-shared-references.md) | User deletion vs. shared references: RESTRICT stays, a BEFORE DELETE trigger on users clears the references | Accepted |
+| [0012](0012-https-via-cloudfront.md) | Serve dev and prod over HTTPS through one CloudFront distribution per environment (supersedes 0003) | Accepted |
 
 ## Adding an ADR
 
