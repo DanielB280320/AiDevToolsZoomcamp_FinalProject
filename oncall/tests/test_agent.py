@@ -593,6 +593,38 @@ def test_agent_requires_its_own_secrets_and_a_sane_budget():
         Settings.from_env({"ONCALL_WEBHOOK_PASSWORD": "x", "ONCALL_AGENT_MAX_BUDGET_USD": "5; x"})
 
 
+@pytest.mark.parametrize("name", ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "GH_TOKEN"])
+@pytest.mark.parametrize("bad", ["abc def", "abc\ndef", "abc\tdef", "abcdef ", " abcdef"])
+def test_credential_with_whitespace_fails_fast_without_echoing_it(name: str, bad: str):
+    """Drill S1 attempt 1: a paste wrap left a space inside the token and the CLI answered 401."""
+    env = {
+        "ONCALL_WEBHOOK_PASSWORD": "x",
+        "ONCALL_AGENT_ENABLED": "1",
+        "GH_TOKEN": "t",
+        "CLAUDE_CODE_OAUTH_TOKEN": "o",
+    }
+    env[name] = bad
+    with pytest.raises(ConfigError, match=name) as exc:
+        Settings.from_env(env)
+    assert "abc" not in str(exc.value)  # the value never appears in the message
+    assert "whitespace" in str(exc.value)
+
+
+def test_whitespace_in_credentials_is_not_checked_when_the_agent_is_off():
+    s = Settings.from_env({"ONCALL_WEBHOOK_PASSWORD": "x", "GH_TOKEN": "a b"})
+    assert not s.agent_enabled
+
+
+def test_default_observability_urls_are_loopback_ports_the_prod_compose_publishes():
+    """scripts/check-oncall-obs-reach.sh asserts these three ports are published on 127.0.0.1."""
+    s = Settings.from_env({"ONCALL_WEBHOOK_PASSWORD": "x"})
+    assert (s.prometheus_url, s.loki_url, s.tempo_url) == (
+        "http://127.0.0.1:9090",
+        "http://127.0.0.1:3100",
+        "http://127.0.0.1:3200",
+    )
+
+
 def test_new_alert_starts_claude_p_via_the_receiver(
     agent_settings: Settings,
     make_client: Callable[[Settings], TestClient],

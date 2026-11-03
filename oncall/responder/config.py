@@ -57,6 +57,15 @@ class Settings:
                     "CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY) must be set "
                     "when ONCALL_AGENT_ENABLED=1"
                 )
+            # A credential pasted with a line wrap keeps a stray space or newline inside; the CLI
+            # then answers 401 "Not logged in" at the first call (drill S1, attempt 1). Fail at
+            # startup instead. The message names the variable only, never the value.
+            for name in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "GH_TOKEN"):
+                if re.search(r"\s", e.get(name, "")):
+                    raise ConfigError(
+                        f"{name} contains whitespace (stray space or line break from a paste?); "
+                        "fix the value in the env file"
+                    )
         budget = e.get("ONCALL_AGENT_MAX_BUDGET_USD", "5")
         if not re.fullmatch(r"[0-9]+(\.[0-9]+)?", budget) or float(budget) <= 0:
             raise ConfigError("ONCALL_AGENT_MAX_BUDGET_USD must be a positive number")

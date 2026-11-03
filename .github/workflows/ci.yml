@@ -323,6 +323,7 @@ jobs:
       - run: bash scripts/test-oncall-rollback.sh
       - run: bash scripts/test-oncall-compose.sh
       - run: bash scripts/test-obs-mode.sh
+      - run: bash scripts/check-oncall-obs-reach.sh
       - run: bash scripts/test-backup.sh
       - run: bash scripts/test-adaptive-calories.sh
       - run: bash scripts/test-deploy-env.sh
