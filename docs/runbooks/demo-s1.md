@@ -8,12 +8,12 @@ This is a **live prod drill**. The orchestrator runs it after the owner confirms
 
 ## 1. What the broken build is
 
-`backend/app/demo_faults.py` holds `S1_FINISH_RAISES: bool = False`. `POST /api/v1/sessions/{id}/finish` has a route dependency (`finish_session_fault`) that raises `DemoFaultError` when the constant is `True`. In the drill build it is `True`; the result is an unhandled exception, so HTTP 500 `internal_error`, with only `error_type=DemoFaultError` in the logs and the failing span in the trace (no message, no request data; rule 6).
+`backend/app/demo_faults.py` holds `S1_FINISH_RAISES: bool = False`. `POST /api/v1/sessions/{id}/finish` has a route dependency (`finish_session_fault`) that raises `DemoFaultError` when the constant is `True` **and the app runs with `APP_ENV=prod`** (amendment 2026-11-02). In the drill build the constant is `True`; the result is an unhandled exception, so HTTP 500 `internal_error`, with only `error_type=DemoFaultError` in the logs and the failing span in the trace (no message, no request data; rule 6).
 
 - The fault runs before authentication, so the drill's traffic needs no account and no health data (`scripts/demo-s1-traffic.sh`). Real users finishing a workout fail the same way.
 - Only `finish` is affected. Sets and meal logs keep working; the alert fires per route.
 - The code is compiled into the image: **rolling back to `PREVIOUS_TAG` removes the fault**, which is what makes this a bad-release scenario (S2 and S3 are flag scenarios).
-- `scripts/demo-s1-enable.sh` produces the drill commit: it flips the constant and the guard test `test_shipped_build_has_no_demo_fault`, so CI stays green. Tests: `backend/tests/unit/test_demo_faults.py` (fault off does nothing, fault on gives 500 with `DemoFaultError`, only `finish` carries the dependency, the shipped build is off).
+- `scripts/demo-s1-enable.sh` produces the drill commit: it flips the constant and the guard test `test_shipped_build_has_no_demo_fault`, so CI stays green. Tests: `backend/tests/unit/test_demo_faults.py` (fault off does nothing, fault on in prod gives 500 with `DemoFaultError`, fault on in local/test/dev does nothing, only `finish` carries the dependency, the shipped build is off).
 
 ### Why this mechanism (trade-offs)
 
@@ -23,7 +23,8 @@ This is a **live prod drill**. The orchestrator runs it after the owner confirms
 |---|---|
 | Demo branch, image built by CI, promote it | Not possible: `promote-verify.sh` requires a `main` push run; weakening that gate for a demo is worse than the problem. |
 | Runtime flag or env var gating the fault | The same image would be "good" and "bad", so the mitigation would be the flag, not a rollback. Not a bad release. |
-| **Constant flipped by a small, reviewed PR on `main`, reverted afterwards (chosen)** | Uses the unchanged pipeline end to end (PR, CI, dev, dev smoke, promote, approval). Costs: for the time between the drill merge and the revert, `main` and **dev** serve the broken build, and the drill commit sits in history. Mitigation: the drill PR is one line plus the guard test, labelled `DEMO S1`, merged only on the owner's go and reverted right after the drill. |
+| **Constant flipped by a small, reviewed PR on `main`, reverted afterwards (chosen)** | Uses the unchanged pipeline end to end (PR, CI, dev, dev smoke, promote, approval). Costs: the drill commit sits in history and `main` carries the armed constant until the revert; dev does not serve the broken behaviour (the fault is gated on `APP_ENV=prod`). Mitigation: the drill PR is one line plus the guard test, labelled `DEMO S1`, merged only on the owner's go and reverted right after the drill. |
+| Constant on with no environment gate (first version of the drill, PR #204/#206) | Failed: with the constant `True` everywhere, every test that finishes a session failed in CI (69 failed + 36 errors in pytest, 3 Playwright journeys, schemathesis on `finishSession`), so the build could not pass `ci.yml` on `main` and could not be promoted (D58). Fixed by firing only when `APP_ENV=prod`. |
 | Permanent fault code gated by a build arg | Needs CI changes (build args per commit) and keeps unreleasable test code in production images. Rejected. |
 
 The production code added is 25 lines, off by default, covered by tests, and recorded in D91.
@@ -33,12 +34,14 @@ The production code added is 25 lines, off by default, covered by tests, and rec
 ```bash
 git worktree add ../fitwise-s1 -b scratch/demo-s1 main   # scratch copy; never push it
 cd ../fitwise-s1 && scripts/demo-s1-enable.sh
+# the fault fires only with APP_ENV=prod (and prod needs a USER_HASH_SALT of >= 16 chars)
+sed -i 's/^APP_ENV=.*/APP_ENV=prod/' .env   # .env comes from `make up` / .env.example
 COMPOSE_PROJECT_NAME=fitwise-s1 HTTP_PORT=18090 make up
 BASE_URL=http://127.0.0.1:18090 scripts/demo-s1-traffic.sh 5 1     # expect HTTP 500 five times
 COMPOSE_PROJECT_NAME=fitwise-s1 docker compose down -v
 ```
 
-Without the fault the same command prints `HTTP 401`. Unit level: `cd backend && uv run pytest tests/unit/test_demo_faults.py`.
+Without the fault, or with `APP_ENV` other than `prod`, the same command prints `HTTP 401`. Unit level: `cd backend && uv run pytest tests/unit/test_demo_faults.py`.
 
 ## 3. Roles
 
@@ -102,8 +105,8 @@ Release A is what prod serves now. B is the drill build. `T0` is the minute erro
 | # | Step | Who / command | Expect |
 |---|---|---|---|
 | 1 | Pre-flight A, B, C above | Orchestrator | All pass; note `CURRENT_TAG` (A) in the table below |
-| 2 | Prepare the drill PR: `git switch -c ops/20-s1-drill main && scripts/demo-s1-enable.sh && git commit -am "DEMO S1: finish raises (drill build, revert after the drill) (#20)"`, push, `gh pr create --draft` titled `DEMO S1: ...` with a body saying "do not release to anyone; revert after the drill" | Orchestrator | CI green (guard test expects the fault) |
-| 3 | Owner reviews and the orchestrator squash-merges the drill PR. Dev now serves B, dev smoke passes (the smoke does not finish a workout) | Orchestrator | `ci.yml` run on `main` for the merge SHA B: `deploy-dev` and `smoke-dev` green |
+| 2 | Prepare the drill PR: `git switch -c ops/20-s1-drill main && scripts/demo-s1-enable.sh && git commit -am "DEMO S1: finish raises (drill build, revert after the drill) (#20)"`, push, `gh pr create --draft` titled `DEMO S1: ...` with a body saying "do not release to anyone; revert after the drill" | Orchestrator | CI green (guard test expects the fault; the fault is a no-op outside `APP_ENV=prod`, so the finish tests, e2e and contract smoke pass) |
+| 3 | Owner reviews and the orchestrator squash-merges the drill PR. Dev now runs B but the fault is inactive there (`APP_ENV=dev`), dev smoke passes | Orchestrator | `ci.yml` run on `main` for the merge SHA B: `deploy-dev` and `smoke-dev` green |
 | 4 | Pre-flight A with B: `scripts/demo-s1-preflight.sh <B>` | Orchestrator | all `ok` |
 | 5 | Start the stopwatch notes. Run "Promote to production": `gh workflow run promote-prod.yml --ref main -f sha=<B>`. Record the run URL | Orchestrator | `verify` green, `promote` waits for approval |
 | 6 | Approve the `production` environment job | **Owner** | `deploy/prod` moves (job summary shows the time) |
@@ -115,7 +118,7 @@ Release A is what prod serves now. B is the drill build. `T0` is the minute erro
 | 12 | Recovery: with the traffic script still running, the 5xx ratio of `finish` falls under 5 % once the failing requests leave the 5 min window, so the alert resolves about **5 to 7 minutes after the rollback**. Record the `resolved` time | Orchestrator | Rule back to Normal; the agent reports recovery (it checks for 5 minutes) |
 | 13 | The agent opens the incident issue (label `incident`) and a fix PR on branch `oncall/<id>`. Record both links | On-call agent | Issue has timeline, evidence, mitigation, recovery. PR is a revert of the drill or an equivalent fix |
 | 14 | No retry: wait 5 minutes (two polls) and check `journalctl -u fitwise-deploy --since -8min -o cat`: B is not redeployed. `cat /opt/fitwise/CURRENT_TAG` is A, `ROLLED_BACK_FROM` is B | Orchestrator | Prod stays on A |
-| 15 | Revert the drill on `main` so dev leaves the broken build and the fix is real: owner reviews and merges the agent's fix PR if it removes the fault and keeps `test_shipped_build_has_no_demo_fault` green; otherwise `git revert <drill merge>` as a normal PR. After merge, dev is healthy again (smoke-dev) | Owner merges, orchestrator | `main` has `S1_FINISH_RAISES = False` |
+| 15 | Revert the drill on `main` so `main` no longer carries the armed constant and the fix is real: owner reviews and merges the agent's fix PR if it removes the fault and keeps `test_shipped_build_has_no_demo_fault` green; otherwise `git revert <drill merge>` as a normal PR. After merge, smoke-dev is green | Owner merges, orchestrator | `main` has `S1_FINISH_RAISES = False` |
 | 16 | Promote the fix through the same workflow (steps 5 and 6 with the fix SHA C); verify `/healthz` is C and `finish` answers 401 (not 500) to `scripts/demo-s1-traffic.sh 3 1` | Orchestrator, owner approves | Prod on C. Record the run link |
 | 17 | Fill in the evidence table, redact (section 7), attach to #20, run the post-drill checks below | Orchestrator | |
 
