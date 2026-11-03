@@ -37,7 +37,14 @@ chown -R "$USER_NAME:$USER_NAME" "$STATE"; chmod 700 "$STATE" "$STATE/home"
 # Root-owned checkout: runbooks, ops scripts, responder code.
 if [ -d "$APP/app/.git" ]; then git -C "$APP/app" fetch --quiet origin
 else git clone --quiet "https://github.com/$REPO.git" "$APP/app"; fi
-git -C "$APP/app" checkout --quiet --detach "$(git -C "$APP/app" rev-parse "origin/$DEPLOY_REF" 2>/dev/null || echo "$DEPLOY_REF")"
+# A branch resolves through its remote-tracking ref; anything else (a SHA) must be a commit as is.
+# (`rev-parse origin/<sha>` fails but still prints its argument, so a `|| echo` fallback produced two
+# lines and checkout refused them; S1 attempt 3, #20.)
+if target="$(git -C "$APP/app" rev-parse --verify --quiet "refs/remotes/origin/$DEPLOY_REF^{commit}")"; then :
+else target="$(git -C "$APP/app" rev-parse --verify --quiet "$DEPLOY_REF^{commit}")" ||
+  { echo "install-oncall: DEPLOY_REF $DEPLOY_REF is neither a branch on origin nor a commit" >&2; exit 1; }
+fi
+git -C "$APP/app" checkout --quiet --detach "$target"
 chown -R root:root "$APP/app"
 
 # Venv from the lock file (hash-checked by uv).
