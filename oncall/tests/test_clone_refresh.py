@@ -56,7 +56,12 @@ def clone_settings(agent_settings: Settings, origin: Path, tmp_path: Path) -> Se
     clone = tmp_path / "the-clone"
     subprocess.run(["git", "clone", "-q", str(tmp_path / "origin.git"), str(clone)], check=True)
     agent_settings.agent_home.mkdir(parents=True, exist_ok=True)
-    return replace(agent_settings, clone_dir=clone, clone_refresh_timeout_s=20.0)
+    return replace(
+        agent_settings,
+        clone_dir=clone,
+        clone_refresh_timeout_s=20.0,
+        clone_origin_url=str(tmp_path / "origin.git"),
+    )
 
 
 def push_new_commit(work: Path, text: str) -> str:
@@ -98,6 +103,7 @@ def test_failed_fetch_is_logged_without_secrets_and_the_run_continues(
     configure()
     secret_url = "https://x-access-token:ghp_supersecret@127.0.0.1:1/nope.git"
     git(clone_settings.clone_dir, "remote", "set-url", "origin", secret_url)
+    clone_settings = replace(clone_settings, clone_origin_url=secret_url)
     assert refresh_clone(clone_settings, "inc1") is None
     out = capsys.readouterr().out
     assert "clone_refresh_failed" in out and "fetch failed" in out
@@ -132,7 +138,8 @@ def test_prompt_tells_the_agent_the_clone_is_current(clone_settings: Settings, i
     alert = json.loads((incident.path / "alert.json").read_text())
     clone = str(clone_settings.clone_dir.resolve())
     fresh = build_prompt(incident, alert, clone_settings, "abc1234def56")
-    assert "origin/main (abc1234def56)" in fresh
+    assert "origin/main (abc1234def56, ref refs/remotes/origin/main)" in fresh
+    assert f"checkout -b oncall/{incident.id} refs/remotes/origin/main" in fresh
     assert f"git -C {clone} grep" in fresh
     stale = build_prompt(incident, alert, clone_settings, None)
     assert "refresh" in stale and "may be out of date" in stale and "fetch origin" in stale
@@ -162,3 +169,68 @@ def test_run_agent_still_runs_when_the_refresh_fails(
     s = replace(agent_settings, claude_bin=str(claude), clone_refresh_timeout_s=10.0)
     assert run_agent(incident, s) == 0
     assert "may be out of date" in (tmp_path / "prompt").read_text()
+
+
+def real_main(origin: Path) -> str:
+    return git(origin, "rev-parse", "HEAD")
+
+
+def _assert_at_remote_main(s: Settings, origin: Path, result: str | None) -> None:
+    full = real_main(origin)
+    assert result == full[:12]
+    assert git(s.clone_dir, "rev-parse", "HEAD") == full
+    assert (s.clone_dir / "app.py").read_text() == "v2\n"
+
+
+def test_a_local_branch_named_origin_main_cannot_hold_the_clone_back(
+    clone_settings: Settings, origin: Path
+):
+    old = git(clone_settings.clone_dir, "rev-parse", "HEAD")
+    git(clone_settings.clone_dir, "branch", "origin/main", old)  # shadows the short name
+    push_new_commit(origin, "v2\n")
+    _assert_at_remote_main(clone_settings, origin, refresh_clone(clone_settings, "inc1"))
+
+
+def test_a_local_tag_named_origin_main_cannot_hold_the_clone_back(
+    clone_settings: Settings, origin: Path
+):
+    old = git(clone_settings.clone_dir, "rev-parse", "HEAD")
+    git(clone_settings.clone_dir, "tag", "origin/main", old)
+    push_new_commit(origin, "v2\n")
+    _assert_at_remote_main(clone_settings, origin, refresh_clone(clone_settings, "inc1"))
+
+
+def test_a_remote_tag_named_origin_main_cannot_hold_the_clone_back(
+    clone_settings: Settings, origin: Path
+):
+    old = git(origin, "rev-parse", "HEAD")
+    push_new_commit(origin, "v2\n")
+    git(origin, "tag", "origin/main", old)
+    git(origin, "push", "-q", "origin", "origin/main")
+    _assert_at_remote_main(clone_settings, origin, refresh_clone(clone_settings, "inc1"))
+
+
+def test_a_clone_pointing_at_another_repository_is_not_refreshed(
+    clone_settings: Settings, origin: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    from responder.log import configure
+
+    configure()
+    other = tmp_path / "other.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(other)], check=True)
+    git(clone_settings.clone_dir, "remote", "set-url", "origin", str(other))
+    assert refresh_clone(clone_settings, "inc1") is None
+    out = capsys.readouterr().out
+    assert "origin url does not match" in out and str(other) not in out
+
+
+def test_a_hook_in_the_clone_does_not_run_during_the_refresh(
+    clone_settings: Settings, origin: Path, tmp_path: Path
+):
+    marker = tmp_path / "hook-ran"
+    hook = clone_settings.clone_dir / ".git" / "hooks" / "post-checkout"
+    hook.write_text(f"#!/bin/sh\ntouch {marker}\n")
+    hook.chmod(0o755)
+    push_new_commit(origin, "v2\n")
+    assert refresh_clone(clone_settings, "inc1") is not None
+    assert not marker.exists()

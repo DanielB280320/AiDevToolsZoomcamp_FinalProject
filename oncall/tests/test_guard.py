@@ -118,9 +118,9 @@ def git(ctx: Context, *args: str) -> str:
         ("show", "HEAD:backend/app/x.py"),
         ("grep", "-n", "-i", "-e", "finish", "--", "backend"),
         ("grep", "-C", "3", "-e", "raise", "origin/main"),
-        ("checkout", "-b", "oncall/20261024T100000Z-abc", "origin/main"),
+        ("checkout", "-b", "oncall/inc", "refs/remotes/origin/main"),
         ("checkout", "oncall/fix"),
-        ("switch", "-c", "oncall/fix"),
+        ("switch", "-c", "oncall/inc"),
         ("branch", "--list", "-a"),
         ("branch", "--show-current"),
         ("add", "backend/app/x.py", "backend/tests/test_x.py"),
@@ -177,6 +177,12 @@ def test_allowed_git_shapes(args: tuple[str, ...], ctx: Context):
         ("checkout", "--", "/etc/passwd"),
         ("checkout", "--", "../outside"),
         ("checkout", "../outside"),
+        ("checkout", "-b", "oncall/other-incident"),
+        ("checkout", "-b", "oncall/fix"),
+        ("switch", "-c", "oncall/fix"),
+        ("branch", "origin/main"),
+        ("branch", "oncall/inc"),
+        ("branch", "-f", "x", "HEAD"),
         ("branch", "-D", "main"),
         ("branch", "--delete", "x"),
         ("branch", "-m", "main", "x"),
@@ -439,5 +445,5 @@ def test_checkout_cannot_restore_paths(ctx: Context):
             check_bash(git(ctx, *args), ctx)
     check_bash(git(ctx, "checkout", "oncall/fix"), ctx)
     check_bash(git(ctx, "checkout", "origin/main"), ctx)
-    check_bash(git(ctx, "checkout", "-b", "oncall/x"), ctx)
-    check_bash(git(ctx, "checkout", "-b", "oncall/x", "origin/main"), ctx)
+    check_bash(git(ctx, "checkout", "-b", "oncall/inc"), ctx)
+    check_bash(git(ctx, "checkout", "-b", "oncall/inc", "origin/main"), ctx)

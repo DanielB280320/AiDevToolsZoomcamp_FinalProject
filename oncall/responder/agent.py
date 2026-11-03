@@ -93,7 +93,8 @@ def build_allowlist(settings: Settings, incident: Incident) -> dict[str, list[st
                 "commit *",
                 "checkout *",
                 "switch *",
-                "branch*",
+                "branch",
+                "branch -*",
                 "fetch*",
                 "rev-parse *",
                 "ls-files*",
@@ -190,9 +191,6 @@ def _runbook(alert: dict[str, Any], settings: Settings) -> tuple[str, str]:
     return "", ""
 
 
-_SHA = re.compile(r"[0-9a-f]{7,40}")
-
-
 def _git_env(settings: Settings) -> dict[str, str]:
     """Environment for the clone refresh: what git needs to fetch, nothing else."""
     env = {k: os.environ[k] for k in ("PATH", "LANG", "GH_TOKEN") if os.environ.get(k)}
@@ -202,23 +200,42 @@ def _git_env(settings: Settings) -> dict[str, str]:
     return env
 
 
+_FULL_SHA = re.compile(r"[0-9a-f]{40}")
+MAIN_REF = "refs/remotes/origin/main"
+
+
+def _expected_origin(settings: Settings) -> str:
+    return _norm_url(settings.clone_origin_url or f"https://github.com/{settings.github_repo}")
+
+
+def _norm_url(url: str) -> str:
+    return url.strip().rstrip("/").removesuffix(".git")
+
+
 def refresh_clone(settings: Settings, incident_id: str) -> str | None:
     """Bring the separate clone to origin/main before the agent looks at it (drill S1, attempt 2).
 
     The clone was five days old and the agent grepped it without fetching, so it could not find
     the commit that broke production. Runs as the responder's own user (the owner of the clone),
-    one git step at a time with a timeout, and logs only fixed reasons (never git's output, which
-    could contain a URL with credentials). A failed fetch is logged and the run continues on the
-    clone as it is. Returns the short SHA the clone is at, or None when it is not at a known
-    origin/main (fetch failed or not a git clone).
+    one git step at a time with a timeout and `core.hooksPath=/dev/null`, and logs only fixed
+    reasons (never git's output, which could contain a URL with credentials). A failed refresh
+    is logged and the run continues on the clone as it is.
+
+    The remote ref is fetched with an explicit refspec (no tags) and resolved once, by its full
+    name, to a commit SHA; the working tree is then moved to that SHA. The short name
+    `origin/main` is never used: a local branch or tag with that name would shadow the real ref.
+    Returns the short SHA the clone is at, or None when the refresh did not happen.
     """
     clone = str(settings.clone_dir)
     env = _git_env(settings)
 
+    def fail(reason: str, **fields: object) -> None:
+        log("clone_refresh_failed", incident_id=incident_id, reason=reason, **fields)
+
     def git(*args: str) -> subprocess.CompletedProcess[str] | None:
         try:
             return subprocess.run(  # noqa: S603 (fixed argv, no shell)
-                ["git", "-C", clone, *args],  # noqa: S607
+                ["git", "-c", "core.hooksPath=/dev/null", "-C", clone, *args],  # noqa: S607
                 env=env,
                 capture_output=True,
                 text=True,
@@ -227,54 +244,53 @@ def refresh_clone(settings: Settings, incident_id: str) -> str | None:
                 check=False,
             )
         except subprocess.TimeoutExpired:
-            log("clone_refresh_failed", incident_id=incident_id, reason="timeout")
+            fail("timeout")
         except OSError as exc:
-            log(
-                "clone_refresh_failed",
-                incident_id=incident_id,
-                reason="git not runnable",
-                error_type=type(exc).__name__,
-            )
+            fail("git not runnable", error_type=type(exc).__name__)
         return None
 
-    started = time.monotonic()
-    fetched = git("fetch", "--quiet", "--prune", "origin")
-    if fetched is None:
-        return None
-    if fetched.returncode != 0:
-        log(
-            "clone_refresh_failed",
-            incident_id=incident_id,
-            reason="fetch failed",
-            exit_code=fetched.returncode,
-        )
-        return None
-    # Leave any branch of an earlier run and drop its leftovers: the working tree is origin/main.
-    for step in (
-        ("checkout", "--force", "--detach", "origin/main"),
-        ("reset", "--hard", "origin/main"),
-        ("clean", "-fdq"),
-    ):
-        done = git(*step)
-        if done is None or done.returncode != 0:
-            if done is not None:
-                log(
-                    "clone_refresh_failed",
-                    incident_id=incident_id,
-                    reason=f"git {step[0]} failed",
-                    exit_code=done.returncode,
-                )
+    def step(name: str, *args: str) -> str | None:
+        done = git(*args)
+        if done is None:
             return None
-    head = git("rev-parse", "--short=12", "HEAD")
-    sha = head.stdout.strip() if head is not None and head.returncode == 0 else ""
-    sha = sha if _SHA.fullmatch(sha) else ""
+        if done.returncode != 0:
+            fail(f"git {name} failed", exit_code=done.returncode)
+            return None
+        return done.stdout.strip()
+
+    started = time.monotonic()
+    url = step("config", "config", "--get", "remote.origin.url")
+    if url is None:
+        return None
+    if _norm_url(url) != _expected_origin(settings):
+        fail("origin url does not match the configured repository")
+        return None
+    if (
+        step("fetch", "fetch", "--quiet", "--no-tags", "origin", f"+refs/heads/main:{MAIN_REF}")
+        is None
+    ):
+        return None
+    sha = step("rev-parse", "rev-parse", "--verify", f"{MAIN_REF}^{{commit}}")
+    if sha is None:
+        return None
+    if not _FULL_SHA.fullmatch(sha):
+        fail("unexpected rev-parse output")
+        return None
+    # Leave any branch of an earlier run and drop its leftovers: the working tree is that commit.
+    for name, args in (
+        ("checkout", ("checkout", "--force", "--detach", sha)),
+        ("reset", ("reset", "--hard", sha)),
+        ("clean", ("clean", "-fdq")),
+    ):
+        if step(name, *args) is None:
+            return None
     log(
         "clone_refreshed",
         incident_id=incident_id,
-        commit=sha,
+        commit=sha[:12],
         duration_ms=int((time.monotonic() - started) * 1000),
     )
-    return sha or None
+    return sha[:12]
 
 
 def build_prompt(
@@ -292,14 +308,14 @@ def build_prompt(
     if clone_head:
         clone_state = (
             f"The clone {clone} was refreshed when this incident opened and is at origin/main "
-            f"({clone_head}); no fetch is needed. Search it for the cause "
+            f"({clone_head}, ref {MAIN_REF}); no fetch is needed. Search it for the cause "
             f"(`git -C {clone} grep -n <text>`, `git -C {clone} log`), and compare with the "
             "release that started failing."
         )
     else:
         clone_state = (
             f"The refresh of the clone {clone} failed, so it may be out of date: run "
-            f"`git -C {clone} fetch origin` first, and say in the issue if you could not."
+            f"`git -C {clone} fetch origin` first (use the full ref {MAIN_REF}, not origin/main), and say in the issue if you could not."
         )
     summary = {
         "alertname": labels.get("alertname"),
@@ -343,7 +359,7 @@ Folder {inc}/ holds alert.json, prometheus.json, loki.json, tempo.json and captu
 ## Deliverables
 1. Incident issue: write it to {inc}/issue.md (template in the runbook; timeline, evidence, mitigation, recovery check), then run exactly:
    gh issue create --repo {repo} --label incident --title "<title>" --body-file {inc}/issue.md
-2. Root-cause fix PR from the separate clone, only if you can identify the cause in the code: `git -C {clone} fetch origin`, `git -C {clone} checkout -b oncall/{incident.id} origin/main`, edit files under {clone} (with a regression test), `git -C {clone} add ...`, `git -C {clone} commit -m "<message>"`, `git -C {clone} push origin oncall/{incident.id}`, write {inc}/pr.md (reference the incident issue), then run exactly:
+2. Root-cause fix PR from the separate clone, only if you can identify the cause in the code: `git -C {clone} fetch origin`, `git -C {clone} checkout -b oncall/{incident.id} refs/remotes/origin/main`, edit files under {clone} (with a regression test), `git -C {clone} add ...`, `git -C {clone} commit -m "<message>"`, `git -C {clone} push origin oncall/{incident.id}`, write {inc}/pr.md (reference the incident issue), then run exactly:
    gh pr create --repo {repo} --head oncall/{incident.id} --base main --title "<title>" --body-file {inc}/pr.md
    If the cause is not clear from the code, skip the PR and say so in the issue.
 

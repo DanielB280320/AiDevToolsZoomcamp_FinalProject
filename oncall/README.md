@@ -96,7 +96,7 @@ email through a Loki stub to show that. Its own logs also go through an allow-li
 | `ONCALL_LAUNCHER_CMD` | empty (no-op that logs) | Command line run for each new incident, no shell (test seam; ignored when the agent is enabled) |
 | `ONCALL_LAUNCHER_TIMEOUT_S` | `1260` | Launcher timeout (spec: 20 min plus margin) |
 | `ONCALL_WORKERS` | `4` | Background worker threads |
-| `ONCALL_CLONE_REFRESH_TIMEOUT_S` | `60` | Timeout per git step when the agent clone is refreshed to `origin/main` before a run |
+| `ONCALL_CLONE_REFRESH_TIMEOUT_S` | `20` | Timeout per git step when the agent clone is refreshed to `origin/main` before a run |
 | `ONCALL_HOST` / `ONCALL_PORT` | `127.0.0.1` / `8099` | Listen address |
 
 The webhook credentials (`ONCALL_WEBHOOK_USER`, `ONCALL_WEBHOOK_PASSWORD`) are shared with Grafana,
@@ -140,7 +140,7 @@ Everything else is denied: `psql`, `rm`, `sudo`, `docker compose exec/up/down`, 
 
 ### Clone refresh
 
-Before every agent run `refresh_clone` (as the service user, which owns the clone, so git's "dubious ownership" check does not apply to it) runs `git fetch --prune origin`, then `checkout --force --detach origin/main`, `reset --hard origin/main` and `clean -fdq`, each with a timeout (`ONCALL_CLONE_REFRESH_TIMEOUT_S`, default 60). It logs `clone_refreshed` (commit, duration) or `clone_refresh_failed` (fixed reason only, never git's output) and continues if it fails; the prompt then tells the agent the clone may be stale. Otherwise the prompt says the clone is at `origin/main` as of the incident and to search it with `git -C <clone> grep`.
+Before every agent run `refresh_clone` (as the service user, which owns the clone, so git's "dubious ownership" check does not apply to it) runs `git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main`, resolves `refs/remotes/origin/main` to a SHA once, then `checkout --force --detach <sha>`, `reset --hard <sha>` and `clean -fdq`, each with a timeout (`ONCALL_CLONE_REFRESH_TIMEOUT_S`, default 20). Every git call runs with `-c core.hooksPath=/dev/null`, and the refresh is skipped (fixed reason logged, prompt says it failed) when the clone's `remote.origin.url` is not the configured repository. The short name `origin/main` is never used because a local branch or tag of that name would shadow the real ref. The guard allows the agent to create only `oncall/<incident id>` (`checkout -b` / `switch -c`) and `git branch` only lists. It runs before the agent starts, so a slow fetch delays the run by at most the timeout. It logs `clone_refreshed` (commit, duration) or `clone_refresh_failed` (fixed reason only, never git's output) and continues if it fails; the prompt then tells the agent the clone may be stale. Otherwise the prompt says the clone is at `origin/main` as of the incident and to search it with `git -C <clone> grep`.
 
 ### Run, limits, evidence
 
