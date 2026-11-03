@@ -365,7 +365,8 @@ Folder {inc}/ holds alert.json, prometheus.json, loki.json, tempo.json and captu
    gh issue create --repo {repo} --label incident --title "<title>" --body-file {inc}/issue.md
 2. Root-cause fix PR from the separate clone, only if you can identify the cause in the code: `git -C {clone} fetch origin`, `git -C {clone} checkout -b oncall/{incident.id} refs/remotes/origin/main`, edit files under {clone} (with a regression test), `git -C {clone} add ...`, `git -C {clone} commit -m "<message>"`, `git -C {clone} push origin oncall/{incident.id}`, write {inc}/pr.md (reference the incident issue), then run exactly:
    gh pr create --repo {repo} --head oncall/{incident.id} --base main --title "<title>" --body-file {inc}/pr.md
-   If the cause is not clear from the code, skip the PR and say so in the issue.
+   If the failing code sits behind a feature flag (an experimental or demo-only version such as a progression engine v2 that raises for some inputs), opening the PR is still required: a docstring that says the fault is intentional or demo-only is NOT a reason to skip it. The flag mitigation stops the outage; the PR makes the flagged path correct for the failing input and adds a regression test that fails before the change and passes after it. Do not remove the flag and do not change its default.
+   Skip the PR only if the cause is not clear from the code, and say so in the issue.
 
 {runbook_part}
 """

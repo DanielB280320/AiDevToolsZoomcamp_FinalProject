@@ -129,6 +129,8 @@ The 5-minute window still contains pre-mitigation requests for a few minutes, so
 
 The root-cause fix, with a regression test, is a normal PR: branch, CI, human review, merge (deploys to dev), then "Promote to production". After a rollback, prod keeps the old tag until that promotion.
 
+**A flag mitigation does not end the work.** When the cause is a code path behind a feature flag (for example `progression_engine` `v2`, including a documented demo-only or experimental version that fails on purpose), the agent still opens the fix PR: the flagged path is made correct for the failing input (S2: bodyweight exercises under v2) and a regression test is added that fails before the change and passes after it. "Intentional" or "demo only" is not a reason to skip the PR. The flag and its default (`v1`) are left as they are. Skip the PR only when the cause is not clear from the code, and say so in the issue.
+
 ## 5. Incident issue template
 
 Create with `gh issue create --label incident` (title `Incident: KeyJourneyErrors <route> <UTC date>`). Never put emails, names, body metrics, food names or notes in it; `user_hash` and `trace_id` are fine.

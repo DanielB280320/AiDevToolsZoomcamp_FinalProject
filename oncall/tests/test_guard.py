@@ -447,3 +447,13 @@ def test_checkout_cannot_restore_paths(ctx: Context):
     check_bash(git(ctx, "checkout", "origin/main"), ctx)
     check_bash(git(ctx, "checkout", "-b", "oncall/inc"), ctx)
     check_bash(git(ctx, "checkout", "-b", "oncall/inc", "origin/main"), ctx)
+
+
+def test_fix_pr_may_edit_backend_code_and_tests_in_the_clone(ctx: Context):
+    # S2 (#33): the fix for a flagged engine is under backend/app and backend/tests of the clone.
+    for rel in (
+        "backend/app/engines/progression_v2.py",
+        "backend/tests/unit/test_progression_v2.py",
+    ):
+        for tool in ("Read", "Edit", "Write"):
+            decide({"tool_name": tool, "tool_input": {"file_path": str(ctx.clone_dir / rel)}}, ctx)

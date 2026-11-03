@@ -634,3 +634,16 @@ def test_new_alert_starts_claude_p_via_the_receiver(
     assert client.post("/alerts", json=fixture("firing")).status_code == 202
     responder_of(client).wait()
     assert not record.exists()
+
+
+def test_prompt_requires_a_fix_pr_for_a_flagged_code_path(
+    agent_settings: Settings, incident: Incident
+):
+    # S2 (#33): the flag mitigation stops the outage, the PR fixes the flagged path. "Demo only" is
+    # not a reason to skip it, and the one-mitigation rule is unchanged.
+    alert = fixture("firing")["alerts"][0]
+    prompt = build_prompt(incident, alert, agent_settings)
+    assert "behind a feature flag" in prompt
+    assert "NOT a reason to skip it" in prompt
+    assert "regression test" in prompt
+    assert "AT MOST ONE runtime mitigation" in prompt
