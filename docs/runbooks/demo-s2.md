@@ -171,23 +171,36 @@ scripts/demo-s2-traffic.py --requests 5 --interval 0 --expect ok
 
 On dev, set `DEMO_S2_ALLOW_REMOTE=1` and run the flag commands on the dev host as in step 2. Dev is not in the alert's scope (`env=prod`), so no page is raised there.
 
-## Evidence to keep (spec §15.2)
+## Evidence (live run 2026-11-03)
 
-Fill in after the run and link from [#33](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/issues/33).
+Issue [#33](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/issues/33). Times UTC.
 
 | Item | Value |
 |---|---|
-| Prod build during the run (`CURRENT_TAG`) | `<sha>` |
-| Flag set to v2 (`T0`, UTC) | `<time>` |
-| First failing request | `<time>` |
-| Alert fired | `<time>` (delay from first failure: `<mm:ss>`) |
-| Agent started / mitigation (`flag.sh progression_engine v1`) applied | `<time>` / `<time>` |
-| Error ratio back under 5 % for 5 min | `<time range>` |
-| Alert and dashboard screenshot | `<link or path; screenshot only after the redaction check below>` |
-| Incident folder | `incidents/<id>/` on `fitwise-prod` (`/var/lib/fitwise-oncall/incidents/<id>/`) |
-| Transcript excerpt | `incidents/<id>/transcript` (stream-json, mode 0600); excerpt of the investigation and the `flag.sh` call: `<link to the excerpt>` |
-| Incident issue | `<#N>` |
-| Fix PR | `<#N>` (fix v2 for bodyweight plus a regression test; goes through CI, QA and "Promote to production") |
+| Prod build during the run (`CURRENT_TAG`) | `9b0c039` (unchanged all run; `PREVIOUS_TAG` `5d2339a` was not used) |
+| Pre-flight | all passed, including agent auth (`{"is_error":false,"result":"OK"}`), the guard probe (0/2/2) and the on-call host at `dae2f07a5365`; token `set`, length 108, no whitespace |
+| Check traffic with flag `v1` | `HTTP 200 x3` |
+| Flag set to v2 (`T0`) | 18:38:09Z (`progression_engine: v1 -> v2 (changed, by owner at 18:38:10Z)`) |
+| First failing request | about 18:38:30Z (first `BodyweightNotSupported` log line) |
+| Error traffic | `HTTP 500 x30 (30 errors)`, finished 18:40:33Z; no set traffic while v2 was on |
+| **Alert fired** (`KeyJourneyErrors`, finish route) | **18:40:20Z** (incident `20261103T184020Z-c9616e4f3c53`); about 1 min 50 s after the first failure |
+| Agent started / **mitigation** (`oncall/ops/flag.sh progression_engine v1`) | clone refreshed 18:40:38Z / **18:40:49Z** (`mitigation.json`; flag row: `v2 -> v1 by oncall-agent at 18:40:51Z`). Alert to mitigation: 29 s |
+| Recovery traffic | `HTTP 200 x90` from 18:41:38Z |
+| 5xx ratio of the route | 1.0 at 18:40 -> 0.07 at 18:45:15 -> 0 from 18:45:56Z |
+| **Alert resolved** / incident closed by the responder | **18:46:20Z**. Alert to recovery: 6 min 0 s |
+| `/healthz` poll (every 5 s, 18:38:08Z to 18:52:45Z, from outside) | 170 samples, all `200`, one version (`9b0c039`) throughout: the flag mitigation is not a release change |
+| Agent run | exit 0, 651.6 s, not timed out, `max_budget_usd` 5; finished 18:51:29Z; 0 permission denials in the transcript |
+| Incident issue | [#216](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/issues/216) (by the agent, 18:51:21Z): timeline, evidence, one mitigation, recovery check, no health data |
+| **Fix PR** | **none**: the agent decided not to open one (see below) |
+| Flag after the run | `progression_engine v1`, set by `oncall-agent` |
+| Post-drill checks | journals: 0 hits; one mitigation in `mitigation.json`; `CURRENT_TAG` `9b0c039` and `ROLLED_BACK_FROM` empty (no rollback). The incident-folder grep lists only `agent-settings.json`: a false positive, `includeCoAuthoredBy` contains `oAuth` (case-insensitive); the same file of the S1 incident matches too |
+| Screenshot | not taken by the operator; the Grafana alert history and the issue carry the times |
+
+Transcript (mode 0600, stays on the host), commands only: `curl` queries to Loki and Prometheus, `git -C <clone> grep -n BodyweightNotSupported`, `docker compose ps`, `oncall/ops/flag.sh progression_engine v1`, a `cat` of `progression_v2.py` and `git grep progression_engine` on the clone, then roughly 25 one-minute recovery queries and `gh issue create`.
+
+### Gap found: no fix PR
+
+The issue's Follow-up says: "Root-cause fix PR: not opened. `progression_v2.py` is a documented demo-only faulty engine (it raises on bodyweight exercises on purpose) and only reachable through the flag." The agent read the file's docstring, judged the fault intentional and, as the prompt tells it to open a fix PR "only if you can identify the cause in the code", did not open one. So AC "fix PR with a regression test for bodyweight under v2" has no evidence from this run. The fix is a separate decision for the owner: either (a) accept the agent's reasoning and record that the demo fault is by design, with the fix PR written by an Engineer (fix v2 for bodyweight plus a test), or (b) change the S2 expectations in `key-journey-errors.md` / the responder prompt, which is on-call code and needs `install-oncall.sh` at the merge SHA before a rerun. Not changed in this PR.
 
 ## Health-data redaction checklist
 
@@ -219,4 +232,4 @@ Before anything from this run leaves the host (screenshots, transcript excerpts,
 | Dev dry run through the traffic script | flag `v1`: `HTTP 200 x3`; `flag set v2 --actor owner`: `HTTP 500 x5`; `v1` again: `HTTP 200 x5`. The CLI printed `progression_engine: v1 -> v2 (changed, by owner at ...)` and the reverse; the flag is `v1` again |
 | Prod host, read-only | `CURRENT_TAG=9b0c039` (contains `fcb7c93`), `/healthz` version `9b0c039`, `progression_engine` `v1` (default), fault class in the image, `fitwise-oncall` and `fitwise-deploy.timer` active, on-call app HEAD `dae2f07a5365`, agent enabled, env file `600 root`, token set with length 108 and no whitespace, evidence URLs 200 x3, rules `KeyJourneyErrors` and `KeyJourneyLatency` inactive and healthy, no open incident |
 | Guard probe on prod | `flag.sh progression_engine v1` exit 0; a second mitigation exit 2; a pipe exit 2 |
-| Not done (spends the subscription or needs the owner) | agent auth probe, the live drill (flag `v2` on prod, traffic) |
+| Agent auth probe | done at the live run (see Evidence) |
