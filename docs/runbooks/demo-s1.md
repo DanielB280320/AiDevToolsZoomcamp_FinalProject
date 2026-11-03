@@ -183,24 +183,68 @@ Keep these (spec §15.2): the alert, `incidents/<id>/` (redacted excerpts), the 
 
 | Item | Value |
 |---|---|
-| Release A (prod before, rollback target) | `<sha>` |
-| Drill build B (merge SHA of the drill PR) | `<sha>`, PR #`<n>` |
-| Promote run (B) and approval time | `<run link>`, `<UTC>` |
-| Prod serves B (first `/healthz`) | `<UTC>` |
-| First 500 from `finish` (T0) | `<UTC>` |
-| **Alert fired** (`KeyJourneyErrors`, route `/api/v1/sessions/{session_id}/finish`) | `<UTC>` |
-| Agent started / first query | `<UTC>` |
-| **Mitigation** (`oncall/ops/rollback.sh`, exit code) | `<UTC>`, `<exit>` |
-| Prod serves A again (first `/healthz`) | `<UTC>` |
-| **Recovered** (alert resolved / ratio under 5 % for 5 min) | `<UTC>` |
-| **Alert to recovery** | `<minutes>` |
-| Alert to mitigation | `<minutes>` |
-| Incident issue | `#<n>` |
-| Fix PR (agent's) | `#<n>` |
-| Fix promoted (C) and run | `<sha>`, `<run link>` |
-| `--max-budget-usd` enforced under subscription auth (from #166) | `<yes/no, evidence>` |
-| Guard log: allow-list respected, one mitigation | `<yes/no>` |
-| Secret grep results (post-drill checks) | `<clean/not clean>` |
+| Release A (prod before, rollback target) | `5d2339a` (A′, promoted first so the rollback crosses no migration) |
+| Drill build B (SHA promoted; carries the drill commit from PR #209, merged as `a92ec29`) | `dae2f07` (B4: `main` after #212) |
+| Promote run (B) and approval time | [run 41674161648](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/actions/runs/41674161648); owner approved, approval job completed 16:28:20Z |
+| Prod serves B (first `/healthz`) | 2026-11-03 16:29:21Z |
+| First 500 from `finish` (T0) | 16:29:58Z |
+| **Alert fired** (`KeyJourneyErrors`, route `/api/v1/sessions/{session_id}/finish`) | **16:32:20Z** (incident `20261103T163220Z-c9616e4f3c53`) |
+| Agent started / first query | 16:32:20Z (clone refreshed to `dae2f07` in 662 ms, then launched) |
+| **Mitigation** (`oncall/ops/rollback.sh`, exit code) | **16:32:33Z** (`mitigation.json`); the agent run exited 0 |
+| Prod serves A again | `finish` answers 401 (fault gone) from **16:32:45Z**: last 500 at 16:32:32Z, one `000` at 16:32:39Z during the container swap, 26 × 500 in total. `/healthz` was not polled during the drill; the host's `CURRENT_TAG` read `5d2339a` (A) after the drill, with `ROLLED_BACK_FROM=dae2f07` |
+| **Recovered** (alert resolved / ratio under 5 % for 5 min) | **16:38:20Z** (`alert_resolved`, incident closed by the responder) |
+| **Alert to recovery** | **6 min 0 s** |
+| Alert to mitigation | 13 s |
+| Incident issue | #213 (by the agent, 16:42:54Z) |
+| Fix PR (agent's) | #214 (by the agent, 16:42:57Z; merged by the owner) |
+| Fix promoted (C) and run | `9b0c039`, [run 41683181637](https://github.com/DanielB280320/AiDevToolsZoomcamp_FinalProject/actions/runs/41683181637); prod serves C from 17:27:05Z, `finish` → 401 ×3 |
+| `--max-budget-usd` enforced under subscription auth (from #166) | Accepted with subscription auth (`max_budget_usd: "5"` in `agent.json`, runs reported `total_cost_usd` ≈ $0.58). Hitting the cap was not exercised |
+| Guard log: allow-list respected, one mitigation | yes: one `mitigation.json`; guard refusals were expected ones (1 shell syntax, 1 `git grep` option, 1 Read outside the allowed paths) |
+| Secret grep results (post-drill checks) | clean (incident folder exit 1; deploy/oncall journals 0 hits) |
+
+### Excerpts (attempt 4, redacted)
+
+Responder journal (`journalctl -u fitwise-oncall -o cat`), the structured lines only:
+
+```json
+{"ts": "2026-11-03T16:32:20+00:00", "service": "oncall", "event": "incident_opened", "incident_id": "20261103T163220Z-c9616e4f3c53", "fingerprint": "c9616e4f3c530e92"}
+{"ts": "2026-11-03T16:32:20+00:00", "service": "oncall", "event": "clone_refreshed", "incident_id": "20261103T163220Z-c9616e4f3c53", "commit": "dae2f07a5365", "duration_ms": 662}
+{"ts": "2026-11-03T16:38:20+00:00", "service": "oncall", "event": "alert_resolved", "fingerprint": "c9616e4f3c530e92", "incident_id": "20261103T163220Z-c9616e4f3c53", "closed": true}
+{"ts": "2026-11-03T16:43:02+00:00", "service": "oncall", "event": "agent_done", "incident_id": "20261103T163220Z-c9616e4f3c53", "launcher": "agent", "exit_code": 0, "duration_ms": 642151}
+```
+
+`incidents/20261103T163220Z-c9616e4f3c53/mitigation.json` (written by the guard, which allows one per incident) and `agent.json`:
+
+```json
+{"command": "oncall/ops/rollback.sh", "at": "2026-11-03T16:32:33Z"}
+{"exit_code": 0, "timed_out": false, "duration_s": 642.2, "max_budget_usd": "5", "timeout_s": 1200.0}
+```
+
+Traffic script around the rollback (`scripts/demo-s1-traffic.sh 150 6`, status codes only):
+
+```text
+16:29:58Z   1/150 HTTP 500
+16:32:32Z  26/150 HTTP 500
+16:32:39Z  27/150 HTTP 000
+16:32:45Z  28/150 HTTP 401
+```
+
+The agent's transcript stays on the host (0600). Its incident report is #213.
+
+### Attempts before the successful run
+
+The drill needed four attempts. Each found a real gap in the on-call setup that CI could not see. Details are in #20.
+
+| Attempt | Outcome | Gap found, and fix |
+|---|---|---|
+| 1 (`a92ec29`) | Alert fired; agent exited after 3.7 s; manual rollback | Token in `/etc/fitwise-oncall.env` had a stray whitespace (fixed on the host; the responder now refuses one, #210). Prometheus/Loki/Tempo not published on the host's loopback (#210) |
+| 2 (`04afffb`) | Agent rolled back in 17 s and verified recovery; no issue or PR | `Write(...)` permission rules are ignored by Claude Code, so `issue.md` could not be written (`Edit(...)` rules, #211). The clone was stale (refresh to the exact `origin/main` SHA before each run, #211) |
+| 3 (`c5e8658`) | Rolled back in 13 s, revert branch pushed; no issue or PR | The guard hook ran under the host's system Python 3.9, where `zip(strict=True)` raises `TypeError` (hook uses the responder's Python, #212) |
+| 4 (`dae2f07`) | Full run, table above | — |
+
+Earlier fixes also came from the drill:
+- The ungated fault broke CI, so the fault now fires only with `APP_ENV=prod` (#207).
+- `install-oncall.sh` failed with `DEPLOY_REF=<sha>` (#212).
 
 ### Redaction checklist (health data and secrets; rule 6)
 
