@@ -83,11 +83,13 @@ for u in 9090/-/ready 3100/ready 3200/ready; do curl -s -o /dev/null -m 5 -w "$u
 ss -ltn | grep -E '127.0.0.1:(9090|3100|3200) '                                 # three lines, loopback only
 # the agent can authenticate (no state change; the token is read from the env file, never printed;
 # a pasted token with a stray whitespace gives "Not logged in", the responder now refuses to start with one)
-H=$(mktemp -d); chown fitwise-oncall "$H"
-v=$(grep -E '^CLAUDE_CODE_OAUTH_TOKEN=' /etc/fitwise-oncall.env | cut -d= -f2-)
-echo "reply with exactly: OK" | runuser -u fitwise-oncall -- env -i HOME=$H PATH=/usr/local/bin:/usr/bin:/bin \
-  CLAUDE_CODE_OAUTH_TOKEN="$v" claude -p --output-format json --max-turns 1 | jq -c '{is_error,result}'
-unset v; rm -rf "$H"
+# (the token goes through a 0600 file, never through argv, so it does not show in ps or /proc/*/cmdline)
+H=$(mktemp -d); chmod 700 "$H"
+grep -E '^CLAUDE_CODE_OAUTH_TOKEN=' /etc/fitwise-oncall.env | cut -d= -f2- | tr -d '\n' > "$H/t"; chmod 600 "$H/t"
+chown -R fitwise-oncall "$H"
+echo "reply with exactly: OK" | runuser -u fitwise-oncall -- env -i HOME="$H" PATH=/usr/local/bin:/usr/bin:/bin \
+  sh -c 'CLAUDE_CODE_OAUTH_TOKEN=$(cat "$HOME/t") exec claude -p --output-format json --max-turns 1' | jq -c '{is_error,result}'
+rm -rf "$H"
 # alert rule state from Grafana (admin password read on the host, not printed)
 set -a; . <(grep -E '^GRAFANA_ADMIN_(USER|PASSWORD)=' /opt/fitwise/.env); set +a
 curl -s -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" http://127.0.0.1:3000/api/prometheus/grafana/api/v1/rules |
@@ -100,7 +102,7 @@ Expected:
 |---|---|
 | `CURRENT_TAG` equals the SHA from part A (and `/healthz`) | yes |
 | `PREVIOUS_TAG` | A SHA different from `CURRENT_TAG` is fine now; **after promoting the drill build it must be A**. If `PREVIOUS_TAG` is empty or equals `CURRENT_TAG` the agent's rollback exits 3 and nothing rolls back: stop and fix first (promote one more good release) |
-| `ROLLED_BACK_FROM` | Does not equal the drill SHA (it would refuse with exit 4) |
+| `ROLLED_BACK_FROM` | Does not equal the drill SHA. It only matters to a no-argument `rollback.sh`: when `PREVIOUS_TAG` equals `ROLLED_BACK_FROM` the agent's rollback refuses with exit 4. Nothing blocks a promotion or deploy of that SHA |
 | `fitwise-oncall` and `fitwise-deploy.timer` | `active` |
 | `ONCALL_AGENT_ENABLED=1`, env file `600 root` | `1`, `600 root` |
 | Responder | HTTP 401 |
@@ -155,7 +157,7 @@ The transcript is mode 0600 and stays on the host; only an excerpt checked again
 | No alert 8 minutes after T0 | Check that traffic reaches the route: Grafana Key journey dashboard, `env=prod`; count of requests in the 5 min window is at least 20 (increase the pace: `scripts/demo-s1-traffic.sh 150 3`); check rule health in Grafana. If metrics show 500s but the rule stays Normal, it is a bug in the rule: stop, and record it on #18/#97 |
 | Alert fires, no agent run | `systemctl status fitwise-oncall`, `journalctl -u fitwise-oncall`; `launched` file missing in the incident folder. The owner can restart the service (it re-runs the launcher for open incidents that never reached it) |
 | Agent hits the budget, the timeout, or does nothing | Do **not** run `rollback.sh` for it unless the owner decides to end the drill: then use the "Rollback production" workflow or `sudo /opt/fitwise/bin/rollback.sh` and record that the agent did not mitigate |
-| Drill ended by a rollback, rerun wanted | The rolled-back build B cannot be promoted again: `ROLLED_BACK_FROM=B` makes the host refuse it (exit 4), and `PREVIOUS_TAG` equals `CURRENT_TAG` after a rollback. A rerun promotes a **new** SHA of `main` (B2). It still carries the fault (the drill commit stays on `main` until step 15), so it behaves like B; its `PREVIOUS_TAG` becomes the release prod serves at that moment, which must be a good one (check part B). Restart from step 4 with B2 |
+| Drill ended by a rollback, rerun wanted | Do not promote B again. Nothing on the host refuses it (`ROLLED_BACK_FROM` is read only by a no-argument `rollback.sh`, exit 4, and is cleared by the next successful deploy), but B is known bad and the poller attempts each `deploy/prod` value once. After a rollback `PREVIOUS_TAG` equals `CURRENT_TAG`, so a second no-argument rollback would exit 3 until a new release is deployed. A rerun promotes a **new** SHA of `main` (B2). It still carries the fault (the drill commit stays on `main` until step 15), so it behaves like B; its `PREVIOUS_TAG` becomes the release prod serves at that moment, which must be a good one (check part B). Restart from step 4 with B2 |
 | Rollback exit 3 or 4 | `PREVIOUS_TAG` empty or equal to current (3), or target is the release that was rolled back from (4). Nothing changed. The release stays; stop the traffic, run "Rollback production" (it reads the history), and fix `PREVIOUS_TAG` handling in the runbook |
 | Users are really affected | This is prod. If the drill must end immediately, stop the traffic and run "Rollback production" |
 
