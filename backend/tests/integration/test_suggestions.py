@@ -463,34 +463,11 @@ def test_v2_matches_v1_for_sessions_without_bodyweight(athlete: Api) -> None:
     assert v2["payload"]["proposed"] == v1["payload"]["proposed"]
 
 
-def test_v2_fails_the_finish_of_a_bodyweight_session_and_v1_succeeds(athlete: Api) -> None:
-    _make_bodyweight(athlete)
-    crashing = TestClient(athlete.app, raise_server_exceptions=False)
-    crashing.cookies.update(athlete.client.cookies)
-    _set_engine(athlete, "v2")
-    sid, response = _finish_thursday(athlete, crashing)
-    problem(response, 500, "internal_error")
-    assert "bodyweight" not in response.text
-
-    _set_engine(athlete, "v1")  # the S2 mitigation
-    assert _finish(athlete, sid).status_code == 200
-
-
-def test_the_v2_fault_leaks_no_health_data(athlete: Api) -> None:
-    from app.engines import progression_v2
-
+def test_v2_finishes_a_bodyweight_session(athlete: Api) -> None:
     _make_bodyweight(athlete)
     _set_engine(athlete, "v2")
-    with Session(athlete.app.state.engine) as session:
-        ex = session.scalars(select(Exercise).where(Exercise.type == "bodyweight")).first()
-        assert ex is not None
-        name = ex.name
-    with pytest.raises(progression_v2.BodyweightNotSupported) as raised:
-        progression_v2.suggest(
-            progression.ProgressionInput("bodyweight", "double", "bodyweight", 3, [], reps_min=8)
-        )
-    assert name not in str(raised.value)
-    assert str(raised.value) == "progression engine v2 does not support bodyweight exercises"
+    _sid, response = _finish_thursday(athlete, athlete.client)
+    assert response.status_code == 200
 
 
 # ───────────── metrics ─────────────
