@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Superseded by [ADR 0012](0012-https-via-cloudfront.md) (dev 2026-11-03; prod once approved) |
+| **Status** | Superseded by [ADR 0012](0012-https-via-cloudfront.md) (dev 2026-11-03, prod 2026-11-04) |
 | **Date** | 2026-10-21 |
 | **Deciders** | Owner |
 | **Spec** | [spec §6.4 Security](../spec.md#64-security), [§12 Deployment](../spec.md#12-deployment-aws), [§17 Roadmap](../spec.md#17-roadmap-post-mvp) item 1, [§19](../spec.md#19-decisions-log) D4 |
