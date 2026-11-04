@@ -107,6 +107,9 @@ services:
     environment:
       BACKEND_UPSTREAM: backend:8000
       NGINX_RESOLVER: 127.0.0.11
+      # Behind CloudFront (#220): the hosts set 0.0.0.0/0 and https; locally nothing is trusted.
+      NGINX_TRUSTED_PROXIES: ${NGINX_TRUSTED_PROXIES:-127.0.0.1}
+      NGINX_FORWARDED_PROTO: ${NGINX_FORWARDED_PROTO:-$$scheme}
     ports:
       - "${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-8088}:8080"
     depends_on:

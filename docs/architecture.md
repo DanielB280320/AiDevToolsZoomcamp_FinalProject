@@ -231,8 +231,8 @@ flowchart LR
 | **Local** | Developer or agent machine | Working tree / worktree | `make up`: Postgres, a one-shot migration step (migrations + seed), then the backend (app only) and frontend (nginx). `make up-obs` adds the observability stack. `make seed-demo` loads a demo athlete and coach. | `localhost` |
 | **CI** | GitHub Actions runners | Every PR and every merge to `main` | Lint, type-check, unit + integration tests against a Postgres service, frontend tests, OpenAPI validation, dependency scan, secret scan, image build. Integration tests use the Open Food Facts fake. | n/a |
 | **Image registry** | GHCR | Built once per commit on merge to `main` | Images tagged with the git SHA; the same image is promoted from dev to prod. | Pulled by the EC2 hosts |
-| **dev** | `fitwise-dev` EC2, Docker Compose | Auto-deploy on every merge to `main`, then smoke test (`/readyz` + e2e smoke) | App stack + OTel Collector, forwarding to prod | Public DNS over HTTP, port 80 |
-| **prod** | `fitwise-prod` EC2, Docker Compose | Manual "Promote to production" of a SHA already on dev; `production` environment needs approval. The host rolls back to `PREVIOUS_TAG` by itself when its post-deploy health check fails (pull-based, ADR 0010); the workflow's smoke test then fails and reports it. | App stack, observability stack, on-call responder (systemd), nightly `pg_dump` to S3 | Public DNS over HTTP, port 80; Grafana restricted to the owner's IP |
+| **dev** | `fitwise-dev` EC2, Docker Compose | Auto-deploy on every merge to `main`, then smoke test (`/readyz` + e2e smoke) | App stack + OTel Collector, forwarding to prod | HTTPS on the `*.cloudfront.net` name of its CloudFront distribution; port 80 open only to the CloudFront prefix list ([ADR 0012](adr/0012-https-via-cloudfront.md)) |
+| **prod** | `fitwise-prod` EC2, Docker Compose | Manual "Promote to production" of a SHA already on dev; `production` environment needs approval. The host rolls back to `PREVIOUS_TAG` by itself when its post-deploy health check fails (pull-based, ADR 0010); the workflow's smoke test then fails and reports it. | App stack, observability stack, on-call responder (systemd), nightly `pg_dump` to S3 | Plain HTTP on the public DNS until the prod distribution is approved and created, then HTTPS via CloudFront like dev (ADR 0012); Grafana restricted to the owner's IP |
 
 Release mechanics ([spec §12](spec.md#12-deployment-aws), [§13](spec.md#13-cicd-github-actions), [process.md §9](process.md#9-releases)):
 
@@ -277,6 +277,7 @@ Each decision is recorded in the [spec decisions log](spec.md#19-decisions-log);
 | [0009](adr/0009-separate-migration-step.md) | Migrations + seed run as a separate one-shot step before the backend starts; rollback skips it | D50 |
 | [0010](adr/0010-pull-based-deploy.md) | Deploys are pull-based: hosts poll the approved tag; no AWS keys in GitHub | D57 |
 | [0011](adr/0011-user-deletion-vs-shared-references.md) | User deletion vs. shared references: RESTRICT stays, a trigger on users clears the references | D66, D71 |
+| [0012](adr/0012-https-via-cloudfront.md) | HTTPS through one CloudFront distribution per environment; origin locked to the CloudFront prefix list (supersedes 0003) | D94 |
 
 Other decisions that shape the code but need no separate ADR, because the spec states them fully:
 

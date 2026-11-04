@@ -327,6 +327,7 @@ jobs:
       - run: bash scripts/test-backup.sh
       - run: bash scripts/test-adaptive-calories.sh
       - run: bash scripts/test-deploy-env.sh
+      - run: bash scripts/test-nginx-proxy.sh
 
   oncall:
     name: On-call responder (ruff, mypy, pytest)

@@ -11,6 +11,11 @@
 #
 #   DEPLOY_REF=<branch|sha>   where to fetch the deploy scripts from (default main; public repo).
 #                             Scripts next to this file are used instead when present.
+#   BEHIND_CLOUDFRONT=1       the host is served through CloudFront over HTTPS (#220, ADR 0012,
+#                             deploy/cloudfront.sh): Secure session cookie, X-Forwarded-For from
+#                             the CloudFront edge trusted, X-Forwarded-Proto https. Without it the
+#                             host is plain HTTP (cookie not Secure). Set it only once the
+#                             distribution works, or sign-in breaks over plain HTTP.
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
 ENV_NAME="${ENV_NAME:?set ENV_NAME=dev|prod}"
@@ -62,6 +67,11 @@ set_env() {
   fi
   printf '%s=%s\n' "$1" "$2" >> "$APP_DIR/.env"
 }
+if [ "${BEHIND_CLOUDFRONT:-}" = 1 ]; then
+  set_env SESSION_COOKIE_SECURE true
+  set_env NGINX_TRUSTED_PROXIES 0.0.0.0/0   # safe: the security group admits only CloudFront to port 80
+  set_env NGINX_FORWARDED_PROTO https
+fi
 ensure_env GRAFANA_ADMIN_USER admin
 ensure_env GRAFANA_ADMIN_PASSWORD "$(openssl rand -hex 16)"   # prod: the Grafana login (never printed)
 if [ "$ENV_NAME" = prod ]; then

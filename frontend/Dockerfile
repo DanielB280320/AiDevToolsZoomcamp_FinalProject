@@ -21,7 +21,9 @@ FROM nginxinc/nginx-unprivileged:${NGINX_VERSION}-alpine AS runtime
 # restricted to variables with these prefixes so nginx's own $variables are left alone.
 ENV NGINX_ENVSUBST_FILTER="^(BACKEND_|NGINX_)" \
     BACKEND_UPSTREAM=backend:8000 \
-    NGINX_RESOLVER=127.0.0.11
+    NGINX_RESOLVER=127.0.0.11 \
+    NGINX_TRUSTED_PROXIES=127.0.0.1 \
+    NGINX_FORWARDED_PROTO=\$scheme
 # Pull in security fixes until the base image ships them: brotli-libs (CVE-2026-111497, fixed in
 # 1.2.1-r0) and curl/libcurl (CVE-2026-92392, HTTP/2 upload use-after-free, fixed in 8.23.0-r0), libexpat
 # (CVE-2026-117610, CVE-2026-118370, fixed in 2.10.0-r0).
