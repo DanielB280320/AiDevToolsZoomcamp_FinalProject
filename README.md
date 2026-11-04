@@ -73,7 +73,7 @@ A React + TypeScript SPA (Vite) is served by nginx, which proxies `/api` to a Fa
 | Environment | URL | Health check (`/api/v1/healthz` returned 200 on 2026-11-01) |
 |---|---|---|
 | Dev (deployed automatically from `main`) | https://drjfx5qv8ht2r.cloudfront.net | [healthz](https://drjfx5qv8ht2r.cloudfront.net/api/v1/healthz) |
-| Prod (promoted manually, with approval) | http://18.191.71.253 | [healthz](http://18.191.71.253/api/v1/healthz) |
+| Prod (promoted manually, with approval) | https://d3c78p667zuju.cloudfront.net | [healthz](https://d3c78p667zuju.cloudfront.net/api/v1/healthz) |
 
 Both run Docker Compose on EC2 ([ADR 0002](docs/adr/0002-ec2-docker-compose-deployment.md), [spec §12](docs/spec.md#12-deployment-aws)). Register your own test account there; the demo accounts below exist on the local stack only.
 

@@ -55,14 +55,14 @@ deploy/cloudfront.sh lock-add <dev|prod>     # port 80 from pl-b6a144df (needs 5
 deploy/cloudfront.sh verify <dev|prod>       # https, redirect, readyz, SPA route, /api never cached
 deploy/cloudfront.sh lock-revoke <dev|prod>  # then drop 0.0.0.0/0 on port 80 (refuses without lock-add)
 deploy/host-https.sh <dev|prod> on           # SESSION_COOKIE_SECURE=true, trusted proxy, https; recreates the backend
-# then: gh variable set DEV_BASE_URL --body https (repository variable) or PROD_BASE_URL --env production --body https://<id>.cloudfront.net
+# then: gh variable set DEV_BASE_URL --env dev --body https://<id>.cloudfront.net (environment `dev`; a same-named repository variable is shadowed) or PROD_BASE_URL --env production --body https://<id>.cloudfront.net
 ```
 
 Never run `lock-revoke` before `verify` passes: it closes the only other way in. Ports 3000 and 4317 on prod are never touched. `host-https.sh` edits the root-only `.env` without printing it; the frontend container picks up `NGINX_TRUSTED_PROXIES` and `NGINX_FORWARDED_PROTO` at the next deploy. A new host gets the same settings from `BEHIND_CLOUDFRONT=1 deploy/bootstrap-remote.sh <env>`.
 
 **Rollback (one step each, reversible):** `deploy/cloudfront.sh unlock <env>` (re-opens port 80 to the world), `deploy/host-https.sh <env> off`, and set the base URL variable back to `http://<elastic-ip>`. The distribution can stay (it costs nothing); delete it only with explicit owner confirmation (disable, wait for `Deployed`, then `aws cloudfront delete-distribution`). Tests: `bash scripts/test-nginx-proxy.sh` (client IP and scheme handling).
 
-**Prod promotion and smoke tests** read `DEV_BASE_URL` (repository variable) and `PROD_BASE_URL` (`production` environment variable). After an environment is locked, GitHub runners can no longer reach it by IP, so the variable must be the CloudFront URL before the next workflow run.
+**Prod promotion and smoke tests** read `DEV_BASE_URL` (`dev` environment variable, which takes precedence over a same-named repository variable) and `PROD_BASE_URL` (`production` environment variable). After an environment is locked, GitHub runners can no longer reach it by IP, so the variable must be the CloudFront URL before the next workflow run.
 
 ## Steps
 
@@ -144,7 +144,7 @@ Actions > "Rollback production" (workflow_dispatch, no inputs; only from main)
 - **Secrets.** Nothing secret is read or printed: the workflow handles SHAs, image references and statuses; the token is the built-in `GITHUB_TOKEN`, masked by Actions. Evidence for the issue: `journalctl -u fitwise-deploy | grep -Ei 'ghp_|github_pat_|ghs_|bearer'` prints nothing, and the same for the downloaded run log.
 - **After merging:** re-run `deploy/bootstrap-remote.sh prod` (and dev) so the hosts get the new `poll.sh`.
 
-GitHub settings for prod (owner): environment `production` with required reviewers and deployment branches limited to `main`, and variable `PROD_BASE_URL` (`https://<id>.cloudfront.net` once the prod distribution exists; until then `http://<prod elastic ip>`).
+GitHub settings for prod (owner): environment `production` with required reviewers and deployment branches limited to `main`, and variable `PROD_BASE_URL` (`https://<id>.cloudfront.net`; the prod distribution exists since 2026-11-04).
 
 GitHub settings behind dev: environment `dev` (deploys from `main` only) with variable `DEV_BASE_URL` (the dev address, used by the smoke test). The GHCR packages `fitwise-backend` and `fitwise-frontend` are public: they inherit the public repository because the images carry the `org.opencontainers.image.source` label. A ruleset limiting `deploy/*` to GitHub Actions is **not possible on a personal repository**: the API rejects the GitHub Actions app as a bypass actor ("must be part of the ruleset source or owner organization"). Until the repository moves to an organization, protection rests on the owner being the only writer (D58).
 
