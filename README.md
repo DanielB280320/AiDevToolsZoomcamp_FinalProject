@@ -67,13 +67,13 @@ All work is tracked in GitHub Issues with acceptance criteria and shown on the p
 A React + TypeScript SPA (Vite) is served by nginx, which proxies `/api` to a FastAPI backend (Python 3.12, SQLAlchemy 2, Alembic) on PostgreSQL 16. The calculation and suggestion rules are pure functions in `backend/app/engines/`. The API contract in `openapi.yaml` is written first and the frontend client is generated from it. The backend exports OpenTelemetry traces, metrics and logs to a collector feeding Prometheus, Loki, Tempo and Grafana. Details: [docs/architecture.md](docs/architecture.md), [ADR 0001](docs/adr/0001-stack-fastapi-react-postgres.md), [ADR 0004](docs/adr/0004-pure-calculation-engines.md).
 
 ## Deployed environments
-
+> **Test data only.** Dev and prod are served over HTTPS through CloudFront ([ADR 0012](docs/adr/0012-https-via-cloudfront.md); prod since 2026-11-04). These are demo environments, so use test data, not real health data.
 > **Test data only.** Dev is served over HTTPS through CloudFront ([ADR 0012](docs/adr/0012-https-via-cloudfront.md)). Prod is still plain HTTP until its distribution is approved and created: credentials and health data are not encrypted in transit there, so do not enter real health data ([ADR 0003](docs/adr/0003-plain-http-known-limitation.md)).
 
 | Environment | URL | Health check (`/api/v1/healthz` returned 200 on 2026-11-01) |
 |---|---|---|
 | Dev (deployed automatically from `main`) | https://drjfx5qv8ht2r.cloudfront.net | [healthz](https://drjfx5qv8ht2r.cloudfront.net/api/v1/healthz) |
-| Prod (promoted manually, with approval) | http://18.191.71.253 | [healthz](http://18.191.71.253/api/v1/healthz) |
+| Prod (promoted manually, with approval) | https://d3c78p667zuju.cloudfront.net | [healthz](https://d3c78p667zuju.cloudfront.net/api/v1/healthz) |
 
 Both run Docker Compose on EC2 ([ADR 0002](docs/adr/0002-ec2-docker-compose-deployment.md), [spec §12](docs/spec.md#12-deployment-aws)). Register your own test account there; the demo accounts below exist on the local stack only.
 
