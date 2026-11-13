@@ -548,15 +548,22 @@
     "suggestionPending": "Using current targets, suggestion pending.",
     "setName": "Set {{number}}",
     "extra": "Extra",
-    "target": "Target: {{value}}",
     "noTarget": "No target",
-    "logged": "Logged: {{value}}",
     "skipped": "Skipped",
     "glyph": {
-      "logged": "✓ ",
       "skipped": "– "
     },
     "asPlanned": "Done as planned",
+    "loggedPrefix": "Logged: ",
+    "repsTimesWeight": "{{reps}} × {{weight}}",
+    "completeAll": {
+      "button": "Complete all as planned",
+      "confirm_one": "Mark {{count}} remaining set as done as planned? There is no single undo; you can still edit each set.",
+      "confirm_other": "Mark {{count}} remaining sets as done as planned? There is no single undo; you can still edit each set.",
+      "yes": "Yes, complete them",
+      "no": "Cancel",
+      "working": "Completing…"
+    },
     "forSet": "{{exercise}}, set {{number}}",
     "edit": "Edit",
     "skip": "Skip",

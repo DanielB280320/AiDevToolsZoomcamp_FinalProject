@@ -501,3 +501,17 @@ def test_generated_and_decided_metrics_increment_once_per_event(
     assert points("fitwise_suggestions_decided_total") == {
         (("decision", "accepted"), ("kind", "progression")): 1
     }
+
+
+def test_completing_planned_sets_on_a_finished_session_replaces_pending_suggestions(
+    athlete: Api,
+) -> None:
+    """#223 F10.10: complete-planned is an edit like any other (D65)."""
+    sid = _perform(athlete, THU, reps=8, sets=2)
+    (first,) = _pending_for(athlete, sid)  # only the strength exercise was performed
+    response = athlete.client.post(f"{BASE}/sessions/{sid}/sets/complete-planned")
+    assert response.status_code == 200
+    # The timed set is now done as planned too, so it gets a suggestion; the old one is replaced.
+    second = _pending_for(athlete, sid)
+    assert len(second) == 2
+    assert first["id"] not in [s["id"] for s in second]

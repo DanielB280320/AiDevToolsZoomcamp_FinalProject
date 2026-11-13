@@ -1,9 +1,10 @@
 """Demo latency fault (spec §15.3 S3): delay the key-journey logging routes by a flag.
 
 When `fault_injection_latency_ms` > 0, the logging routes watched by the §15.1 alerts
-(`POST /sessions/*/sets`, `POST /sessions/*/finish`, `POST /athletes/*/meal-logs`) wait that
-many milliseconds before being handled; every other route is untouched. The default 0 adds no
-delay. The on-call mitigation is `oncall/ops/flag.sh fault_injection_latency_ms 0`.
+(`POST /sessions/*/sets[/complete-planned]`, `POST /sessions/*/finish`,
+`POST /athletes/*/meal-logs`) wait that many milliseconds before being handled; every other
+route is untouched. The default 0 adds no delay. The on-call mitigation is
+`oncall/ops/flag.sh fault_injection_latency_ms 0`.
 
 It sits inside the telemetry middleware, so the delay shows up in `http_server_duration` and in
 the server span exactly like a real slowdown. It writes no logs and reads nothing from the
@@ -22,7 +23,7 @@ from app.services.flags import FlagReader
 
 _SEGMENT: Final = r"[^/]+"
 LOGGING_ROUTES: Final = (
-    re.compile(rf"/api/v1/sessions/{_SEGMENT}/sets"),
+    re.compile(rf"/api/v1/sessions/{_SEGMENT}/sets(/complete-planned)?"),
     re.compile(rf"/api/v1/sessions/{_SEGMENT}/finish"),
     re.compile(rf"/api/v1/athletes/{_SEGMENT}/meal-logs"),
 )

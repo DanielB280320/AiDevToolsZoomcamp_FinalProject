@@ -11,6 +11,7 @@ The endpoints are the key journey (check off meals, log sets, finish workout):
 | Route template (label `route`) | What the user cannot do |
 |---|---|
 | `/api/v1/sessions/{session_id}/sets` | Log a set |
+| `/api/v1/sessions/{session_id}/sets/complete-planned` | Complete all remaining planned sets as planned |
 | `/api/v1/sessions/{session_id}/finish` | Finish a workout (suggestions are generated here) |
 | `/api/v1/athletes/{athlete_id}/meal-logs` | Check off a meal |
 

@@ -9,6 +9,7 @@ import {
   type FinishSessionResult,
   type SessionExercise,
   type SetLogInput,
+  useCompletePlanned,
   useFinishSession,
   useLogSet,
   useSession,
@@ -62,6 +63,8 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
   const day = useDay(me.id, session.data?.date); // the coach notes of the workout's day
   const logSet = useLogSet(sessionId);
   const finish = useFinishSession(sessionId);
+  const completeAll = useCompletePlanned(sessionId);
+  const [confirming, setConfirming] = useState(false);
   const timer = useRestTimer(clock);
   const [result, setResult] = useState<FinishSessionResult | null>(null);
   const [added, setAdded] = useState<ExerciseSummary[]>([]);
@@ -87,6 +90,20 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
     ...data.exercises,
     ...added.filter((e) => !present.has(e.id) && !data.exercises.some((x) => x.exercise.id === e.id)).map(addedExercise),
   ];
+
+  // Unlogged planned sets with a target: what "Complete all as planned" would log (F10.9).
+  const remaining = data.exercises
+    .filter((e) => !e.is_extra)
+    .reduce(
+      (count, e) =>
+        count + e.sets.filter((x) => !x.log && (x.target_reps != null || x.target_seconds != null)).length,
+      0,
+    );
+
+  const onCompleteAll = () => {
+    if (completeAll.isPending) return;
+    completeAll.mutate(undefined, { onSettled: () => setConfirming(false) }); // no rest timer
+  };
 
   const onFinish = () => {
     if (finish.isPending) return;
@@ -131,6 +148,45 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
             <p role="alert" className="mt-3 border-l-4 border-alert pl-3 text-alert">
               {t(`workout.errors.${errorKey(logSet.error)}`)}
             </p>
+          )}
+          {completeAll.isError && (
+            <p role="alert" className="mt-3 border-l-4 border-alert pl-3 text-alert">
+              {t(`workout.errors.${errorKey(completeAll.error)}`)}
+            </p>
+          )}
+          {!locked && remaining > 0 && (
+            <div className="mt-4">
+              {confirming ? (
+                <div role="group" aria-label={t("workout.completeAll.button")} className="border-l-4 border-plate pl-3">
+                  <p>{t("workout.completeAll.confirm", { count: remaining })}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={onCompleteAll}
+                      aria-disabled={completeAll.isPending || undefined}
+                      className="min-h-12 rounded-md bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark aria-disabled:opacity-75"
+                    >
+                      {completeAll.isPending ? t("workout.completeAll.working") : t("workout.completeAll.yes")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(false)}
+                      className="min-h-12 rounded-md px-4 font-semibold text-spruce underline underline-offset-4"
+                    >
+                      {t("workout.completeAll.no")}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirming(true)}
+                  className="min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
+                >
+                  {t("workout.completeAll.button")}
+                </button>
+              )}
+            </div>
           )}
           {exercises.map((exercise) => (
             <ExerciseCard

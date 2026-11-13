@@ -27,7 +27,8 @@ from responder.config import Settings
 from responder.log import log
 
 ROUTE_REGEX = (
-    "/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/finish"
+    "/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/sets/complete-planned"
+    "|/api/v1/sessions/{session_id}/finish"
     "|/api/v1/athletes/{athlete_id}/meal-logs"
 )
 

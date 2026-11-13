@@ -53,6 +53,21 @@ export function useLogSet(sessionId: string) {
   });
 }
 
+/** Logs every unlogged planned set that has a target as done as planned, all or nothing (F10.9). */
+export function useCompletePlanned(sessionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error, response } = await api.POST("/sessions/{session_id}/sets/complete-planned", {
+        params: { path: { session_id: sessionId } },
+      });
+      if (data) return data;
+      throw apiError(response, error);
+    },
+    onSettled: () => invalidateAfterLogging(queryClient, sessionId),
+  });
+}
+
 /** Closes the workout; allowed again inside the edit window to recompute completion. */
 export function useFinishSession(sessionId: string) {
   const queryClient = useQueryClient();

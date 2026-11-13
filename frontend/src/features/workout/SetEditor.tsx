@@ -13,12 +13,14 @@ interface Props {
   pending: boolean;
   onSave: (values: Pick<SetLogInput, "reps" | "weight_kg" | "seconds" | "distance_m">) => void;
   onCancel: () => void;
+  /** When given, the editor offers Skip (the row itself stays one line). */
+  onSkip?: () => void;
 }
 
 const text = (value: number | null | undefined) => (value == null ? "" : String(value));
 
 /** Enter actual reps and weight, or duration and distance, for one set (F10). */
-export function SetEditor({ exercise, initial, units, pending, onSave, onCancel }: Props) {
+export function SetEditor({ exercise, initial, units, pending, onSave, onCancel, onSkip }: Props) {
   const { t } = useTranslation();
   const baseId = useId();
   const fields = fieldsFor(exercise.type);
@@ -104,6 +106,18 @@ export function SetEditor({ exercise, initial, units, pending, onSave, onCancel 
         >
           {t("workout.cancel")}
         </button>
+        {onSkip && (
+          <button
+            type="button"
+            aria-disabled={pending || undefined}
+            onClick={() => {
+              if (!pending) onSkip();
+            }}
+            className="min-h-12 rounded-md px-4 font-semibold text-spruce underline underline-offset-4"
+          >
+            {t("workout.skip")}
+          </button>
+        )}
       </div>
     </form>
   );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { SessionExercise, SessionSet, SetLogInput, ExerciseSummary } from "../../api/workout";
@@ -7,7 +7,7 @@ import type { CoachNote } from "../../api/notes";
 import { PrBadge } from "../../components/PrBadge";
 import { NoteThread } from "../notes/NoteThread";
 import { SetEditor } from "./SetEditor";
-import { describeValues } from "./values";
+import { describeCompact } from "./values";
 
 export interface SetSaver {
   /** Logs one set; resolves `true` when the server accepted it. */
@@ -29,6 +29,16 @@ interface Props {
   onDiscard?: (exercise: SessionExercise) => void;
 }
 
+/** Done exactly as planned: the logged values equal the targets the set was logged against. */
+function isAsPlanned(set: SessionSet): boolean {
+  const { log } = set;
+  if (!log || log.skipped) return false;
+  return log.reps === set.target_reps && log.weight_kg === set.target_weight_kg && log.seconds === set.target_seconds;
+}
+
+const ICON = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 3, "aria-hidden": true } as const;
+
+/** One set as a single non-wrapping row: number, target, check, edit (F10.6-F10.8, D95). */
 function SetRow({
   exercise,
   set,
@@ -41,13 +51,14 @@ function SetRow({
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const { log } = set;
-  const target = describeValues(
+  const target = describeCompact(
     t,
     { reps: set.target_reps, weight_kg: set.target_weight_kg, seconds: set.target_seconds },
     units,
   );
   const hasTarget = set.target_reps != null || set.target_seconds != null || set.target_weight_kg != null;
-  const name = t("workout.setName", { number: set.set_no });
+  const asPlanned = isAsPlanned(set);
+  const forSet = t("workout.forSet", { exercise: exercise.exercise.name, number: set.set_no });
 
   const submit = async (input: Partial<SetLogInput>) => {
     const ok = await save(exercise.exercise.id, exercise.planned_exercise_id, set.set_no, input);
@@ -56,63 +67,80 @@ function SetRow({
     if (!input.skipped) onLogged(exercise);
   };
 
+  // What the row says next to (or instead of) the target.
+  let result: ReactNode = null;
+  if (log?.skipped) {
+    result = (
+      <>
+        <span aria-hidden="true">{t("workout.glyph.skipped")}</span>
+        {t("workout.skipped")}
+      </>
+    );
+  } else if (log && !asPlanned) {
+    result = (
+      <>
+        <span aria-hidden="true">{target ? "→ " : ""}</span>
+        <span className="sr-only">{t("workout.loggedPrefix")}</span>
+        {describeCompact(t, log, units)}
+      </>
+    );
+  }
+  const targetText = target || (set.is_extra ? t("workout.extra") : t("workout.noTarget"));
+
   return (
-    <li className="border-b border-line py-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="font-semibold">
-          {name}
-          {set.is_extra && <span className="ml-2 text-step--1 font-normal text-slate">{t("workout.extra")}</span>}
+    <li className="border-b border-line py-2">
+      <div className="flex flex-nowrap items-center gap-2">
+        <span className="w-7 shrink-0 text-center font-semibold tabular-nums">
+          <span className="sr-only">{t("workout.setName", { number: "" })}</span>
+          {set.set_no}
         </span>
-        <span className="text-right text-step--1 text-slate">
-          {target ? t("workout.target", { value: target }) : t("workout.noTarget")}
+        <span className="min-w-0 flex-1 truncate whitespace-nowrap text-step--1">
+          <span className={result ? "text-slate" : undefined}>{targetText}</span>
+          {result && (
+            <>
+              {" "}
+              <span className="font-semibold text-spruce">{result}</span>
+            </>
+          )}
         </span>
+        {!locked && (
+          <>
+            <button
+              type="button"
+              aria-pressed={asPlanned}
+              aria-disabled={pending || !hasTarget || undefined}
+              onClick={() => {
+                if (!pending && hasTarget && !asPlanned) void submit({ as_planned: true });
+              }}
+              className={`inline-flex size-12 shrink-0 items-center justify-center rounded-md border-2 ${
+                asPlanned
+                  ? "border-spruce bg-spruce text-chalk"
+                  : "border-iron/60 bg-transparent text-iron hover:bg-line"
+              } aria-disabled:opacity-50`}
+            >
+              <svg {...ICON}>
+                <path d="M4 12.5l5 5L20 6.5" />
+              </svg>
+              <span className="sr-only">
+                {t("workout.asPlanned")}, {forSet}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-expanded={editing}
+              onClick={() => setEditing(!editing)}
+              className="inline-flex size-12 shrink-0 items-center justify-center rounded-md border-2 border-iron hover:bg-line"
+            >
+              <svg {...ICON} strokeWidth={2}>
+                <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />
+              </svg>
+              <span className="sr-only">
+                {t("workout.edit")} {forSet}
+              </span>
+            </button>
+          </>
+        )}
       </div>
-      {log && (
-        <p className="mt-1 font-semibold text-spruce">
-          <span aria-hidden="true">{log.skipped ? t("workout.glyph.skipped") : t("workout.glyph.logged")}</span>
-          {log.skipped
-            ? t("workout.skipped")
-            : t("workout.logged", { value: describeValues(t, log, units) })}
-        </p>
-      )}
-      {!locked && !editing && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {!log && hasTarget && (
-            <button
-              type="button"
-              aria-disabled={pending || undefined}
-              onClick={() => {
-                if (!pending) void submit({ as_planned: true });
-              }}
-              className="min-h-12 rounded-md bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark aria-disabled:opacity-75"
-            >
-              {t("workout.asPlanned")}
-              <span className="sr-only"> {t("workout.forSet", { exercise: exercise.exercise.name, number: set.set_no })}</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
-          >
-            {t("workout.edit")}
-            <span className="sr-only"> {t("workout.forSet", { exercise: exercise.exercise.name, number: set.set_no })}</span>
-          </button>
-          {!log && (
-            <button
-              type="button"
-              aria-disabled={pending || undefined}
-              onClick={() => {
-                if (!pending) void submit({ skipped: true });
-              }}
-              className="min-h-12 rounded-md px-4 font-semibold text-spruce underline underline-offset-4"
-            >
-              {t("workout.skip")}
-              <span className="sr-only"> {t("workout.forSet", { exercise: exercise.exercise.name, number: set.set_no })}</span>
-            </button>
-          )}
-        </div>
-      )}
       {editing && (
         <SetEditor
           exercise={exercise.exercise}
@@ -126,6 +154,7 @@ function SetRow({
           pending={pending}
           onSave={(values) => void submit(values)}
           onCancel={() => setEditing(false)}
+          onSkip={() => void submit({ skipped: true })}
         />
       )}
     </li>

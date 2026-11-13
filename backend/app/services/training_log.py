@@ -238,6 +238,21 @@ def _resolve_values(
     return body.reps, body.weight_kg, body.seconds, body.distance_m
 
 
+def _new_log(
+    row: TrainingSession, exercise_id: uuid.UUID, set_no: int, planned: PlannedExercise | None
+) -> SetLog:
+    """A set log carrying the planned targets it is performed against (rule 7)."""
+    return SetLog(
+        session_id=row.id,
+        exercise_id=exercise_id,
+        set_no=set_no,
+        planned_exercise_id=planned.id if planned else None,
+        target_reps=planned.reps_min if planned else None,
+        target_weight_kg=planned.target_weight_kg if planned else None,
+        target_seconds=planned.target_seconds if planned else None,
+    )
+
+
 def log_set(
     db: Session, user: User, session_id: uuid.UUID, body: out.SetLogInput, now: dt.datetime
 ) -> tuple[SetLog, bool]:
@@ -273,15 +288,7 @@ def log_set(
     created = log is None
     if log is None:
         # The first log fixes the target snapshot; replacing a set never rewrites it.
-        log = SetLog(
-            session_id=row.id,
-            exercise_id=body.exercise_id,
-            set_no=body.set_no,
-            planned_exercise_id=planned.id if planned else None,
-            target_reps=planned.reps_min if planned else None,
-            target_weight_kg=planned.target_weight_kg if planned else None,
-            target_seconds=planned.target_seconds if planned else None,
-        )
+        log = _new_log(row, body.exercise_id, body.set_no, planned)
         db.add(log)
     log.skipped = body.skipped
     log.reps, log.weight_kg, log.seconds, log.distance_m = reps, weight, seconds, distance
@@ -293,6 +300,47 @@ def log_set(
     recompute(db, row)
     db.commit()
     return log, created
+
+
+def complete_planned(
+    db: Session, user: User, session_id: uuid.UUID, now: dt.datetime
+) -> tuple[TrainingSession, int]:
+    """Log every unlogged planned set that has a target as done as planned (F10.9).
+
+    One transaction: all sets or none. Logged (done, edited or skipped) sets, extra sets and sets
+    without a target are untouched, so repeating the call changes nothing. Each new log snapshots
+    its targets like `log_set` (rule 7). Returns the session and the number of sets created."""
+    row = _locked_session(db, user, session_id, now)
+    training_day, exercises = load_day(db, row)
+    logged = {
+        (log.exercise_id, log.set_no)
+        for log in db.scalars(select(SetLog).where(SetLog.session_id == row.id))
+    }
+    created = 0
+    for planned in training_day.exercises if training_day else []:
+        exercise = exercises[planned.exercise_id]
+        try:
+            as_planned = out.SetLogInput(exercise_id=planned.exercise_id, set_no=1, as_planned=True)
+            values = _resolve_values(as_planned, exercise, planned)
+        except ProblemError:
+            continue  # no target to copy
+        for n in range(1, planned.sets + 1):
+            if (planned.exercise_id, n) in logged:
+                continue
+            logged.add((planned.exercise_id, n))
+            log = _new_log(row, planned.exercise_id, n, planned)
+            log.skipped = False
+            log.reps, log.weight_kg, log.seconds, log.distance_m = values
+            log.logged_at = now
+            db.add(log)
+            created += 1
+    if created and row.status == "planned":
+        row.status = "in_progress"
+        row.started_at = now
+    db.flush()
+    recompute(db, row)
+    db.commit()
+    return row, created
 
 
 def delete_set(
