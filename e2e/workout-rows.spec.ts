@@ -23,6 +23,7 @@ test("workout rows at 360 px: check, complete all as planned", async ({ page }) 
   });
 
   const checks = page.getByRole("button", { name: /^Done as planned, /, pressed: false });
+  await expect(checks.first()).toBeVisible();
   const total = await checks.count();
   expect(total).toBeGreaterThan(2);
 
