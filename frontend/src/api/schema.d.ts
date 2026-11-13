@@ -710,6 +710,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions/{session_id}/sets/complete-planned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete all remaining planned sets as planned
+         * @description Logs every unlogged planned set that has a target as done as planned (F10.9, D95), in one
+         *     transaction (all or nothing). Sets already logged, edited or skipped, extra sets and sets
+         *     without a target are unchanged, so calling it again changes nothing. Each new set log
+         *     stores a snapshot of the targets like `logSet` (rule 7). It does not finish the session;
+         *     completion is recomputed and a `planned` session moves to `in_progress`. On a finished
+         *     session inside the edit window the pending suggestions are replaced like any other edit
+         *     (F10.10, D65); later returns `409 edit_window_closed`. Coaches and strangers are refused
+         *     like `logSet` (F16.4).
+         */
+        post: operations["completePlannedSets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions/{session_id}/sets/{set_log_id}": {
         parameters: {
             query?: never;
@@ -3839,6 +3868,33 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    completePlannedSets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session with the updated sets and completion. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     deleteSetLog: {

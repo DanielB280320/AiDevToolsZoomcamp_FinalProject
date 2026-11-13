@@ -29,12 +29,12 @@ groups:
               range: false
               expr: >-
                 (
-                  sum by (route) (increase(http_server_duration_seconds_count{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs", status=~"5.."}[5m]))
+                  sum by (route) (increase(http_server_duration_seconds_count{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/sets/complete-planned|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs", status=~"5.."}[5m]))
                   /
-                  sum by (route) (increase(http_server_duration_seconds_count{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs"}[5m]))
+                  sum by (route) (increase(http_server_duration_seconds_count{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/sets/complete-planned|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs"}[5m]))
                 )
                 and
-                sum by (route) (increase(http_server_duration_seconds_count{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs"}[5m])) >= 20
+                sum by (route) (increase(http_server_duration_seconds_count{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/sets/complete-planned|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs"}[5m])) >= 20
           - refId: B
             datasourceUid: __expr__
             model:
@@ -82,7 +82,7 @@ groups:
               instant: true
               range: false
               expr: >-
-                histogram_quantile(0.95, sum by (route, le) (increase(http_server_duration_seconds_bucket{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs"}[10m])))
+                histogram_quantile(0.95, sum by (route, le) (increase(http_server_duration_seconds_bucket{env="prod", method="POST", route=~"/api/v1/sessions/{session_id}/sets|/api/v1/sessions/{session_id}/sets/complete-planned|/api/v1/sessions/{session_id}/finish|/api/v1/athletes/{athlete_id}/meal-logs"}[10m])))
           - refId: B
             datasourceUid: __expr__
             model:

@@ -201,17 +201,217 @@ describe("rest timer", () => {
     expect(screen.queryByRole("timer")).not.toBeInTheDocument();
   });
 
-  it("does not start after a skipped set", async () => {
+  it("does not start after a skipped set; Skip lives in the editor, not the row", async () => {
     const { clock } = manualClock(NOW);
     const user = userEvent.setup();
     const bodies = captureSets();
     server.use(sessionOk());
     renderScreen(clock);
 
-    await user.click((await screen.findAllByRole("button", { name: /^Skip/ }))[0]!);
+    await screen.findAllByRole("button", { name: /^Edit/ });
+    expect(screen.queryByRole("button", { name: /^Skip/ })).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /^Edit/ })[0]!);
+    await user.click(screen.getByRole("button", { name: "Skip" }));
 
     expect(bodies[0]).toMatchObject({ set_no: 1, skipped: true, as_planned: false });
     expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  });
+});
+
+describe("set rows (F10.6, F10.7)", () => {
+  it("renders each set as one row: number, target in the user's units, check and edit", async () => {
+    const { clock } = manualClock(NOW);
+    server.use(sessionOk());
+    renderScreen(clock, meFixture({ units: "imperial" }));
+
+    const rows = await screen.findAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+    const row = rows[0]!;
+    expect(row).toHaveTextContent("Set 1");
+    expect(row).toHaveTextContent("8 × 132.3 lb");
+    expect(within(row).getAllByRole("button")).toHaveLength(2);
+    expect(within(row).getByRole("button", { name: "Done as planned, Back squat, set 1" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Edit Back squat, set 1" })).toBeInTheDocument();
+    // Nothing wraps: the row is a no-wrap flex line.
+    const line = row.firstElementChild!;
+    expect(line).toHaveClass("flex-nowrap");
+    expect(line.querySelector(".truncate")).toHaveClass("whitespace-nowrap");
+  });
+
+  it("shows a timed target as a duration", async () => {
+    const { clock } = manualClock(NOW);
+    server.use(
+      sessionOk({
+        exercises: [
+          squatExercise({
+            exercise: PLANK,
+            sets: [{ set_no: 1, is_extra: false, target_reps: null, target_weight_kg: null, target_seconds: 45, log: null }],
+          }),
+        ],
+      }),
+    );
+    renderScreen(clock);
+
+    expect(await screen.findByRole("listitem")).toHaveTextContent("45 s");
+  });
+
+  it("marks a set done as planned with a pressed, named check and one POST", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    const bodies = captureSets();
+    server.use(sessionOk());
+    renderScreen(clock);
+
+    const check = (await screen.findAllByRole("button", { name: /Done as planned/ }))[0]!;
+    expect(check).toHaveAttribute("aria-pressed", "false");
+    await user.click(check);
+
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({ set_no: 1, as_planned: true });
+    expect(await screen.findByRole("timer")).toBeInTheDocument();
+  });
+
+  it("shows a set logged as planned with a pressed check", async () => {
+    const { clock } = manualClock(NOW);
+    server.use(sessionOk({ exercises: [squatExercise({ sets: sets(2, (n) => (n === 1 ? setLog(1) : null)) })] }));
+    renderScreen(clock);
+
+    const checks = await screen.findAllByRole("button", { name: /Done as planned/ });
+    expect(checks[0]).toHaveAttribute("aria-pressed", "true");
+    expect(checks[1]).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("shows other logged values next to the target and no pressed check", async () => {
+    const { clock } = manualClock(NOW);
+    server.use(
+      sessionOk({ exercises: [squatExercise({ sets: sets(1, (n) => setLog(n, { reps: 5, weight_kg: 50 })) })] }),
+    );
+    renderScreen(clock);
+
+    const row = await screen.findByRole("listitem");
+    expect(row).toHaveTextContent("8 × 60 kg");
+    expect(row).toHaveTextContent(/Logged: 5 × 50 kg/);
+    expect(within(row).getByRole("button", { name: /Done as planned/ })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("shows Skipped for a skipped set", async () => {
+    const { clock } = manualClock(NOW);
+    server.use(
+      sessionOk({
+        exercises: [squatExercise({ sets: sets(1, (n) => setLog(n, { skipped: true, reps: null, weight_kg: null })) })],
+      }),
+    );
+    renderScreen(clock);
+
+    const row = await screen.findByRole("listitem");
+    expect(row).toHaveTextContent("Skipped");
+    expect(within(row).getByRole("button", { name: /Done as planned/ })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("disables the check on a set without a target", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    const bodies = captureSets();
+    server.use(
+      sessionOk({
+        exercises: [
+          squatExercise({
+            sets: [{ set_no: 1, is_extra: false, target_reps: null, target_weight_kg: null, target_seconds: null, log: null }],
+          }),
+        ],
+      }),
+    );
+    renderScreen(clock);
+
+    const check = await screen.findByRole("button", { name: /Done as planned/ });
+    expect(check).toHaveAttribute("aria-disabled", "true");
+    await user.click(check);
+    expect(bodies).toHaveLength(0);
+  });
+});
+
+describe("complete all as planned (F10.9)", () => {
+  function captureComplete() {
+    const calls: string[] = [];
+    server.use(
+      http.post(apiUrl("/sessions/:id/sets/complete-planned"), ({ params }) => {
+        calls.push(String(params.id));
+        return HttpResponse.json(sessionFixture("2026-10-26", { id: SESSION_ID, exercises: [squatExercise()] }));
+      }),
+    );
+    return calls;
+  }
+
+  it("asks once, calls the endpoint once, starts no rest timer and does not finish", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    const calls = captureComplete();
+    const finishCalls: string[] = [];
+    server.use(
+      sessionOk(),
+      http.post(apiUrl("/sessions/:id/finish"), () => {
+        finishCalls.push("finish");
+        return problem(500, "internal_error");
+      }),
+    );
+    renderScreen(clock);
+
+    await user.click(await screen.findByRole("button", { name: "Complete all as planned" }));
+    expect(calls).toHaveLength(0); // not before the confirmation
+    expect(screen.getByText(/Mark 3 remaining sets as done as planned/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Yes, complete them" }));
+
+    await vi.waitFor(() => expect(calls).toEqual([SESSION_ID]));
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+    expect(finishCalls).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Finish workout" })).toBeInTheDocument();
+  });
+
+  it("does nothing when the confirmation is cancelled", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    const calls = captureComplete();
+    server.use(sessionOk());
+    renderScreen(clock);
+
+    await user.click(await screen.findByRole("button", { name: "Complete all as planned" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(calls).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Complete all as planned" })).toBeInTheDocument();
+  });
+
+  it("is hidden when every planned set with a target is logged", async () => {
+    const { clock } = manualClock(NOW);
+    server.use(sessionOk({ exercises: [squatExercise({ sets: sets(2, (n) => setLog(n)) })] }));
+    renderScreen(clock);
+
+    await screen.findByRole("heading", { name: "Back squat" });
+    expect(screen.queryByRole("button", { name: "Complete all as planned" })).not.toBeInTheDocument();
+  });
+
+  it("is hidden once the edit window has closed", async () => {
+    const { clock } = manualClock(Date.parse("2026-10-28T10:00:00Z"));
+    server.use(sessionOk({ status: "done" }));
+    renderScreen(clock);
+
+    await screen.findByRole("heading", { name: "Back squat" });
+    expect(screen.queryByRole("button", { name: "Complete all as planned" })).not.toBeInTheDocument();
+  });
+
+  it("shows the server's reason when it is refused", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    server.use(
+      sessionOk(),
+      http.post(apiUrl("/sessions/:id/sets/complete-planned"), () => problem(409, "edit_window_closed")),
+    );
+    renderScreen(clock);
+
+    await user.click(await screen.findByRole("button", { name: "Complete all as planned" }));
+    await user.click(screen.getByRole("button", { name: "Yes, complete them" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("This workout can no longer be edited.");
   });
 });
 
@@ -444,7 +644,7 @@ describe("editing sets", () => {
     );
     renderScreen(clock);
 
-    expect(await screen.findByText("Logged: 8 reps · 60 kg")).toBeInTheDocument();
+    expect(await screen.findByRole("listitem")).toHaveTextContent("8 × 60 kg");
     expect(screen.getAllByText("This workout can no longer be edited.").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /^Edit/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Finish workout/ })).not.toBeInTheDocument();

@@ -63,7 +63,7 @@ test("journey 2: log a workout above target, finish, accept the suggestion, see 
       await card.getByLabel("Reps", { exact: true }).fill(String(aboveTarget));
       await card.getByLabel(/^Weight/).fill("20");
       await card.getByRole("button", { name: "Save set", exact: true }).click();
-      await expect(card.getByText(`Logged: ${aboveTarget} reps · 20 kg`)).toHaveCount(set.set_no);
+      await expect(card.getByText(`Logged: ${aboveTarget} × 20 kg`)).toHaveCount(set.set_no);
     }
   });
 

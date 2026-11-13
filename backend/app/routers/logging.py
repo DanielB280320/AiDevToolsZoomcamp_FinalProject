@@ -10,6 +10,7 @@ from app.dependencies import OwnerAccess, OwnerSession, SessionDep, TelemetryDep
 from app.engines.constants import IMPORT_MAX_BYTES
 from app.errors import ProblemError
 from app.models import Suggestion as Row
+from app.schemas.calendar import Session
 from app.schemas.logging import (
     ActivityInput,
     ActivityResult,
@@ -76,6 +77,34 @@ def log_set(
     if not created:
         response.status_code = 200
     return SetLog.model_validate(log, from_attributes=True)
+
+
+@router.post(
+    "/sessions/{session_id}/sets/complete-planned",
+    operation_id="completePlannedSets",
+    response_model=Session,
+    responses={**_COMMON, 404: _PROBLEM, 409: _PROBLEM},
+)
+def complete_planned_sets(
+    session_id: uuid.UUID,
+    access: OwnerSession,
+    db: SessionDep,
+    clock: ClockDep,
+    telemetry: TelemetryDep,
+    flags: FlagsDep,
+) -> Session:
+    """Log every unlogged planned set with a target as done as planned (F10.9); all or nothing."""
+    now = clock.now()
+    user = access.athlete
+    row, created = training_log.complete_planned(db, user, session_id, now)
+    for _ in range(created):
+        telemetry.metrics.set_logged()
+    # Editing a finished session replaces its pending suggestions (F10.10, D65).
+    _count(
+        telemetry,
+        suggestions.refresh_for_session(db, user, session_id, flags.progression_engine, now),
+    )
+    return calendar.session_view(db, user, row, local_today(now, user.timezone))
 
 
 @router.delete(

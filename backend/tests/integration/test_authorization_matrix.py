@@ -379,6 +379,9 @@ BUILDERS: dict[str, Builder] = {
     "GET /sessions/{session_id}": _sid,
     "POST /sessions/{session_id}/move": _move,
     "POST /sessions/{session_id}/sets": _log_set,
+    "POST /sessions/{session_id}/sets/complete-planned": lambda w: Request(
+        {"session_id": new_set_log(w)[0]}
+    ),
     "DELETE /sessions/{session_id}/sets/{set_log_id}": _delete_set,
     "POST /sessions/{session_id}/finish": lambda w: Request({"session_id": new_set_log(w)[0]}),
     "POST /athletes/{athlete_id}/meal-logs": lambda w: Request(

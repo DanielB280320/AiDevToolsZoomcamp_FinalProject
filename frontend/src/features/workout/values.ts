@@ -44,3 +44,16 @@ export function fieldsFor(type: ExerciseSummary["type"]): { field: Field; requir
       ];
   }
 }
+
+/** Compact one-line form for a set row: "8 × 60 kg", "12 + 10 kg", "45 s" (user's units). */
+export function describeCompact(t: TFunction, values: Partial<SetValues>, units: UnitSystem): string {
+  const weight = values.weight_kg != null ? formatWeight(values.weight_kg, units) : null;
+  const distance = values.distance_m != null ? t("workout.meters", { count: values.distance_m }) : null;
+  if (values.seconds != null) {
+    return [t("workout.seconds", { count: values.seconds }), distance].filter(Boolean).join(" · ");
+  }
+  if (values.reps != null) {
+    return weight ? t("workout.repsTimesWeight", { reps: values.reps, weight }) : String(values.reps);
+  }
+  return weight ?? "";
+}
