@@ -103,7 +103,10 @@ test("journey 2: log a workout above target, finish, accept the suggestion, see 
   await test.step("the Plan shows the accepted value as the exercise's next target", async () => {
     await page.getByRole("link", { name: "Plan", exact: true }).click();
     await expect(page).toHaveURL(/\/plan$/);
-    const day = page.getByRole("listitem").filter({ has: page.getByRole("heading", { level: 3, name: new RegExp(`: ${session.training_day_name}$`) }) }).first();
+    // Today's day, by its weekday: with three days a week the split is A / B / A, the two "A" days
+    // hold different exercises and today's is not always the first one in the week.
+    const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${todayIso()}T00:00:00Z`));
+    const day = page.getByRole("listitem").filter({ has: page.getByRole("heading", { level: 3, name: `${weekday}: ${session.training_day_name}`, exact: true }) });
     const exercise = day.getByRole("listitem").filter({ has: page.getByRole("heading", { level: 4, name: subject!.exercise.name, exact: true }) });
     // Calibration: the weight lifted (20 kg) is now the target weight; it was empty before.
     await expect(exercise.getByLabel(/^Weight/)).toHaveValue("20");

@@ -24,6 +24,11 @@ COPY app ./app
 
 # ---- runtime: no uv, no build tools, non-root ----
 FROM python:${PYTHON_VERSION}-slim AS runtime
+# Pull in security fixes until the base image ships them: zlib1g (CVE-2026-76844, CVE-2026-85091,
+# heap buffer overflows, fixed in 1:1.3.dfsg+really1.3.1-1+deb13u1).
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends --only-upgrade zlib1g \
+ && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system --gid 10001 fitwise \
  && useradd --system --uid 10001 --gid fitwise --no-create-home --shell /usr/sbin/nologin fitwise
 WORKDIR /app

@@ -26,9 +26,11 @@ ENV NGINX_ENVSUBST_FILTER="^(BACKEND_|NGINX_)" \
     NGINX_FORWARDED_PROTO=\$scheme
 # Pull in security fixes until the base image ships them: brotli-libs (CVE-2026-111497, fixed in
 # 1.2.1-r0) and curl/libcurl (CVE-2026-92392, HTTP/2 upload use-after-free, fixed in 8.23.0-r0), libexpat
-# (CVE-2026-117610, CVE-2026-118370, fixed in 2.10.0-r0).
+# (CVE-2026-117610, CVE-2026-118370, fixed in 2.10.0-r0), libxslt (CVE-2026-125350, CVE-2026-87636,
+# CVE-2026-9947, fixed in 1.1.43-r4) and musl-utils (CVE-2026-107891, fixed in 1.2.6-r3).
 USER root
-RUN apk add --no-cache --upgrade 'brotli-libs>=1.2.1-r0' 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0' 'libexpat>=2.10.0-r0'
+RUN apk add --no-cache --upgrade 'brotli-libs>=1.2.1-r0' 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0' 'libexpat>=2.10.0-r0' \
+    'libxslt>=1.1.43-r4' 'musl-utils>=1.2.6-r3'
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 USER 101
