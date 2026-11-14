@@ -210,3 +210,16 @@ export async function completeWizardInUi(page: Page): Promise<number> {
   await expect(calories).toBeVisible();
   return Number(((await calories.textContent()) ?? "").replace(/\D/g, ""));
 }
+
+/**
+ * Body of a set-logging call for a planned set. "As planned" copies the plan's targets; a strength
+ * set without a planned weight cannot be logged that way (#223, D96), so the reps and a light
+ * weight are sent explicitly, like an athlete entering them in the editor.
+ */
+export function plannedOrEntered(
+  type: string,
+  set: { target_reps: number | null; target_weight_kg?: number | null },
+): { as_planned: true } | { reps: number; weight_kg: number } {
+  if (type === "strength" && set.target_weight_kg == null) return { reps: set.target_reps ?? 8, weight_kg: 20 };
+  return { as_planned: true };
+}

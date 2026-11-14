@@ -165,10 +165,16 @@ def main() -> int:
         if exercise["planned_exercise_id"] is None:
             continue
         for set_no in range(1, len(exercise["sets"]) + 1):
+            # A strength set without a planned weight cannot be logged as planned (D96).
+            target = exercise["sets"][set_no - 1]
+            if exercise["exercise"]["type"] == "strength" and target.get("target_weight_kg") is None:
+                values: dict[str, object] = {"reps": target.get("target_reps") or 8, "weight_kg": 20}
+            else:
+                values = {"as_planned": True}
             status, _ = client.call("POST", f"/sessions/{sid}/sets", {
                 "exercise_id": exercise["exercise"]["id"],
                 "planned_exercise_id": exercise["planned_exercise_id"],
-                "set_no": set_no, "as_planned": True,
+                "set_no": set_no, **values,
             })
             if status not in (200, 201):
                 die(f"logging a set failed (HTTP {status})", 1)

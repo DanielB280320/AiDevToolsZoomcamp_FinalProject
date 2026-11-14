@@ -549,6 +549,9 @@
     "setName": "Set {{number}}",
     "extra": "Extra",
     "noTarget": "No target",
+    "weightNotDefined": "Weight not defined",
+    "plannedValues": "Planned: {{values}}",
+    "progress": "{{logged}} of {{total}} sets logged",
     "skipped": "Skipped",
     "glyph": {
       "skipped": "– "

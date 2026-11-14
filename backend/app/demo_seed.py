@@ -17,6 +17,7 @@ relative to "today". Test data only: the credentials below are public in the REA
 import datetime as dt
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, func, select
@@ -146,6 +147,9 @@ def _onboard(db: Session, user: User, now: dt.datetime, telemetry: Telemetry) ->
     )
 
 
+DEMO_START_WEIGHT_KG = 20.0
+
+
 def _log_session(
     db: Session, user: User, session_id: object, partial: bool, now: dt.datetime
 ) -> list[Suggestion]:
@@ -154,8 +158,18 @@ def _log_session(
     day, _ = training_log.load_day(db, row)
     assert day is not None  # noqa: S101 - demo sessions come from the plan
     for planned in day.exercises:
+        exercise = db.get(Exercise, planned.exercise_id)
+        assert exercise is not None  # noqa: S101 - FK
+        # A strength set without a planned weight cannot be logged as planned (D96): the demo
+        # athlete "enters" a light starting weight instead, like the real calibration week.
+        enter_weight = exercise.type == "strength" and planned.target_weight_kg is None
         for set_no in range(1, planned.sets + 1):
             skip = partial and set_no == planned.sets and planned.sets > 1
+            entered: dict[str, Any] = (
+                {"reps": planned.reps_min, "weight_kg": DEMO_START_WEIGHT_KG}
+                if enter_weight and not skip
+                else {}
+            )
             training_log.log_set(
                 db,
                 user,
@@ -165,7 +179,8 @@ def _log_session(
                     planned_exercise_id=planned.id,
                     set_no=set_no,
                     skipped=skip,
-                    as_planned=not skip,
+                    as_planned=not skip and not entered,
+                    **entered,
                 ),
                 now,
             )

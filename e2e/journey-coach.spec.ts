@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { newContext, onboard, run, signIn, signUp } from "./helpers";
+import { newContext, onboard, plannedOrEntered, run, signIn, signUp } from "./helpers";
 
 /**
  * Journey 4 (#52, spec §10, F16, F15): an athlete requests a coach by the coach's email, the coach
@@ -30,10 +30,10 @@ test("journey 4: link request, coach approves, reads the session chart, leaves a
     expect(dayResponse.status()).toBe(200);
     const session = (await dayResponse.json()).session;
     expect(session, "the plan trains today").not.toBeNull();
-    for (const exercise of session.exercises as { planned_exercise_id: string; exercise: { id: string }; sets: { set_no: number }[] }[]) {
+    for (const exercise of session.exercises as { planned_exercise_id: string; exercise: { id: string; type: string }; sets: { set_no: number; target_reps: number | null; target_weight_kg: number | null }[] }[]) {
       for (const set of exercise.sets) {
         const logged = await api.post(`/api/v1/sessions/${session.id}/sets`, {
-          data: { exercise_id: exercise.exercise.id, planned_exercise_id: exercise.planned_exercise_id, set_no: set.set_no, as_planned: true },
+          data: { exercise_id: exercise.exercise.id, planned_exercise_id: exercise.planned_exercise_id, set_no: set.set_no, ...plannedOrEntered(exercise.exercise.type, set) },
         });
         expect(logged.status(), await logged.text()).toBe(201);
       }

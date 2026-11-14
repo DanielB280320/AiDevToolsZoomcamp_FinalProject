@@ -160,3 +160,44 @@ def test_edit_window(athlete: Api) -> None:
     athlete.login()
     problem(_complete(athlete, sid), 409, "edit_window_closed")
     assert len(_logs(athlete)) == 4
+
+
+def _clear_weight(api: Api, planned: str) -> None:
+    with Session(api.app.state.engine) as db:
+        db.execute(
+            update(PlannedExercise)
+            .where(PlannedExercise.id == uuid.UUID(planned))
+            .values(target_weight_kg=None)
+        )
+        db.commit()
+
+
+def test_a_strength_set_without_a_planned_weight_is_not_logged_as_planned(athlete: Api) -> None:
+    """D96: week-1 calibration plans have no weight; the athlete enters it."""
+    sid, ex, planned, _ = _ids(_session(athlete))
+    _clear_weight(athlete, planned)
+    body = {"exercise_id": ex, "planned_exercise_id": planned, "set_no": 1, "as_planned": True}
+    refused = athlete.client.post(f"{BASE}/sessions/{sid}/sets", json=body)
+    assert "no target to copy" in problem(refused, 422, "invalid_set")["detail"]
+    assert _logs(athlete) == []
+    # Entering reps and weight works.
+    entered = athlete.client.post(
+        f"{BASE}/sessions/{sid}/sets",
+        json={
+            "exercise_id": ex,
+            "planned_exercise_id": planned,
+            "set_no": 1,
+            "reps": 8,
+            "weight_kg": 30,
+        },
+    )
+    assert entered.status_code == 201, entered.text
+
+
+def test_complete_planned_leaves_weightless_strength_sets_unlogged(athlete: Api) -> None:
+    sid, ex, planned, timed = _ids(_session(athlete))
+    _clear_weight(athlete, planned)
+    assert _complete(athlete, sid).status_code == 200
+    logs = _logs(athlete)
+    assert [str(x.exercise_id) for x in logs] == [timed]  # only the timed set was logged
+    assert not any(str(x.exercise_id) == ex for x in logs)

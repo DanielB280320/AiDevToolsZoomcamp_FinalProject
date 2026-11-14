@@ -235,7 +235,7 @@ describe("Pending-suggestion banner", () => {
 
   it("is not shown when none is pending", async () => {
     renderWorkout(null);
-    await screen.findByRole("heading", { name: "Back squat" });
+    await screen.findByRole("heading", { name: /Back squat/ });
     expect(screen.queryByText(/suggestion pending/)).not.toBeInTheDocument();
   });
 });
