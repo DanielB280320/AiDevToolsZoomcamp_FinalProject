@@ -839,6 +839,43 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Plan]
+      operationId: createPlan
+      summary: Create a new named plan
+      description: |
+        Creates a new plan version with a name and a start date and makes it active at once, like
+        an edit or a regeneration does (one active plan, D75); the previous version stays readable
+        in the history. `start_from = empty` (default) has no training days and no meals (source
+        `custom`); `generated` builds the plan from the current profile and targets like
+        `regeneratePlan`, limited by `scope` (source `generated`). `start_date` is a label: it
+        defaults to the athlete's today and may not be in the future (422 `invalid_plan`, field
+        `start_date`); it schedules nothing. `404 not_onboarded` without a plan. Name and start
+        date are carried to every later version of the plan (D105).
+      x-fitwise-access: owner-or-coach
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanRequest'
+      responses:
+        '201':
+          description: New active plan version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
 
   /athletes/{athlete_id}/plan/training:
     parameters:
@@ -3983,7 +4020,7 @@ components:
             - type: 'null'
     Plan:
       type: object
-      required: [id, athlete_id, version, source, active, revision, created_by, created_at, updated_at, training_days, meal_days, warnings]
+      required: [id, athlete_id, version, source, active, revision, name, start_date, created_by, created_at, updated_at, training_days, meal_days, warnings]
       properties:
         id:
           $ref: '#/components/schemas/Id'
@@ -4001,6 +4038,14 @@ components:
           type: integer
           minimum: 0
           description: Optimistic-concurrency counter; send it back with plan updates.
+        name:
+          type: [string, 'null']
+          maxLength: 60
+          description: User text given when the plan was created (D105); null for older plans. Never logged.
+        start_date:
+          type: [string, 'null']
+          format: date
+          description: Label set when the plan was created (D105); null for older plans.
         created_by:
           description: Null once the author (a linked coach) has deleted their account.
           oneOf:
@@ -4058,9 +4103,32 @@ components:
           type: string
           enum: [all, training, meals]
           default: all
+    CreatePlanRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: Trimmed; 1 to 60 characters after trimming.
+        start_date:
+          type: string
+          format: date
+          description: Today or earlier in the athlete's time zone; default the athlete's today.
+        start_from:
+          type: string
+          enum: [empty, generated]
+          default: empty
+        scope:
+          type: string
+          enum: [all, training, meals]
+          default: all
+          description: Used only with `start_from = generated`.
     PlanVersionSummary:
       type: object
-      required: [id, version, source, active, created_by, created_at]
+      required: [id, version, source, active, name, start_date, created_by, created_at]
       properties:
         id:
           $ref: '#/components/schemas/Id'
@@ -4070,6 +4138,12 @@ components:
           $ref: '#/components/schemas/PlanSource'
         active:
           type: boolean
+        name:
+          type: [string, 'null']
+          maxLength: 60
+        start_date:
+          type: [string, 'null']
+          format: date
         created_by:
           description: Null once the author (a linked coach) has deleted their account.
           oneOf:

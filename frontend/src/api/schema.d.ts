@@ -397,7 +397,18 @@ export interface paths {
          */
         get: operations["getActivePlan"];
         put?: never;
-        post?: never;
+        /**
+         * Create a new named plan
+         * @description Creates a new plan version with a name and a start date and makes it active at once, like
+         *     an edit or a regeneration does (one active plan, D75); the previous version stays readable
+         *     in the history. `start_from = empty` (default) has no training days and no meals (source
+         *     `custom`); `generated` builds the plan from the current profile and targets like
+         *     `regeneratePlan`, limited by `scope` (source `generated`). `start_date` is a label: it
+         *     defaults to the athlete's today and may not be in the future (422 `invalid_plan`, field
+         *     `start_date`); it schedules nothing. `404 not_onboarded` without a plan. Name and start
+         *     date are carried to every later version of the plan (D105).
+         */
+        post: operations["createPlan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2037,6 +2048,13 @@ export interface components {
             active: boolean;
             /** @description Optimistic-concurrency counter; send it back with plan updates. */
             revision: number;
+            /** @description User text given when the plan was created (D105); null for older plans. Never logged. */
+            name: string | null;
+            /**
+             * Format: date
+             * @description Label set when the plan was created (D105); null for older plans.
+             */
+            start_date: string | null;
             /** @description Null once the author (a linked coach) has deleted their account. */
             created_by: components["schemas"]["UserRef"] | null;
             created_at: components["schemas"]["Timestamp"];
@@ -2061,11 +2079,34 @@ export interface components {
              */
             scope: "all" | "training" | "meals";
         };
+        CreatePlanRequest: {
+            /** @description Trimmed; 1 to 60 characters after trimming. */
+            name: string;
+            /**
+             * Format: date
+             * @description Today or earlier in the athlete's time zone; default the athlete's today.
+             */
+            start_date?: string;
+            /**
+             * @default empty
+             * @enum {string}
+             */
+            start_from: "empty" | "generated";
+            /**
+             * @description Used only with `start_from = generated`.
+             * @default all
+             * @enum {string}
+             */
+            scope: "all" | "training" | "meals";
+        };
         PlanVersionSummary: {
             id: components["schemas"]["Id"];
             version: number;
             source: components["schemas"]["PlanSource"];
             active: boolean;
+            name: string | null;
+            /** Format: date */
+            start_date: string | null;
             /** @description Null once the author (a linked coach) has deleted their account. */
             created_by: components["schemas"]["UserRef"] | null;
             created_at: components["schemas"]["Timestamp"];
@@ -3563,6 +3604,38 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    createPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description New active plan version. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plan"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     updateTrainingPlan: {

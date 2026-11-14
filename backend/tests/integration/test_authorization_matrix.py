@@ -366,6 +366,9 @@ BUILDERS: dict[str, Builder] = {
         json={"date": "2026-10-20", "weight_kg": 72.0}
     ),
     "GET /athletes/{athlete_id}/plan": lambda w: Request(),
+    "POST /athletes/{athlete_id}/plan": lambda w: Request(
+        json={"name": "Matrix", "start_from": "generated", "scope": "training"}
+    ),
     "PUT /athletes/{athlete_id}/plan/training": lambda w: Request(json=_training_body(plan(w))),
     "PUT /athletes/{athlete_id}/plan/meals": lambda w: Request(json=_meals_body(plan(w))),
     "GET /athletes/{athlete_id}/plan/meals/{meal_key}/swaps": lambda w: Request(

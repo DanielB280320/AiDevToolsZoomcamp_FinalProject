@@ -88,13 +88,15 @@ export function CoachClientBodyPage() {
   );
 }
 
+const COACH = "coach";
+
 export function CoachClientPlanPage() {
   const { t } = useTranslation();
   const scope = useClientScope();
   return (
     <article>
       <Heading>{t("plan.title")}</Heading>
-      <PlanEditor me={{ id: scope.athleteId, units: scope.units, timezone: scope.timezone }} />
+      <PlanEditor viewer={COACH} me={{ id: scope.athleteId, units: scope.units, timezone: scope.timezone }} />
     </article>
   );
 }

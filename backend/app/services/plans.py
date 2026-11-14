@@ -38,6 +38,13 @@ WARM_UP_MINUTES = 5  # D54: estimated session duration includes a 5 minute warm-
 CALIBRATION_HINT = "Choose a weight you can do for the target reps with 2 reps left"  # F5.4
 
 
+class _Carry:
+    """Sentinel: keep the previous version's value (D105)."""
+
+
+CARRY: Any = _Carry()
+
+
 @dataclass(frozen=True)
 class NewPlannedExercise:
     exercise_id: uuid.UUID
@@ -91,6 +98,8 @@ def create_plan_version(
     revision: int = 0,
     change: dict[str, Any] | None = None,
     change_at: dt.datetime | None = None,
+    name: str | _Carry | None = CARRY,
+    start_date: dt.date | _Carry | None = CARRY,
 ) -> Plan:
     """Store `days` as the athlete's next plan version and make it the active one.
 
@@ -104,12 +113,18 @@ def create_plan_version(
     the new version (editors pass the previous one plus one so a stale client is detected, D75);
     `change` is the `PlanChange` summary (default: version created) recorded at `change_at`
     (default `now`; a suggestion accept keeps the plan's `created_at` but records the decision).
+    `name` and `start_date` (D105) are carried forward from the previous active version unless
+    given (`createPlan` gives them; `None` clears).
     """
     session.execute(select(User.id).where(User.id == athlete_id).with_for_update()).one()
+    previous = session.scalar(
+        select(Plan).where(Plan.athlete_id == athlete_id, Plan.active.is_(True))
+    )
+    if not isinstance(name, str) and name is CARRY:
+        name = previous.name if previous else None
+    if not isinstance(start_date, dt.date) and start_date is CARRY:
+        start_date = previous.start_date if previous else None
     if meal_days is None:
-        previous = session.scalar(
-            select(Plan).where(Plan.athlete_id == athlete_id, Plan.active.is_(True))
-        )
         meal_days = (
             []
             if previous is None
@@ -141,6 +156,8 @@ def create_plan_version(
         created_by=author_id,
         created_at=now,
         updated_at=now,
+        name=name,
+        start_date=start_date,
     )
     for day_order, day in enumerate(days):
         training_day = TrainingDay(
@@ -259,6 +276,8 @@ def plan_view(session: Session, plan: Plan, warnings: Sequence[str] = ()) -> out
             "source": plan.source,
             "active": plan.active,
             "revision": plan.revision,
+            "name": plan.name,
+            "start_date": plan.start_date,
             "created_by": user_ref(users[plan.created_by]) if plan.created_by else None,
             "created_at": plan.created_at,
             "updated_at": plan.updated_at,

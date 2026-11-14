@@ -14,6 +14,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -58,6 +59,10 @@ class Plan(Base):
     )
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    # D105: user-given name and start date (a label: it does not schedule anything). Null for
+    # plans created before D105; every later version of a plan carries both forward.
+    name: Mapped[str | None] = mapped_column(String(60))
+    start_date: Mapped[dt.date | None] = mapped_column(Date)
 
     training_days: Mapped[list["TrainingDay"]] = relationship(
         back_populates="plan", cascade="all, delete-orphan", order_by="TrainingDay.position"

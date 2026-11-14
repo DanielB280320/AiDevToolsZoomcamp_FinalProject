@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
@@ -30,6 +30,8 @@ function planFixture(over: Partial<Schemas["Plan"]> = {}): Schemas["Plan"] {
     source: "generated",
     active: true,
     revision: 4,
+    name: null,
+    start_date: null,
     created_by: ATHLETE_REF,
     created_at: "2026-10-20T08:00:00Z",
     updated_at: "2026-10-20T08:00:00Z",
@@ -79,9 +81,21 @@ const meal = (id: string, name: string, slot: Schemas["MealSlot"] = "lunch"): Sc
 });
 
 /** A fake plan API that records requests; `put` can return a problem instead of a plan. */
-function fakePlan(options: { plan?: Schemas["Plan"]; put?: () => Response | undefined; versions?: Schemas["PlanVersionSummary"][] } = {}) {
+function fakePlan(
+  options: {
+    plan?: Schemas["Plan"];
+    put?: () => Response | undefined;
+    post?: () => Response | undefined;
+    versions?: Schemas["PlanVersionSummary"][];
+  } = {},
+) {
   let current = options.plan ?? planFixture();
-  const calls = { gets: 0, training: [] as Schemas["TrainingPlanUpdate"][], meals: [] as Schemas["MealPlanUpdate"][], regenerate: [] as unknown[] };
+  const calls = {
+    gets: 0,
+    training: [] as Schemas["TrainingPlanUpdate"][],
+    meals: [] as Schemas["MealPlanUpdate"][],
+    create: [] as Schemas["CreatePlanRequest"][],
+  };
   server.use(
     meOk(),
     http.get(apiUrl("/athletes/:athleteId/plan"), () => {
@@ -104,12 +118,27 @@ function fakePlan(options: { plan?: Schemas["Plan"]; put?: () => Response | unde
       current = { ...current, revision: current.revision + 1, version: current.version + 1, source: "custom" };
       return HttpResponse.json(current);
     }),
-    http.post(apiUrl("/athletes/:athleteId/plan/regenerate"), async ({ request }) => {
-      calls.regenerate.push(await request.json());
-      current = { ...current, revision: current.revision + 1, version: current.version + 1, source: "generated" };
+    http.post(apiUrl("/athletes/:athleteId/plan"), async ({ request }) => {
+      const body = (await request.json()) as Schemas["CreatePlanRequest"];
+      calls.create.push(body);
+      const failure = options.post?.();
+      if (failure) return failure;
+      current = {
+        ...current,
+        revision: current.revision + 1,
+        version: current.version + 1,
+        source: body.start_from === "generated" ? "generated" : "custom",
+        name: body.name,
+        start_date: body.start_date ?? null,
+        ...(body.start_from === "generated"
+          ? {}
+          : { training_days: [], meal_days: [] }),
+      };
       return HttpResponse.json(current, { status: 201 });
     }),
-    http.get(apiUrl("/athletes/:athleteId/plan/versions"), () => HttpResponse.json({ items: options.versions ?? [] })),
+    http.get(apiUrl("/athletes/:athleteId/plan/versions"), () =>
+      HttpResponse.json({ items: options.versions ?? [] }),
+    ),
     http.get(apiUrl("/exercises"), ({ request }) => {
       const q = new URL(request.url).searchParams.get("q")?.toLowerCase() ?? "";
       const all = [BENCH, PLANK, { id: "ex-squat", name: "Squat", type: "strength" as const, equipment: "barbell" as const, muscle_group: "legs" as const }];
@@ -128,10 +157,18 @@ function fakePlan(options: { plan?: Schemas["Plan"]; put?: () => Response | unde
   };
 }
 
+/** Days are collapsed by default (D105): open the one whose heading matches. */
+async function openDay(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
+  const heading = await screen.findByRole("heading", { name });
+  const toggle = within(heading).getByRole("button");
+  if (toggle.getAttribute("aria-expanded") === "false")
+    await user.click(toggle);
+}
+
 async function openPlan(user = userEvent.setup()) {
   renderApp("/plan");
   await screen.findByRole("heading", { name: "Plan", level: 1 });
-  await screen.findByRole("heading", { name: "Mon: Push" });
+  await openDay(user, /^Mon: Push/);
   return user;
 }
 
@@ -186,8 +223,12 @@ describe("Plan editor: training", () => {
     await user.click(await screen.findByRole("button", { name: "Add Squat" }));
     // Add a second day.
     await user.click(screen.getByRole("button", { name: "Add training day" }));
-    expect(screen.getByRole("heading", { name: "Tue: New day" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Remove Bench press" }));
+    expect(
+      screen.getByRole("heading", { name: /^Tue: New day(?: .*)?$/ }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Remove Bench press" }),
+    );
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(calls.training).toHaveLength(1));
@@ -273,7 +314,7 @@ describe("Plan editor: meals", () => {
   async function openMeals() {
     const user = await openPlan();
     await user.click(screen.getByRole("tab", { name: "Meals" }));
-    await screen.findByRole("heading", { name: "Monday", level: 3 });
+    await openDay(user, /^Monday/);
     return user;
   }
   const saveMeals = (user: ReturnType<typeof userEvent.setup>) =>
@@ -416,8 +457,14 @@ describe("Plan editor: concurrent edits", () => {
     setCurrent(planFixture({ revision: 7, training_days: [{ ...planFixture().training_days[0]!, name: "Pull" }] }));
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     await screen.findByText("The plan changed");
-    await user.click(screen.getByRole("button", { name: "Reload the latest plan and drop my draft" }));
-    expect(await screen.findByRole("heading", { name: "Mon: Pull" })).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Reload the latest plan and drop my draft",
+      }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: /^Mon: Pull(?: .*)?$/ }),
+    ).toBeInTheDocument();
     expect(screen.getAllByLabelText("Sets")[0]).toHaveValue("3");
   });
 });
@@ -433,11 +480,19 @@ describe("Plan editor: edited-by label", () => {
       },
     });
     const user = await openPlan();
-    const training = screen.getByRole("heading", { name: "Mon: Push" }).closest("li")!;
-    expect(within(training).getByText("Edited by Coach Carla")).toBeInTheDocument();
+    const training = screen
+      .getByRole("heading", { name: /^Mon: Push(?: .*)?$/ })
+      .closest("li")!;
+    expect(
+      within(training).getByText("Edited by Coach Carla"),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Meals" }));
-    const meals = (await screen.findByRole("heading", { name: "Monday", level: 3 })).closest("li")!;
-    expect(within(meals).getByText("Edited by Coach Carla")).toBeInTheDocument();
+    const meals = (
+      await screen.findByRole("heading", { name: /^Monday(?: .*)?$/, level: 3 })
+    ).closest("li")!;
+    expect(
+      within(meals).getByText("Edited by Coach Carla"),
+    ).toBeInTheDocument();
   });
 
   it("shows no label when nobody edited the day", async () => {
@@ -447,32 +502,369 @@ describe("Plan editor: edited-by label", () => {
   });
 });
 
-describe("Plan editor: regenerate", () => {
-  it("asks first, explains the consequences and calls the API only on confirm", async () => {
+const TODAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: ATHLETE.timezone,
+}).format(new Date());
+const shiftDay = (iso: string, days: number) =>
+  new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
+describe("Plan editor: new plan (D105)", () => {
+  const open = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole("button", { name: "New plan" }));
+    return screen.getByRole("form", { name: "New plan" });
+  };
+
+  it("replaces Regenerate: an empty plan by default, today as the start date, with the consequences", async () => {
     const { calls } = fakePlan();
     const user = await openPlan();
-    await user.click(screen.getByRole("button", { name: "Regenerate plan" }));
-    const dialog = screen.getByRole("alertdialog", { name: "Regenerate your plan?" });
-    expect(dialog).toHaveTextContent("Previous versions stay readable");
-    expect(dialog).toHaveTextContent("extra meals");
-    expect(calls.regenerate).toHaveLength(0);
+    expect(
+      screen.queryByRole("button", { name: "Regenerate plan" }),
+    ).not.toBeInTheDocument();
+    const form = await open(user);
+    expect(within(form).getByLabelText("Start date")).toHaveValue(TODAY);
+    expect(within(form).getByLabelText("Start date")).toHaveAttribute(
+      "max",
+      TODAY,
+    );
+    expect(
+      within(form).getByRole("radio", { name: /Empty plan/ }),
+    ).toBeChecked();
+    expect(
+      within(form).queryByLabelText("What to generate"),
+    ).not.toBeInTheDocument();
+    expect(form).toHaveTextContent("replaces the current plan from today");
+    expect(form).toHaveTextContent("stays in History");
+    expect(
+      within(form).queryByText(/unsaved changes will be lost/),
+    ).not.toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(calls.regenerate).toHaveLength(0);
+    await user.type(within(form).getByLabelText("Plan name"), "  Summer cut ");
+    await user.click(within(form).getByRole("button", { name: "Create plan" }));
+    expect(
+      await screen.findByText("New plan created: Summer cut."),
+    ).toBeInTheDocument();
+    expect(calls.create).toEqual([
+      {
+        name: "Summer cut",
+        start_date: TODAY,
+        start_from: "empty",
+        scope: "all",
+      },
+    ]);
+    // The editor reloads with the new plan: the summary shows its name, and the days are gone.
+    expect(
+      within(screen.getByTestId("plan-summary")).getByText("Summer cut"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("No training days yet."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("form", { name: "New plan" }),
+    ).not.toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: "Regenerate plan" }));
-    await user.click(screen.getByRole("button", { name: "Yes, regenerate" }));
-    expect(await screen.findByText("Plan regenerated.")).toBeInTheDocument();
-    expect(calls.regenerate).toEqual([{ scope: "all" }]);
+  it("generates from the profile with the chosen scope and a past start date", async () => {
+    const { calls } = fakePlan();
+    const user = await openPlan();
+    const form = await open(user);
+    await user.type(within(form).getByLabelText("Plan name"), "Base");
+    fireEvent.change(within(form).getByLabelText("Start date"), {
+      target: { value: "2026-09-01" },
+    });
+    await user.click(
+      within(form).getByRole("radio", { name: /Generated from my profile/ }),
+    );
+    await user.selectOptions(
+      within(form).getByLabelText("What to generate"),
+      "Training only",
+    );
+    await user.click(within(form).getByRole("button", { name: "Create plan" }));
+    expect(
+      await screen.findByText("New plan created: Base."),
+    ).toBeInTheDocument();
+    expect(calls.create).toEqual([
+      {
+        name: "Base",
+        start_date: "2026-09-01",
+        start_from: "generated",
+        scope: "training",
+      },
+    ]);
+  });
+
+  it("validates the name and the start date before calling the API, and warns about unsaved edits", async () => {
+    const { calls } = fakePlan();
+    const user = await openPlan();
+    await user.clear(screen.getAllByLabelText("Sets")[0]!);
+    await user.type(screen.getAllByLabelText("Sets")[0]!, "5");
+    const form = await open(user);
+    expect(form).toHaveTextContent("Your unsaved changes will be lost.");
+    await user.click(within(form).getByRole("button", { name: "Create plan" }));
+    const name = within(form).getByLabelText("Plan name");
+    expect(name).toBeInvalid();
+    expect(
+      within(form).getByText("Enter a name for the plan."),
+    ).toHaveAttribute("id", `${name.id}-error`);
+    await user.type(name, "x".repeat(61));
+    fireEvent.change(within(form).getByLabelText("Start date"), {
+      target: { value: shiftDay(TODAY, 1) },
+    });
+    await user.click(within(form).getByRole("button", { name: "Create plan" }));
+    expect(
+      within(form).getByText("Use at most 60 characters."),
+    ).toBeInTheDocument();
+    expect(
+      within(form).getByText("The start date can't be in the future."),
+    ).toBeInTheDocument();
+    expect(calls.create).toHaveLength(0);
+  });
+
+  it("shows a field error from the API on its field and keeps the form", async () => {
+    fakePlan({
+      post: () =>
+        problem(422, "invalid_plan", {
+          detail: "Some plan fields are invalid.",
+          errors: [
+            {
+              field: "start_date",
+              code: "in_the_future",
+              message: "The start date cannot be in the future.",
+            },
+          ],
+        }),
+    });
+    const user = await openPlan();
+    const form = await open(user);
+    await user.type(within(form).getByLabelText("Plan name"), "Later");
+    await user.click(within(form).getByRole("button", { name: "Create plan" }));
+    const message = await within(form).findByText(
+      "The start date cannot be in the future.",
+    );
+    expect(within(form).getByLabelText("Start date")).toHaveAttribute(
+      "aria-describedby",
+      expect.stringContaining(message.id),
+    );
+    expect(within(form).getByLabelText("Plan name")).toHaveValue("Later");
+  });
+});
+
+describe("Plan editor: collapsible days (D105)", () => {
+  it("starts collapsed, opens and closes with aria-expanded, and keeps the draft while collapsed", async () => {
+    fakePlan();
+    const user = userEvent.setup();
+    renderApp("/plan");
+    const heading = await screen.findByRole("heading", { name: /^Mon: Push/ });
+    expect(heading).toHaveTextContent("2 exercises");
+    const toggle = within(heading).getByRole("button");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      document.getElementById(toggle.getAttribute("aria-controls")!),
+    ).toHaveAttribute("hidden");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await user.clear(screen.getAllByLabelText("Sets")[0]!);
+    await user.type(screen.getAllByLabelText("Sets")[0]!, "6");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(screen.getAllByLabelText("Sets")[0]).toHaveValue("6");
+  });
+
+  it("opens a new day, and a day with an error when saving", async () => {
+    fakePlan();
+    const user = await openPlan();
+    await user.click(screen.getByRole("button", { name: "Add training day" }));
+    const added = screen.getByRole("heading", { name: /^Tue: New day/ });
+    expect(added).toHaveTextContent("no exercises");
+    expect(within(added).getByRole("button")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    // An unreadable value in a collapsed day opens it on save.
+    await user.clear(screen.getAllByLabelText("Sets")[0]!);
+    await user.type(screen.getAllByLabelText("Sets")[0]!, "x");
+    const monday = within(
+      screen.getByRole("heading", { name: /^Mon: Push/ }),
+    ).getByRole("button");
+    await user.click(monday);
+    expect(monday).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(monday).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getAllByText("Sets must be a whole number from 1 to 10.").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("opens a meal day that the server reports an error for", async () => {
+    fakePlan({
+      put: () =>
+        problem(422, "invalid_plan", {
+          detail: "x",
+          errors: [
+            {
+              field: "meal_days[0].meals[0].portion_factor",
+              code: "out_of_range",
+              message: "Portion is out of range.",
+            },
+          ],
+        }),
+    });
+    const user = userEvent.setup();
+    renderApp("/plan");
+    await screen.findByRole("heading", { name: /^Mon: Push/ });
+    await user.click(screen.getByRole("tab", { name: "Meals" }));
+    const monday = within(
+      await screen.findByRole("heading", { name: /^Monday/ }),
+    ).getByRole("button");
+    expect(monday).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("heading", { name: /^Monday/ })).toHaveTextContent(
+      "2 meals",
+    );
+    await user.click(monday);
+    await user.clear(screen.getAllByLabelText("Portion")[0]!);
+    await user.type(screen.getAllByLabelText("Portion")[0]!, "2");
+    await user.click(monday);
+    await user.click(
+      within(screen.getByRole("region", { name: "Meals" })).getByRole(
+        "button",
+        { name: "Save changes" },
+      ),
+    );
+    expect(
+      await screen.findByText("Portion is out of range."),
+    ).toBeInTheDocument();
+    expect(monday).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
+describe("Plan editor: summary and descriptions (D105)", () => {
+  it("describes the tab, summarises the current plan and describes each sub-tab", async () => {
+    fakePlan({
+      plan: planFixture({
+        name: "Summer cut",
+        start_date: shiftDay(TODAY, -8),
+      }),
+    });
+    const user = await openPlan();
+    expect(screen.getByTestId("plan-description")).toHaveTextContent(
+      "Your training and meal plan",
+    );
+    const summary = within(screen.getByTestId("plan-summary"));
+    expect(
+      summary.getByRole("heading", { name: "Current plan" }),
+    ).toBeInTheDocument();
+    expect(summary.getByText("Summer cut")).toBeInTheDocument();
+    expect(summary.getByText(/\(week 2\)$/)).toBeInTheDocument();
+    expect(summary.getByText("3, Generated")).toBeInTheDocument();
+    expect(summary.getByText("2 meals in 1 days")).toBeInTheDocument();
+    expect(
+      summary.getByText(/Review that the training days fit your week/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Add the days you train/)).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Meals" }));
+    expect(
+      screen.getByText(/For each day add meals or replace them/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "History" }));
+    expect(screen.getByText(/versions are read-only/)).toBeInTheDocument();
+  });
+
+  it("falls back to the version when the plan has no name and omits the start date", async () => {
+    fakePlan();
+    await openPlan();
+    const summary = within(screen.getByTestId("plan-summary"));
+    expect(summary.getByText("Plan, version 3")).toBeInTheDocument();
+    expect(summary.queryByText("Started")).not.toBeInTheDocument();
+  });
+});
+
+describe("Plan editor: progression methods (D105)", () => {
+  it("lists the three methods, increment and deload, collapsed under the tab description", async () => {
+    fakePlan();
+    const user = await openPlan();
+    const toggle = screen.getByRole("button", { name: /Progression methods/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    const content = document.getElementById(
+      toggle.getAttribute("aria-controls")!,
+    )!;
+    expect(content).not.toHaveAttribute("hidden");
+    expect(
+      within(content).getByText(
+        /^Linear progression: one fixed number of reps/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(content).getByText(/^Double progression: a range of reps/),
+    ).toBeInTheDocument();
+    expect(
+      within(content).getByText(/^Manual: FitWise makes no suggestions/),
+    ).toBeInTheDocument();
+    expect(within(content).getByText(/^Increment:/)).toBeInTheDocument();
+    expect(
+      within(content).getByText(
+        /^Allow deload weeks: after 3 finished sessions in a row/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the meaning of the selected method under the select and follows the selection", async () => {
+    fakePlan();
+    const user = await openPlan();
+    const rule = screen.getAllByLabelText("Progression")[0]!; // bench: double
+    const hint = () =>
+      document.getElementById(
+        rule.getAttribute("aria-describedby")!.split(" ")[0]!,
+      )!;
+    expect(hint()).toHaveTextContent(
+      /^Double: add reps until every set reaches the top/,
+    );
+    await user.selectOptions(rule, "Manual");
+    expect(hint()).toHaveTextContent(
+      "Manual: no suggestions; you change the targets yourself.",
+    );
+    await user.selectOptions(rule, "Linear");
+    expect(hint()).toHaveTextContent(
+      /^Linear: hit the fixed reps on every set/,
+    );
   });
 });
 
 describe("Plan editor: version history", () => {
   const versions: Schemas["PlanVersionSummary"][] = [
-    { id: "plan-3", version: 3, source: "custom", active: true, created_by: COACH_REF, created_at: "2026-10-25T10:30:00Z" },
-    { id: "plan-2", version: 2, source: "generated", active: false, created_by: ATHLETE_REF, created_at: "2026-10-20T08:00:00Z" },
+    {
+      id: "plan-3",
+      version: 3,
+      source: "custom",
+      active: true,
+      name: null,
+      start_date: null,
+      created_by: COACH_REF,
+      created_at: "2026-10-25T10:30:00Z",
+    },
+    {
+      id: "plan-2",
+      version: 2,
+      source: "generated",
+      active: false,
+      name: null,
+      start_date: null,
+      created_by: ATHLETE_REF,
+      created_at: "2026-10-20T08:00:00Z",
+    },
   ];
+
+  it("lists the name of a version that has one", async () => {
+    fakePlan({ versions: [{ ...versions[0]!, name: "Summer cut" }, versions[1]!] });
+    const user = await openPlan();
+    await user.click(screen.getByRole("tab", { name: "History" }));
+    const items = await screen.findAllByRole("listitem");
+    expect(items.find((li) => li.textContent?.includes("Version 3"))).toHaveTextContent("Summer cut");
+    expect(items.find((li) => li.textContent?.includes("Version 2"))).not.toHaveTextContent("Name");
+  });
 
   it("lists versions with date, source and author role and opens one read-only", async () => {
     fakePlan({ versions });
@@ -539,7 +931,7 @@ describe("Plan editor: duplicate a day (D87)", () => {
   async function openMeals() {
     const user = await openPlan();
     await user.click(screen.getByRole("tab", { name: "Meals" }));
-    await screen.findByRole("heading", { name: "Monday", level: 3 });
+    await openDay(user, /^Monday/);
     return user;
   }
 
@@ -550,7 +942,9 @@ describe("Plan editor: duplicate a day (D87)", () => {
     await user.selectOptions(training().getByLabelText("Copy to"), "thu");
     await user.click(training().getByRole("button", { name: "Copy" }));
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Thu: Push" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /^Thu: Push(?: .*)?$/ }),
+    ).toBeInTheDocument();
     await user.click(training().getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(calls.training).toHaveLength(1));
     const [mon, thu] = calls.training[0]!.training_days;
@@ -575,16 +969,26 @@ describe("Plan editor: duplicate a day (D87)", () => {
     const dialog = screen.getByRole("alertdialog", { name: "Replace Thursday?" });
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Thu: Legs" })).toBeInTheDocument();
-    expect(training().getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(
+      screen.getByRole("heading", { name: /^Thu: Legs(?: .*)?$/ }),
+    ).toBeInTheDocument();
+    expect(
+      training().getByRole("button", { name: "Save changes" }),
+    ).toBeDisabled();
     expect(calls.training).toHaveLength(0);
 
     await user.click(training().getByRole("button", { name: "Duplicate Monday" }));
     await user.selectOptions(training().getByLabelText("Copy to"), "thu");
     await user.click(training().getByRole("button", { name: "Copy" }));
-    await user.click(screen.getByRole("button", { name: "Yes, replace Thursday" }));
-    expect(await screen.findByRole("heading", { name: "Thu: Push" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Thu: Legs" })).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Yes, replace Thursday" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: /^Thu: Push(?: .*)?$/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /^Thu: Legs(?: .*)?$/ }),
+    ).not.toBeInTheDocument();
     await user.click(training().getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(calls.training).toHaveLength(1));
     const days = calls.training[0]!.training_days;
@@ -646,7 +1050,7 @@ describe("Plan editor: swap a meal (D86)", () => {
   async function openMeals() {
     const user = await openPlan();
     await user.click(screen.getByRole("tab", { name: "Meals" }));
-    await screen.findByRole("heading", { name: "Monday", level: 3 });
+    await openDay(user, /^Monday/);
     return user;
   }
   function swaps(list: Schemas["MealSwapList"]) {

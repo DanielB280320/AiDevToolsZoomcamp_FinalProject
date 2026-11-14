@@ -46,6 +46,12 @@ export function VersionHistory({ athleteId, units, timezone }: { athleteId: stri
               {v.active && <span className="ml-2 text-step--1 font-semibold text-spruce-dark">{t("plan.history.active")}</span>}
             </p>
             <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 text-step--1">
+              {v.name && (
+                <>
+                  <dt className="font-semibold">{t("plan.history.name")}</dt>
+                  <dd className="break-words">{v.name}</dd>
+                </>
+              )}
               <dt className="font-semibold">{t("plan.history.date")}</dt>
               <dd>{date(v.created_at)}</dd>
               <dt className="font-semibold">{t("plan.history.source")}</dt>

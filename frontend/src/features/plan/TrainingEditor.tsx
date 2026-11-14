@@ -5,8 +5,16 @@ import { isApiError } from "../../api/errors";
 import { useExerciseSearch, type Exercise } from "../../api/onboarding";
 import { type Plan, type ProgressionRule, useSaveTraining, WEEKDAYS, type Weekday } from "../../api/plan";
 import { type UnitSystem, weightUnit } from "../../lib/units";
-import { BUTTON, FieldError, ICON_BUTTON, SelectInput, TextInput } from "./fields";
+import {
+  BUTTON,
+  FieldError,
+  ICON_BUTTON,
+  SelectInput,
+  TextInput,
+} from "./fields";
+import { DayRow } from "./DayRow";
 import { DuplicateDay } from "./DuplicateDay";
+import { ProgressionHelp } from "./ProgressionHelp";
 import { SaveBar } from "./SaveBar";
 import {
   buildTrainingUpdate,
@@ -141,6 +149,7 @@ function ExerciseCard({
           onChange={(rule) => onChange({ rule: rule as ProgressionRule })}
           options={RULES.map((rule) => ({ value: rule, label: t(`plan.training.rules.${rule}`) }))}
           error={error(at(FIELD.rule))}
+          hint={t(`plan.progression.hint.${exercise.rule}`)}
         />
         <TextInput id={id("increment")} label={t("plan.training.increment", { unit: kg })} value={exercise.increment} inputMode="decimal" onChange={(increment) => onChange({ increment })} error={error(at(FIELD.increment))} />
       </div>
@@ -163,6 +172,8 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
   const [days, setDays] = useState<DraftDay[]>(start.draft);
   const [local, setLocal] = useState<Record<string, LocalError>>({});
   const [server, setServer] = useState<Record<string, string>>({});
+  // Days are collapsed by default; a day opens when it is added or when it has an error (D105).
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const save = useSaveTraining(athleteId);
   const dirty = JSON.stringify(days) !== initial;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
@@ -173,7 +184,18 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
     setLocal({});
     setServer({});
   };
-  const patchDay = (d: number, patch: Partial<DraftDay>) => edit(days.map((day, i) => (i === d ? { ...day, ...patch } : day)));
+  const openDays = (uids: string[]) =>
+    setOpen((was) => new Set([...was, ...uids]));
+  const openWithErrors = (errors: Record<string, unknown>) =>
+    openDays(
+      days
+        .filter((_, d) =>
+          Object.keys(errors).some((path) => path.startsWith(`${dayPath(d)}`)),
+        )
+        .map((day) => day.uid),
+    );
+  const patchDay = (d: number, patch: Partial<DraftDay>) =>
+    edit(days.map((day, i) => (i === d ? { ...day, ...patch } : day)));
   const patchExercise = (d: number, x: number, patch: Partial<DraftExercise>) =>
     patchDay(d, { exercises: days[d]!.exercises.map((e, i) => (i === x ? { ...e, ...patch } : e)) });
 
@@ -181,6 +203,7 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
     const built = buildTrainingUpdate(days, conflict ? plan.revision : baseRevision, units);
     if (!built.body) {
       setLocal(built.errors);
+      openWithErrors(built.errors);
       return;
     }
     save.mutate(built.body, {
@@ -189,7 +212,13 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
       },
       onError: (failure) => {
         if (isApiError(failure) && failure.status === 409) onConflict();
-        else if (isApiError(failure) && failure.problem.code === "invalid_plan") setServer(failure.problem.fieldErrors);
+        else if (
+          isApiError(failure) &&
+          failure.problem.code === "invalid_plan"
+        ) {
+          setServer(failure.problem.fieldErrors);
+          openWithErrors(failure.problem.fieldErrors);
+        }
       },
     });
   };
@@ -200,18 +229,48 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
 
   return (
     <section aria-label={t("plan.tabs.training")}>
-      {days.length === 0 && <p className="text-slate">{t("plan.training.empty")}</p>}
+      <ProgressionHelp />
+      {days.length === 0 && (
+        <p className="text-slate">{t("plan.training.empty")}</p>
+      )}
       <ul className="flex flex-col gap-6">
         {days.map((day, d) => {
           const heading = `day-${day.uid}`;
           return (
-            <li key={day.uid} aria-labelledby={`${heading}-title`} className="border-l-4 border-plate pl-3">
-              <div className="flex items-start justify-between gap-2">
-                <h3 id={`${heading}-title`} className="font-display text-step-2 font-bold">
-                  {t("plan.training.dayTitle", { weekday: t(`plan.weekday.${day.weekday}`), name: day.name })}
-                </h3>
-                <div className="flex shrink-0 gap-1">
-                  <button type="button" className={ICON_BUTTON} disabled={d === 0} onClick={() => edit(move(days, d, -1))} aria-label={t("plan.training.moveDayUp", { name: day.name })}>
+            <DayRow
+              key={day.uid}
+              id={heading}
+              open={open.has(day.uid)}
+              onToggle={() =>
+                setOpen(
+                  (was) =>
+                    new Set(
+                      was.has(day.uid)
+                        ? [...was].filter((u) => u !== day.uid)
+                        : [...was, day.uid],
+                    ),
+                )
+              }
+              title={t("plan.training.dayTitle", {
+                weekday: t(`plan.weekday.${day.weekday}`),
+                name: day.name,
+              })}
+              summary={
+                day.exercises.length === 0
+                  ? t("plan.days.noExercises")
+                  : t("plan.days.exercises", { count: day.exercises.length })
+              }
+              actions={
+                <>
+                  <button
+                    type="button"
+                    className={ICON_BUTTON}
+                    disabled={d === 0}
+                    onClick={() => edit(move(days, d, -1))}
+                    aria-label={t("plan.training.moveDayUp", {
+                      name: day.name,
+                    })}
+                  >
                     <span aria-hidden="true">↑</span>
                   </button>
                   <button type="button" className={ICON_BUTTON} disabled={d === days.length - 1} onClick={() => edit(move(days, d, 1))} aria-label={t("plan.training.moveDayDown", { name: day.name })}>
@@ -220,9 +279,16 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
                   <button type="button" className={ICON_BUTTON} onClick={() => edit(days.filter((_, i) => i !== d))} aria-label={t("plan.training.removeDay", { name: day.name })}>
                     <span aria-hidden="true">×</span>
                   </button>
-                </div>
-              </div>
-              {day.editedBy && <p className="text-step--1 font-semibold text-slate">{t("plan.editedBy", { name: day.editedBy })}</p>}
+                </>
+              }
+              note={
+                day.editedBy ? (
+                  <p className="text-step--1 font-semibold text-slate">
+                    {t("plan.editedBy", { name: day.editedBy })}
+                  </p>
+                ) : null
+              }
+            >
               <div className="mt-2 grid grid-cols-2 gap-3">
                 <SelectInput
                   id={`${heading}-weekday`}
@@ -251,9 +317,24 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
                   />
                 ))}
               </ul>
-              <DuplicateDay idPrefix={heading} from={day.weekday} hasContent={(w) => days.some((x) => x.weekday === w)} onCopy={(w) => edit(duplicateTrainingDay(days, day.uid, w))} />
-              <ExercisePicker units={units} onPick={(e) => patchDay(d, { exercises: [...day.exercises, e] })} />
-            </li>
+              <DuplicateDay
+                idPrefix={heading}
+                from={day.weekday}
+                hasContent={(w) => days.some((x) => x.weekday === w)}
+                onCopy={(w) => {
+                  const next = duplicateTrainingDay(days, day.uid, w);
+                  edit(next);
+                  const target = next.find((x) => x.weekday === w);
+                  if (target) openDays([target.uid]);
+                }}
+              />
+              <ExercisePicker
+                units={units}
+                onPick={(e) =>
+                  patchDay(d, { exercises: [...day.exercises, e] })
+                }
+              />
+            </DayRow>
           );
         })}
       </ul>
@@ -261,7 +342,11 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
         type="button"
         className={`${BUTTON} mt-6`}
         disabled={free.length === 0}
-        onClick={() => edit([...days, newDraftDay(free[0]!, t("plan.training.newDayName"))])}
+        onClick={() => {
+          const added = newDraftDay(free[0]!, t("plan.training.newDayName"));
+          edit([...days, added]);
+          openDays([added.uid]);
+        }}
       >
         {t("plan.training.addDay")}
       </button>

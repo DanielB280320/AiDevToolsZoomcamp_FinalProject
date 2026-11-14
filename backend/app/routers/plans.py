@@ -8,6 +8,7 @@ from fastapi import APIRouter, Path, Query
 
 from app.dependencies import OwnerOrCoachAccess, SessionDep
 from app.schemas.plans import (
+    CreatePlanRequest,
     MealPlanUpdate,
     MealSwapList,
     Plan,
@@ -34,6 +35,23 @@ _COMMON: dict[int | str, dict[str, Any]] = {400: _PROBLEM, 401: _PROBLEM, 403: _
 def get_active_plan(access: OwnerOrCoachAccess, session: SessionDep) -> Plan:
     """The active plan version; 404 `not_onboarded` when the athlete has none yet."""
     return plans.get_active_plan(session, access.athlete.id)
+
+
+@router.post(
+    "",
+    operation_id="createPlan",
+    response_model=Plan,
+    status_code=201,
+    responses={**_COMMON, 404: _PROBLEM, 422: _PROBLEM},
+)
+def create_plan(
+    access: OwnerOrCoachAccess,
+    body: CreatePlanRequest,
+    session: SessionDep,
+    clock: ClockDep,
+) -> Plan:
+    """A new named plan, empty or generated from the profile; replaces the active one (D105)."""
+    return plan_edit.create_plan(session, access.actor, access.athlete.id, body, clock.now())
 
 
 @router.put(

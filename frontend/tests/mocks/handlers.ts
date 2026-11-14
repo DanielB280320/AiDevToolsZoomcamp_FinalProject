@@ -66,6 +66,8 @@ export const handlers = [
       source: "generated",
       active: true,
       revision: 0,
+      name: null,
+      start_date: null,
       created_by: { id: String(params.athleteId), display_name: "Ana", role: "athlete" },
       created_at: "2026-10-20T08:00:00Z",
       updated_at: "2026-10-20T08:00:00Z",

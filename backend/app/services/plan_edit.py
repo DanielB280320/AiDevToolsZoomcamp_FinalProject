@@ -608,7 +608,20 @@ def regenerate(
 ) -> schemas.Plan:
     """A new `generated` version from the current profile and targets (F8.2). The part outside
     `scope` is copied from the current version. Regenerated meals are new meals (new keys), so
-    logs of the replaced meals stay visible as extra meal logs (D73)."""
+    logs of the replaced meals stay visible as extra meal logs (D73). The plan's name and start
+    date are carried forward (D105)."""
+    return _generated(db, user, athlete_uuid, scope, now, {"kind": "regenerated", "scope": scope})
+
+
+def _generated(
+    db: Session,
+    user: User,
+    athlete_uuid: uuid.UUID,
+    scope: str,
+    now: dt.datetime,
+    change: dict[str, Any],
+    **identity: Any,
+) -> schemas.Plan:
     old = _lock_active(db, athlete_uuid, None)
     athlete = db.get(User, athlete_uuid)
     assert athlete is not None  # noqa: S101
@@ -619,6 +632,8 @@ def regenerate(
         raise ProblemError(
             404, "not_onboarded", "There is no plan yet. Complete onboarding to get one."
         )
+    if "start_date" in identity:
+        _check_start_date(identity["start_date"], today)
     warnings: list[str] = []
     days = _carry_days(old)
     meal_days: list[NewMealDay] | None = None
@@ -648,7 +663,8 @@ def regenerate(
         meal_days=meal_days,
         now=now,
         revision=old.revision + 1,
-        change={"kind": "regenerated", "scope": scope},
+        change=change,
+        **identity,
     )
     _finish(
         db,
@@ -663,6 +679,56 @@ def regenerate(
     return plan_view(db, new, warnings)
 
 
+def _check_start_date(start: dt.date, today: dt.date) -> None:
+    if start > today:
+        raise _invalid(
+            _error("start_date", "in_the_future", "The start date cannot be in the future.")
+        )
+
+
+# ───────────── new plan (D105) ─────────────
+
+
+def create_plan(
+    db: Session,
+    user: User,
+    athlete_uuid: uuid.UUID,
+    body: schemas.CreatePlanRequest,
+    now: dt.datetime,
+) -> schemas.Plan:
+    """A new named plan that replaces the active one at once (D75). `start_from = empty` has no
+    training days and no meals (source `custom`); `generated` is what `regenerate` does with the
+    given `scope`. The start date is a label: it defaults to the athlete's today and may not be
+    in the future. The `PlanChange` records the kind and `start_from`, never the name."""
+    athlete = db.get(User, athlete_uuid)
+    assert athlete is not None  # noqa: S101
+    today = local_today(now, athlete.timezone)
+    start = body.start_date or today
+    change = {"kind": "created_new", "start_from": body.start_from}
+    if body.start_from == "generated":
+        return _generated(
+            db, user, athlete_uuid, body.scope, now, change, name=body.name, start_date=start
+        )
+    old = _lock_active(db, athlete_uuid, None)
+    _check_start_date(start, today)
+    new = create_plan_version(
+        db,
+        athlete_id=athlete_uuid,
+        author_id=user.id,
+        source="custom",
+        days=[],
+        meal_days=[],
+        now=now,
+        revision=old.revision + 1,
+        change=change,
+        name=body.name,
+        start_date=start,
+    )
+    _finish(db, athlete=athlete, author=user, old=old, new=new, now=now, planned_map={})
+    db.commit()
+    return plan_view(db, new)
+
+
 # ───────────── versions ─────────────
 
 
@@ -673,6 +739,8 @@ def _summary(plan: Plan, users: dict[uuid.UUID, User]) -> schemas.PlanVersionSum
             "version": plan.version,
             "source": plan.source,
             "active": plan.active,
+            "name": plan.name,
+            "start_date": plan.start_date,
             "created_by": plans.user_ref(users[plan.created_by]) if plan.created_by else None,
             "created_at": plan.created_at,
         }
@@ -703,6 +771,7 @@ def get_version(db: Session, athlete: uuid.UUID, version: int) -> schemas.Plan:
 
 
 __all__ = [
+    "create_plan",
     "get_version",
     "list_versions",
     "regenerate",
