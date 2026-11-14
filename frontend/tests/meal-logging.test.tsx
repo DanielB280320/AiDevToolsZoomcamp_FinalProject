@@ -284,7 +284,9 @@ describe("Today meals (F12)", () => {
         },
       ]),
     );
-    expect(await screen.findByText(/Oats 40 g/)).toBeInTheDocument();
+    const row = (await screen.findByText(/Oats 40 g/)).closest("li");
+    // The extra row shows the meal's slot (F12.4, D97).
+    expect(row).toHaveTextContent("Snack");
   });
 
   it("logs several foods as one meal (D97)", async () => {
@@ -356,6 +358,55 @@ describe("Today meals (F12)", () => {
     expect(
       await screen.findByRole("button", { name: "Add food" }),
     ).toBeInTheDocument();
+  });
+
+  it("blocks grams outside 0.1-2000 and resets the list when the form is closed (D97)", async () => {
+    server.use(
+      http.get(apiUrl("/foods"), () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: OATS,
+              name: "Oats",
+              brand: null,
+              kcal_per_100g: 370,
+              protein_g_per_100g: 13,
+              carbs_g_per_100g: 60,
+              fat_g_per_100g: 7,
+              diet_tags: [],
+              allergen_tags: [],
+              source: "seed",
+              external_code: null,
+              owner: null,
+            },
+          ],
+          next_cursor: null,
+        } satisfies Schemas["FoodPage"]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp("/today");
+    await user.click(await screen.findByRole("button", { name: "Add food" }));
+    await user.type(screen.getByLabelText("Search the food library"), "oat");
+    await user.click(await screen.findByRole("button", { name: /Oats/ }));
+    const submit = screen.getByRole("button", { name: "Add to today" });
+    const grams = screen.getByLabelText("Grams of Oats");
+    for (const bad of ["0", "2001", "-5"]) {
+      await user.clear(grams);
+      await user.type(grams, bad);
+      expect(submit).toBeDisabled();
+    }
+    for (const good of ["0.1", "2000"]) {
+      await user.clear(grams);
+      await user.type(grams, good);
+      expect(submit).toBeEnabled();
+    }
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(await screen.findByRole("button", { name: "Add food" }));
+    expect(
+      screen.queryByRole("list", { name: "Foods in this meal" }),
+    ).not.toBeInTheDocument();
+    expect(posts).toEqual([]);
   });
 
   it("removes a food from the meal before logging", async () => {
