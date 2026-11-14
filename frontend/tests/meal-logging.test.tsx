@@ -268,7 +268,7 @@ describe("Today meals (F12)", () => {
     await user.click(await screen.findByRole("button", { name: "Add food" }));
     await user.type(screen.getByLabelText("Search the food library"), "oat");
     await user.click(await screen.findByRole("button", { name: /Oats/ }));
-    const grams = screen.getByLabelText("Grams");
+    const grams = screen.getByLabelText("Grams of Oats");
     await user.clear(grams);
     await user.type(grams, "40");
     await user.click(screen.getByRole("button", { name: "Add to today" }));
@@ -285,6 +285,123 @@ describe("Today meals (F12)", () => {
       ]),
     );
     expect(await screen.findByText(/Oats 40 g/)).toBeInTheDocument();
+  });
+
+  it("logs several foods as one meal (D97)", async () => {
+    const RICE = "77777777-7777-4777-8777-777777777777";
+    const food = (id: string, name: string): Schemas["Food"] => ({
+      id,
+      name,
+      brand: null,
+      kcal_per_100g: 370,
+      protein_g_per_100g: 13,
+      carbs_g_per_100g: 60,
+      fat_g_per_100g: 7,
+      diet_tags: [],
+      allergen_tags: [],
+      source: "seed",
+      external_code: null,
+      owner: null,
+    });
+    server.use(
+      http.get(apiUrl("/foods"), ({ request }) => {
+        const q = new URL(request.url).searchParams.get("q") ?? "";
+        return HttpResponse.json({
+          items: [food(OATS, "Oats"), food(RICE, "Rice")].filter((f) =>
+            f.name.toLowerCase().includes(q.toLowerCase()),
+          ),
+          next_cursor: null,
+        } satisfies Schemas["FoodPage"]);
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp("/today");
+    await user.click(await screen.findByRole("button", { name: "Add food" }));
+    await user.type(screen.getByLabelText("Search the food library"), "oat");
+    await user.click(await screen.findByRole("button", { name: /Oats/ }));
+
+    // The search stays available and is cleared for the next food.
+    const again = screen.getByLabelText("Add another food to this meal");
+    expect(again).toHaveValue("");
+    await user.type(again, "rice");
+    await user.click(await screen.findByRole("button", { name: /^Rice/ }));
+    // Picking the same food twice does not duplicate it.
+    await user.type(again, "rice");
+    await user.click(await screen.findByRole("button", { name: /^Rice/ }));
+
+    const meal = screen.getByRole("list", { name: "Foods in this meal" });
+    expect(within(meal).getAllByRole("listitem")).toHaveLength(2);
+    const rice = screen.getByLabelText("Grams of Rice");
+    await user.clear(rice);
+    expect(screen.getByRole("button", { name: "Add to today" })).toBeDisabled();
+    await user.type(rice, "150");
+    await user.selectOptions(screen.getByLabelText("Meal"), "lunch");
+    await user.click(screen.getByRole("button", { name: "Add to today" }));
+
+    await waitFor(() =>
+      expect(posts).toEqual([
+        {
+          date: DATE,
+          planned_meal_id: null,
+          status: "extra",
+          slot: "lunch",
+          items: [
+            { food_id: OATS, grams: 100 },
+            { food_id: RICE, grams: 150 },
+          ],
+        },
+      ]),
+    );
+    // The form closes after the meal is logged.
+    expect(
+      await screen.findByRole("button", { name: "Add food" }),
+    ).toBeInTheDocument();
+  });
+
+  it("removes a food from the meal before logging", async () => {
+    server.use(
+      http.get(apiUrl("/foods"), () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.post(apiUrl("/foods"), () =>
+        HttpResponse.json(
+          {
+            id: "66666666-6666-4666-8666-666666666666",
+            name: "My bar",
+            brand: null,
+            kcal_per_100g: 400,
+            protein_g_per_100g: 20,
+            carbs_g_per_100g: 40,
+            fat_g_per_100g: 10,
+            diet_tags: [],
+            allergen_tags: [],
+            source: "custom",
+            external_code: null,
+            owner: null,
+          },
+          { status: 201 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp("/today");
+    await user.click(await screen.findByRole("button", { name: "Add food" }));
+    await user.click(screen.getByRole("button", { name: "New custom food" }));
+    await user.type(screen.getByLabelText("Food name"), "My bar");
+    await user.type(screen.getByLabelText("kcal per 100 g"), "400");
+    await user.type(screen.getByLabelText("Protein (g) per 100 g"), "20");
+    await user.type(screen.getByLabelText("Carbs (g) per 100 g"), "40");
+    await user.type(screen.getByLabelText("Fat (g) per 100 g"), "10");
+    await user.click(screen.getByRole("button", { name: "Save food" }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Remove My bar from this meal",
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Add to today" }),
+    ).not.toBeInTheDocument();
+    expect(posts).toEqual([]);
   });
 
   it("imports an online product and adds it", async () => {

@@ -98,7 +98,14 @@ export function CustomFoodForm({ onCreated }: { onCreated: (food: Picked) => voi
   );
 }
 
-/** Adds off-plan food (F12): pick from the library, an Open Food Facts product or a new custom food. */
+type MealFood = Picked & { grams: string };
+
+const gramsOk = (grams: string) => Number(grams) > 0 && Number(grams) <= 2000;
+
+/**
+ * Adds off-plan food (F12): pick from the library, an Open Food Facts product or a new custom food.
+ * Several foods can be collected into one meal and are logged together as one extra log (D97).
+ */
 export function AddFood({
   athleteId,
   date,
@@ -112,20 +119,31 @@ export function AddFood({
   const [text, setText] = useState("");
   const [onlineQuery, setOnlineQuery] = useState("");
   const [custom, setCustom] = useState(false);
-  const [picked, setPicked] = useState<Picked | null>(null);
-  const [grams, setGrams] = useState("100");
+  const [foods, setFoods] = useState<MealFood[]>([]);
   const [slot, setSlot] = useState<MealSlot>("snack");
   const library = useFoodSearch(useDeferredValue(text));
   const online = useOffSearch(onlineQuery);
   const importFood = useImportOffFood();
   const logMeal = useLogMeal(athleteId);
 
-  const close = () => {
-    setOpen(false);
+  const resetSearch = () => {
     setText("");
     setOnlineQuery("");
     setCustom(false);
-    setPicked(null);
+  };
+  const close = () => {
+    setOpen(false);
+    resetSearch();
+    setFoods([]);
+  };
+  /** Puts a food into the meal (once) and clears the search so the next food can be looked up. */
+  const pick = (food: Picked) => {
+    setFoods((current) =>
+      current.some((f) => f.id === food.id)
+        ? current
+        : [...current, { ...food, grams: "100" }],
+    );
+    resetSearch();
   };
 
   if (!open) {
@@ -140,13 +158,12 @@ export function AddFood({
     );
   }
 
-  const gramsValid = Number(grams) > 0 && Number(grams) <= 2000;
+  const valid = foods.length > 0 && foods.every((f) => gramsOk(f.grams));
   const addOnline = (product: OffProduct) =>
     product.imported_food_id
-      ? setPicked({ id: product.imported_food_id, name: product.name })
+      ? pick({ id: product.imported_food_id, name: product.name })
       : importFood.mutate(product.code, {
-          onSuccess: (food: Food) =>
-            setPicked({ id: food.id, name: food.name }),
+          onSuccess: (food: Food) => pick({ id: food.id, name: food.name }),
         });
 
   return (
@@ -154,37 +171,70 @@ export function AddFood({
       aria-label={t("meals.add.open")}
       className="mt-4 border-l-4 border-plate pl-3"
     >
-      {picked ? (
+      {foods.length > 0 && (
         <form
+          className="mb-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!gramsValid) return;
+            if (!valid) return;
             logMeal.mutate(
               {
                 date,
                 planned_meal_id: null,
                 status: "extra",
                 slot,
-                items: [{ food_id: picked.id, grams: Number(grams) }],
+                items: foods.map((f) => ({
+                  food_id: f.id,
+                  grams: Number(f.grams),
+                })),
               },
               { onSuccess: close },
             );
           }}
         >
-          <p className="font-semibold">{picked.name}</p>
-          <label className="mt-2 block">
-            <span className="font-semibold">{t("meals.add.grams")}</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min={0.1}
-              max={2000}
-              step="any"
-              value={grams}
-              onChange={(e) => setGrams(e.target.value)}
-              className={INPUT}
-            />
-          </label>
+          <h3 className="font-semibold">{t("meals.add.mealTitle")}</h3>
+          <ul aria-label={t("meals.add.mealTitle")}>
+            {foods.map((food) => (
+              <li
+                key={food.id}
+                className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line py-2"
+              >
+                <span className="min-w-0 break-words font-semibold">
+                  {food.name}
+                </span>
+                <span className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0.1}
+                    max={2000}
+                    step="any"
+                    value={food.grams}
+                    aria-label={t("meals.gramsOf", { name: food.name })}
+                    onChange={(e) =>
+                      setFoods(
+                        foods.map((f) =>
+                          f.id === food.id ? { ...f, grams: e.target.value } : f,
+                        ),
+                      )
+                    }
+                    className="min-h-12 w-24 rounded-md border-2 border-iron/35 bg-white px-3 text-right"
+                  />
+                  <span>{t("meals.unitG")}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFoods(foods.filter((f) => f.id !== food.id))
+                    }
+                    aria-label={t("meals.add.removeFood", { name: food.name })}
+                    className={BUTTON}
+                  >
+                    {t("meals.remove")}
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
           <label className="mt-2 block">
             <span className="font-semibold">{t("meals.add.slot")}</span>
             <select
@@ -199,125 +249,113 @@ export function AddFood({
               ))}
             </select>
           </label>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="submit"
-              disabled={!gramsValid || logMeal.isPending}
-              className={PRIMARY}
-            >
-              {t("meals.add.submit")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPicked(null)}
-              className={BUTTON}
-            >
-              {t("meals.cancel")}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={!valid || logMeal.isPending}
+            className={`${PRIMARY} mt-3`}
+          >
+            {t("meals.add.submit")}
+          </button>
           {logMeal.isError && (
             <p role="alert" className="mt-2 text-alert">
               {t("meals.failed")}
             </p>
           )}
         </form>
-      ) : (
-        <>
-          <label htmlFor={id} className="block font-semibold">
-            {t("meals.add.search")}
-          </label>
-          <input
-            id={id}
-            type="search"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            autoComplete="off"
-            maxLength={100}
-            className={INPUT}
-          />
-          <ul className="mt-2">
-            {(library.data ?? []).map((food) => (
-              <li key={food.id}>
-                <button
-                  type="button"
-                  onClick={() => setPicked({ id: food.id, name: food.name })}
-                  className="min-h-12 w-full border-b border-line py-2 text-left font-semibold hover:bg-line"
-                >
-                  {food.name}
-                  <span className="text-step--1 font-normal text-slate">
-                    {" "}
-                    ·{" "}
-                    {t("meals.add.per100", {
-                      count: Math.round(food.kcal_per_100g),
-                    })}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={text.trim().length < 2}
-              onClick={() => setOnlineQuery(text.trim())}
-              className={BUTTON}
-            >
-              {t("meals.add.searchOnline")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setCustom(!custom)}
-              aria-expanded={custom}
-              className={BUTTON}
-            >
-              {t("meals.add.custom")}
-            </button>
-          </div>
-          {onlineQuery && online.data && !online.data.available && (
-            <p role="status" className="mt-2 text-slate">
-              {online.data.message ?? t("meals.add.offUnavailable")}
-            </p>
-          )}
-          {online.isError && (
-            <p role="alert" className="mt-2 text-alert">
-              {t("meals.add.offUnavailable")}
-            </p>
-          )}
-          {online.data?.available && (
-            <ul className="mt-2" aria-label={t("meals.add.onlineResults")}>
-              {online.data.items.map((product) => (
-                <li key={product.code}>
-                  <button
-                    type="button"
-                    disabled={importFood.isPending}
-                    onClick={() => addOnline(product)}
-                    className="min-h-12 w-full border-b border-line py-2 text-left font-semibold hover:bg-line"
-                  >
-                    {product.name}
-                    <span className="text-step--1 font-normal text-slate">
-                      {" "}
-                      ·{" "}
-                      {t("meals.add.per100", {
-                        count: Math.round(product.kcal_per_100g),
-                      })}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {importFood.isError && (
-            <p role="alert" className="mt-2 text-alert">
-              {t("meals.add.offUnavailable")}
-            </p>
-          )}
-          {custom && <CustomFoodForm onCreated={setPicked} />}
-        </>
       )}
+      <label htmlFor={id} className="block font-semibold">
+        {t(foods.length > 0 ? "meals.add.another" : "meals.add.search")}
+      </label>
+      <input
+        id={id}
+        type="search"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        autoComplete="off"
+        maxLength={100}
+        className={INPUT}
+      />
+      <ul className="mt-2">
+        {(text.trim().length >= 2 ? (library.data ?? []) : []).map((food) => (
+          <li key={food.id}>
+            <button
+              type="button"
+              onClick={() => pick({ id: food.id, name: food.name })}
+              className="min-h-12 w-full border-b border-line py-2 text-left font-semibold hover:bg-line"
+            >
+              {food.name}
+              <span className="text-step--1 font-normal text-slate">
+                {" "}
+                ·{" "}
+                {t("meals.add.per100", {
+                  count: Math.round(food.kcal_per_100g),
+                })}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={text.trim().length < 2}
+          onClick={() => setOnlineQuery(text.trim())}
+          className={BUTTON}
+        >
+          {t("meals.add.searchOnline")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setCustom(!custom)}
+          aria-expanded={custom}
+          className={BUTTON}
+        >
+          {t("meals.add.custom")}
+        </button>
+      </div>
+      {onlineQuery && online.data && !online.data.available && (
+        <p role="status" className="mt-2 text-slate">
+          {online.data.message ?? t("meals.add.offUnavailable")}
+        </p>
+      )}
+      {online.isError && (
+        <p role="alert" className="mt-2 text-alert">
+          {t("meals.add.offUnavailable")}
+        </p>
+      )}
+      {online.data?.available && (
+        <ul className="mt-2" aria-label={t("meals.add.onlineResults")}>
+          {online.data.items.map((product) => (
+            <li key={product.code}>
+              <button
+                type="button"
+                disabled={importFood.isPending}
+                onClick={() => addOnline(product)}
+                className="min-h-12 w-full border-b border-line py-2 text-left font-semibold hover:bg-line"
+              >
+                {product.name}
+                <span className="text-step--1 font-normal text-slate">
+                  {" "}
+                  ·{" "}
+                  {t("meals.add.per100", {
+                    count: Math.round(product.kcal_per_100g),
+                  })}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {importFood.isError && (
+        <p role="alert" className="mt-2 text-alert">
+          {t("meals.add.offUnavailable")}
+        </p>
+      )}
+      {custom && <CustomFoodForm onCreated={pick} />}
       <button
         type="button"
         onClick={close}
-        className="mt-2 min-h-12 px-4 font-semibold text-spruce underline underline-offset-4"
+        className="mt-2 block min-h-12 px-4 font-semibold text-spruce underline underline-offset-4"
       >
         {t("meals.add.close")}
       </button>

@@ -204,7 +204,12 @@ function ExtraRow({
   const undo = useDeleteMealLog(athleteId);
   return (
     <li className="flex items-center justify-between gap-3 border-b border-line py-2">
-      <span>
+      <span className="min-w-0 break-words">
+        {log.slot && (
+          <span className="block text-step--1 font-semibold uppercase text-slate">
+            {t(`calendar.today.slot.${log.slot}`)}
+          </span>
+        )}
         {log.items
           .map((item) => `${item.food.name} ${item.grams} g`)
           .join(", ")}
