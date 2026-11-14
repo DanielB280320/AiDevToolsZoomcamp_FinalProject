@@ -38,7 +38,7 @@ function MacroBar({ label, eaten, target }: { label: string; eaten: number; targ
 /**
  * Estimated energy balance of one day (spec F13.3): eaten, burned, balance, the goal's target balance
  * and macro progress bars. Used by Today (`compact={false}`) and the Week day cards (`compact`).
- * On Today each calorie figure carries an icon next to its label (D99).
+ * Each calorie figure carries an icon next to its label, smaller on the Week cards (D99, D102).
  */
 export function EnergySummary({ energy, compact }: { energy: Energy; compact: boolean }) {
   const { t } = useTranslation();
@@ -54,7 +54,7 @@ export function EnergySummary({ energy, compact }: { energy: Energy; compact: bo
         {figures.map(([label, value, FigureIcon]) => (
           <div key={label}>
             <dt className="text-step--1 text-slate">
-              {!compact && <FigureIcon className="mx-auto mb-1 size-6 text-spruce" />}
+              <FigureIcon className={`mx-auto mb-1 text-spruce ${compact ? "size-5" : "size-6"}`} />
               {label}
             </dt>
             <dd className={`font-display font-bold ${compact ? "text-step-1" : "text-step-2"}`}>{value}</dd>

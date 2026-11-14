@@ -116,6 +116,9 @@ describe("QA #48: Week in coach context has no Move control", () => {
     renderApp(`/coach/clients/${ANA}/week`);
     await screen.findByText("Upper A");
     expect(screen.queryByRole("button", { name: /^Move/ })).not.toBeInTheDocument();
+    // D102: the description is worded for the coach and doesn't offer the move.
+    expect(screen.getByTestId("week-description")).toHaveTextContent("Your client's week from Monday to Sunday");
+    expect(screen.getByTestId("week-description")).not.toHaveTextContent("move that workout");
   });
 
   it("control: the athlete's own Week shows Move for the same calendar", async () => {

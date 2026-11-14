@@ -86,4 +86,27 @@ describe("Week energy balance", () => {
     expect(bars[0]).toHaveAttribute("aria-valuenow", "120");
     expect(bars[0]).toHaveAttribute("aria-valuemax", "150");
   });
+
+  it("shows Today's icons on each day: training, meals and the four calorie figures, all decorative (D102)", async () => {
+    const dates = ["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"];
+    server.use(
+      http.get(apiUrl("/athletes/:athleteId/calendar"), ({ request }) => {
+        const q = new URL(request.url).searchParams;
+        const days = dates.map((d, i) => calendarDayFixture(d, { is_today: i === 0, energy: energy(d) }));
+        return HttpResponse.json({ from: q.get("from")!, to: q.get("to")!, timezone: ATHLETE.timezone, days });
+      }),
+    );
+    renderApp("/week");
+
+    const list = await screen.findByRole("list", { name: "Days of the week" });
+    for (const row of within(list).getAllByRole("listitem")) {
+      const icons = [...row.querySelectorAll("svg")];
+      // Training, meals, then eaten, burned, balance and target balance.
+      expect(icons).toHaveLength(6);
+      for (const icon of icons) expect(icon).toHaveAttribute("aria-hidden", "true");
+      for (const label of ["Eaten", "Burned", "Balance", "Target balance"]) {
+        expect(within(row).getByText(label).querySelector("svg")).not.toBeNull();
+      }
+    }
+  });
 });

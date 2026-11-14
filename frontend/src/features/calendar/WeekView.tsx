@@ -9,7 +9,11 @@ import { MoveSession } from "./MoveSession";
 import { QueryState } from "./QueryState";
 import { RangeControls } from "./RangeControls";
 import { StatusBadge } from "./StatusBadge";
-import { dayBadge } from "./status";
+import { dayBadge, statusReason } from "./status";
+import { DumbbellIcon, UtensilsIcon } from "../../components/icons";
+
+/** The same icons as Today's training and meals sections, sized for a day row (D102). */
+const ROW_ICON = "size-5 text-spruce";
 
 function DayRow({
   day,
@@ -28,6 +32,7 @@ function DayRow({
   const movable = !readOnly && day.training_status === "planned" && targets.length > 0;
   const weekday = formatDay(day.date, i18n.language, DAY_FORMAT.weekday);
   const date = formatDay(day.date, i18n.language, DAY_FORMAT.dayMonth);
+  const reason = statusReason(day.training_status, day.training_completion);
   return (
     <li
       aria-current={day.is_today ? "date" : undefined}
@@ -39,14 +44,21 @@ function DayRow({
             {weekday} <span className="font-semibold text-slate">{date}</span>
             {day.is_today && <span className="ml-2 text-step--1 text-spruce">{t("calendar.todayMarker")}</span>}
           </p>
-          <p className="text-step-0">
-            {day.training_day_name ?? t("calendar.restDay")}
-            {day.moved && <span className="ml-2 text-step--1 text-slate">{t("calendar.moved")}</span>}
+          <p className="flex items-center gap-2 text-step-0">
+            <DumbbellIcon className={ROW_ICON} />
+            <span>
+              {day.training_day_name ?? t("calendar.restDay")}
+              {day.moved && <span className="ml-2 text-step--1 text-slate">{t("calendar.moved")}</span>}
+            </span>
           </p>
         </div>
         <StatusBadge kind={dayBadge(day)} />
       </div>
-      <p className="mt-1 text-step--1 text-slate">
+      <p className="mt-1 text-step--1 text-slate" data-testid="status-reason">
+        {reason.key === "partialFinished" ? t("calendar.week.reason.partialFinished", { value: reason.value }) : t(`calendar.week.reason.${reason.key}`)}
+      </p>
+      <p className="mt-1 flex items-center gap-2 text-step--1 text-slate">
+        <UtensilsIcon className={ROW_ICON} />
         {day.planned_meal_count > 0
           ? t("calendar.meals", { eaten: day.eaten_meal_count, planned: day.planned_meal_count })
           : t("calendar.noMeals")}
@@ -114,6 +126,9 @@ export function WeekView({
         prevLabel={t("calendar.week.prev")}
         nextLabel={t("calendar.week.next")}
       />
+      <p className="mb-4 text-step--1 text-slate" data-testid="week-description">
+        {t(`calendar.week.about.${readOnly ? "coach" : "athlete"}`)}
+      </p>
       <QueryState isPending={calendar.isPending} isError={calendar.isError} onRetry={() => void calendar.refetch()} />
       {calendar.data && (
         <ol aria-label={t("calendar.week.listLabel")} className="border-t-4 border-iron">

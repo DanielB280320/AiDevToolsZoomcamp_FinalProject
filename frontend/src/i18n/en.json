@@ -211,7 +211,20 @@
       "title": "{{from}} to {{to}}",
       "prev": "Previous week",
       "next": "Next week",
-      "listLabel": "Days of the week"
+      "listLabel": "Days of the week",
+      "about": {
+        "athlete": "Your week from Monday to Sunday: each day's workout and why it has its status, the meals you logged and the estimated calories. Use it to check that the week is on track. Nothing to log here: sets and meals are logged on Today. If you can't train on a planned day, move that workout to a free day of the same week.",
+        "coach": "Your client's week from Monday to Sunday: each day's workout and why it has its status, the meals logged and the estimated calories. Use it to check that the week is on track. Nothing to do here: open a started or finished workout to see its sets."
+      },
+      "reason": {
+        "done": "Done: the workout was finished and every planned set was completed in full (100%).",
+        "doneNoFigure": "Done: the workout was finished.",
+        "partialFinished": "Partial: the workout was finished, but only {{value}}% of the planned sets and reps were completed.",
+        "partialInProgress": "Partial: the workout was started but has not been finished.",
+        "missed": "Missed: a workout was planned and the day ended without it being started.",
+        "rest": "Rest: no workout was planned for this day.",
+        "planned": "Planned: the workout has not been started yet."
+      }
     },
     "month": {
       "prev": "Previous month",

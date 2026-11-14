@@ -207,6 +207,46 @@ describe("Week", () => {
     expect(rows[0]).toHaveAttribute("aria-current", "date");
   });
 
+  it("says what the week view is for and what the athlete is expected to do (D102)", async () => {
+    server.use(calendarOk(weekOf()));
+    renderApp("/week");
+    await screen.findByRole("list", { name: "Days of the week" });
+    const about = screen.getByTestId("week-description");
+    expect(about).toHaveTextContent("Your week from Monday to Sunday");
+    expect(about).toHaveTextContent("Nothing to log here: sets and meals are logged on Today.");
+    expect(about).toHaveTextContent("move that workout to a free day of the same week");
+  });
+
+  it("explains each day's status under its badge (D102)", async () => {
+    server.use(
+      calendarOk(
+        weekOf({
+          "2026-10-26": { training_status: "done", training_completion: 1, training_day_name: "Upper A" },
+          "2026-10-27": { training_status: "done", training_completion: 0.999, training_day_name: "Lower A" },
+          "2026-10-28": { training_status: "missed", training_day_name: "Upper B" },
+          "2026-10-29": { training_status: "in_progress", training_completion: 0.4, training_day_name: "Lower B" },
+          "2026-10-30": { training_status: "planned", training_day_name: "Upper C" },
+          "2026-10-31": { training_status: "done", training_completion: null, training_day_name: "Imported" },
+        }),
+      ),
+    );
+    renderApp("/week");
+
+    const list = await screen.findByRole("list", { name: "Days of the week" });
+    const reasons = within(list)
+      .getAllByRole("listitem")
+      .map((row) => within(row).getByTestId("status-reason").textContent);
+    expect(reasons).toEqual([
+      "Done: the workout was finished and every planned set was completed in full (100%).",
+      "Partial: the workout was finished, but only 99% of the planned sets and reps were completed.",
+      "Missed: a workout was planned and the day ended without it being started.",
+      "Partial: the workout was started but has not been finished.",
+      "Planned: the workout has not been started yet.",
+      "Done: the workout was finished.",
+      "Rest: no workout was planned for this day.",
+    ]);
+  });
+
   it("goes to the next week with the arrow", async () => {
     const seen: string[] = [];
     server.use(calendarOk(weekOf(), (from) => seen.push(from ?? "")));
