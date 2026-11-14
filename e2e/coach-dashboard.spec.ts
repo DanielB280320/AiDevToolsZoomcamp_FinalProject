@@ -145,8 +145,8 @@ test("coach reviews a client, decides suggestions, edits the plan; the athlete s
     await test.step("edits the plan", async () => {
       await page.getByRole("link", { name: "Plan", exact: true }).click();
       // Days are collapsed by default (D105): open the first one.
-      await page.getByRole("heading", { level: 3 }).first().getByRole("button").click();
-      const sets = page.getByLabel("Sets").first();
+      await page.getByRole("heading", { level: 3, name: /\d+ exercises?$/ }).first().getByRole("button").click();
+      const sets = page.getByLabel("Sets").first(); // the opened day is the only one with visible inputs
       await sets.fill("4");
       await page.getByRole("button", { name: "Save changes" }).click();
       await expect(page.getByText(/Plan saved/)).toBeVisible();
