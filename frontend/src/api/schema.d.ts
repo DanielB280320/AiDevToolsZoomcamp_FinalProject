@@ -1124,6 +1124,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/athletes/{athlete_id}/charts/totals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * All-time totals for the overview on Today
+         * @description Finished sessions and personal records up to today (athlete's time zone), over the whole
+         *     history (F9.5, D101). A personal record uses the ranking of the exercise chart (D76(4),
+         *     D88): counted once per finished session and exercise whose top set beats every earlier
+         *     finished session of that exercise; the first session of an exercise counts.
+         */
+        get: operations["getProgressTotals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/coach/profile": {
         parameters: {
             query?: never;
@@ -2530,6 +2556,14 @@ export interface components {
              */
             estimated: true;
             points: components["schemas"]["BodyChartPoint"][];
+        };
+        ProgressTotals: {
+            /** @description Finished sessions up to today. */
+            sessions_done: number;
+            /** @description Personal records set in finished sessions up to today. */
+            personal_records: number;
+            /** @description Date of the first finished session; `null` when there is none. */
+            first_session_date: components["schemas"]["LocalDate"] | null;
         };
         CoachProfileInput: {
             bio: string;
@@ -4397,6 +4431,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BodyChart"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getProgressTotals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Totals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProgressTotals"];
                 };
             };
             400: components["responses"]["BadRequest"];

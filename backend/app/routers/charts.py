@@ -14,6 +14,7 @@ from app.schemas.charts import (
     AdherenceChart,
     BodyChart,
     ExerciseChart,
+    ProgressTotals,
     SessionChart,
     WeeklySummary,
 )
@@ -99,3 +100,15 @@ def get_body_chart(
     access: OwnerOrCoachAccess, db: SessionDep, clock: ClockDep, weeks: Weeks = 12
 ) -> BodyChart:
     return charts.body_chart(db, access.athlete, charts.check_weeks(weeks), clock.now())
+
+
+@router.get(
+    "/athletes/{athlete_id}/charts/totals",
+    operation_id="getProgressTotals",
+    response_model=ProgressTotals,
+    responses=_COMMON,
+)
+def get_progress_totals(
+    access: OwnerOrCoachAccess, db: SessionDep, clock: ClockDep
+) -> ProgressTotals:
+    return charts.progress_totals(db, access.athlete, clock.now())

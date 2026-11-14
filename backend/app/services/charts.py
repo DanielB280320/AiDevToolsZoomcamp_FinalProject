@@ -15,7 +15,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.engines import charts as engine
@@ -23,6 +23,7 @@ from app.engines.nutrition_completion import nutrition_completion
 from app.errors import ProblemError
 from app.models import (
     BodyMetric,
+    Exercise,
     MealDay,
     MealLog,
     Plan,
@@ -424,4 +425,46 @@ def body_chart(db: Session, user: User, weeks: int, now: dt.datetime) -> out.Bod
             )
             for r, avg in zip(in_range, averages, strict=True)
         ],
+    )
+
+
+# ───────────── totals to date ─────────────
+
+
+def progress_totals(db: Session, user: User, now: dt.datetime) -> out.ProgressTotals:
+    """All-time figures for Today's overview (F9.5, D101): finished sessions and personal records.
+
+    A personal record is counted with the F15 ranking (`engine.exercise_history`, D76(4), D88):
+    once per finished session and exercise whose top set beats every earlier finished session of
+    that exercise, the first one included. Two queries, whatever the length of the history.
+    """
+    today = local_today(now, user.timezone)
+    finished = (
+        TrainingSession.athlete_id == user.id,
+        TrainingSession.status == "done",
+        TrainingSession.date <= today,
+    )
+    sessions_done, first_day = db.execute(
+        select(func.count(TrainingSession.id), func.min(TrainingSession.date)).where(*finished)
+    ).one()
+    rows = db.execute(
+        select(SetLog, TrainingSession.date, Exercise.type)
+        .join(TrainingSession, TrainingSession.id == SetLog.session_id)
+        .join(Exercise, Exercise.id == SetLog.exercise_id)
+        .where(*finished, SetLog.skipped.is_(False))
+    ).all()
+    by_exercise: dict[uuid.UUID, list[tuple[SetLog, dt.date]]] = defaultdict(list)
+    timed: dict[uuid.UUID, bool] = {}
+    for log, day, kind in rows:
+        by_exercise[log.exercise_id].append((log, day))
+        timed[log.exercise_id] = kind == "timed"
+    records = 0
+    for exercise_id, logs in by_exercise.items():
+        history = engine.exercise_history(
+            ((str(sid), day, sets) for sid, (day, sets) in _group_by_session(logs).items()),
+            timed=timed[exercise_id],
+        )
+        records += sum(1 for point in history if point.is_pr)
+    return out.ProgressTotals(
+        sessions_done=sessions_done, personal_records=records, first_session_date=first_day
     )

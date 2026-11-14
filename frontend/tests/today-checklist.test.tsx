@@ -178,13 +178,6 @@ describe("Today: progress figures in the overview (F9.5, D100)", () => {
       pending_suggestion_id: null,
       is_pr: isPr,
     }) satisfies Schemas["SessionExercise"];
-  const week = (start: string, done: number): Schemas["AdherenceWeek"] => ({
-    week_start: start,
-    sessions_planned: 4,
-    sessions_done: done,
-    training_completion: null,
-    nutrition_completion: null,
-  });
   const point = (date: string, avg: number | null): Schemas["BodyChartPoint"] => ({ date, weight_kg: avg, weight_avg_7d_kg: avg, body_fat_pct: null });
   /** The tile once its figure has loaded. */
   const kpi = async (id: string, text: string | RegExp) => {
@@ -192,7 +185,7 @@ describe("Today: progress figures in the overview (F9.5, D100)", () => {
     return screen.getByTestId(`kpi-${id}`);
   };
 
-  it("shows this week, the last 12 months, the weight change and the day's records", async () => {
+  it("shows this week, the totals to date, the weight change and the day's records", async () => {
     serve({
       training_status: "done",
       session: sessionFixture(DATE, { id: "s-1", athlete_id: "a-1", status: "done", completion: 1, exercises: [exercise(1, true), exercise(2, false), exercise(3, true)] }),
@@ -203,12 +196,9 @@ describe("Today: progress figures in the overview (F9.5, D100)", () => {
         asked.week = new URL(request.url).searchParams.get("week_start") ?? "";
         return HttpResponse.json(weeklySummaryFixture({ sessions_planned: 4, sessions_done: 2, avg_completion: 0.854 }));
       }),
-      http.get(apiUrl("/athletes/:athleteId/charts/adherence"), ({ request }) => {
-        const query = new URL(request.url).searchParams;
-        asked.from = query.get("from") ?? "";
-        asked.to = query.get("to") ?? "";
-        return HttpResponse.json({ from: asked.from, to: asked.to, days: [], weeks: [week("2026-10-12", 3), week("2026-10-19", 4), week("2026-10-26", 2)] });
-      }),
+      http.get(apiUrl("/athletes/:athleteId/charts/totals"), () =>
+        HttpResponse.json({ sessions_done: 37, personal_records: 12, first_session_date: "2025-06-02" } satisfies Schemas["ProgressTotals"]),
+      ),
       http.get(apiUrl("/athletes/:athleteId/charts/body"), () =>
         HttpResponse.json({ weeks: 52, estimated: true, points: [point("2026-09-01", null), point("2026-09-12", 82.4), point("2026-10-01", 81), point("2026-10-26", 80.1)] }),
       ),
@@ -217,23 +207,23 @@ describe("Today: progress figures in the overview (F9.5, D100)", () => {
 
     await kpi("week", "Workouts this week2 of 4");
     await kpi("completion", "85%");
-    expect(await kpi("workouts", "9")).toHaveTextContent("Last 12 months");
-    expect(await kpi("weight", "−2.3 kg")).toHaveTextContent("Since Sep 12");
-    await kpi("records", "Personal records2");
-    // The week of the day shown, and a range the adherence endpoint accepts (up to 371 days).
-    expect(asked).toEqual({ week: "2026-10-26", from: "2025-10-28", to: DATE });
+    expect(await kpi("workouts", "Workouts completed37")).toHaveTextContent("Since Jun 2, 2025");
+    expect(await kpi("weight", "−2.3 kg")).toHaveTextContent("Since Sep 12, 2026");
+    expect(await kpi("records", "Personal records12")).toHaveTextContent("2 in this day's workout");
+    // The week of the day shown.
+    expect(asked).toEqual({ week: "2026-10-26" });
     expect(within(screen.getByTestId("day-checklist")).getByRole("link", { name: "See all progress" })).toHaveAttribute("href", "/progress");
   });
 
-  it("shows a dash where there is no data yet and no records tile on a rest day", async () => {
+  it("shows zeros and dashes where there is no data yet", async () => {
     serve({});
     renderApp("/today");
     await kpi("week", "0 of 0");
-    await kpi("workouts", "Workouts completed0");
+    expect(await kpi("workouts", "Workouts completed0")).toHaveTextContent("To date");
     expect(screen.getByTestId("kpi-completion")).toHaveTextContent("—");
     expect(screen.getByTestId("kpi-weight")).toHaveTextContent("—");
     expect(screen.getByTestId("kpi-weight")).toHaveTextContent("Needs two weigh-ins");
-    expect(screen.queryByTestId("kpi-records")).not.toBeInTheDocument();
+    expect(await kpi("records", "Personal records0")).toHaveTextContent("To date");
   });
 });
 

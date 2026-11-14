@@ -75,10 +75,9 @@ export const handlers = [
     } satisfies Schemas["Plan"]),
   ),
   http.get(apiUrl("/athletes/:athleteId/charts/weekly-summary"), () => HttpResponse.json(weeklySummaryFixture())),
-  http.get(apiUrl("/athletes/:athleteId/charts/adherence"), ({ request }) => {
-    const query = new URL(request.url).searchParams;
-    return HttpResponse.json({ from: query.get("from") ?? "", to: query.get("to") ?? "", days: [], weeks: [] } satisfies Schemas["AdherenceChart"]);
-  }),
+  http.get(apiUrl("/athletes/:athleteId/charts/totals"), () =>
+    HttpResponse.json({ sessions_done: 0, personal_records: 0, first_session_date: null } satisfies Schemas["ProgressTotals"]),
+  ),
   http.get(apiUrl("/athletes/:athleteId/charts/body"), () =>
     HttpResponse.json({ weeks: 52, estimated: true, points: [] } satisfies Schemas["BodyChart"]),
   ),

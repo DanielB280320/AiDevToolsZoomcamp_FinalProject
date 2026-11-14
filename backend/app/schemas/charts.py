@@ -122,3 +122,9 @@ class BodyChart(ResponseModel):
     weeks: int
     estimated: Literal[True] = True
     points: list[BodyChartPoint]
+
+
+class ProgressTotals(ResponseModel):
+    sessions_done: int
+    personal_records: int
+    first_session_date: dt.date | None

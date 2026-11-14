@@ -334,7 +334,6 @@
         "weekValue": "{{done}} of {{planned}}",
         "completion": "Average completion this week",
         "workouts": "Workouts completed",
-        "lookback": "Last 12 months",
         "weight": "Weight change",
         "weightUp": "+{{value}} {{unit}}",
         "weightDown": "−{{value}} {{unit}}",
@@ -342,8 +341,10 @@
         "since": "Since {{date}}",
         "weightNone": "Needs two weigh-ins",
         "records": "Personal records",
-        "recordsHint": "In this day's workout",
-        "more": "See all progress"
+        "more": "See all progress",
+        "toDate": "To date",
+        "recordsToday_one": "{{count}} in this day's workout",
+        "recordsToday_other": "{{count}} in this day's workout"
       }
     }
   },
