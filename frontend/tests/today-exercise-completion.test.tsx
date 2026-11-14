@@ -46,12 +46,27 @@ describe("Today: completion of the session and per exercise after the session is
   it("shows each exercise's completion once the session is done", async () => {
     server.use(meOk(meFixture({ id: "a-1", role: "athlete" })), dayWith("done"));
     renderApp("/today");
-    expect(await screen.findByTestId("session-completion")).toHaveTextContent("Session completion: 61%");
+    const session = await screen.findByTestId("session-completion");
+    expect(session).toHaveTextContent("61%");
+    // The ring and the bars are progress bars with a name, so the value is not conveyed by the drawing alone.
+    expect(within(session).getByRole("progressbar", { name: "Session completion" })).toHaveAttribute("aria-valuenow", "61");
+    expect(within(await row("Bench press")).getByRole("progressbar", { name: "Bench press completion" })).toHaveAttribute("aria-valuenow", "83");
     expect(within(await row("Back squat")).getByTestId("exercise-completion")).toHaveTextContent("100% completed");
     expect(within(await row("Bench press")).getByTestId("exercise-completion")).toHaveTextContent("83% completed");
     expect(within(await row("Barbell row")).getByTestId("exercise-completion")).toHaveTextContent("0% completed");
     // An exercise without a completion (added on the spot) shows none.
     expect(within(await row("Cable curl")).queryByTestId("exercise-completion")).not.toBeInTheDocument();
+  });
+
+  it("orders the sections: energy, meals, then training (D98)", async () => {
+    server.use(meOk(meFixture({ id: "a-1", role: "athlete" })), dayWith("done"));
+    renderApp("/today");
+    await row("Back squat");
+    const titles = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    const at = (title: string) => titles.indexOf(title);
+    expect(at("Estimated energy today")).toBeGreaterThanOrEqual(0);
+    expect(at("Estimated energy today")).toBeLessThan(at("Meals"));
+    expect(at("Meals")).toBeLessThan(at("Training"));
   });
 
   it("shows no completion while the session is still in progress", async () => {

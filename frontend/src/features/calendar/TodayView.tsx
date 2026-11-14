@@ -25,6 +25,50 @@ function formatWeight(kg: number, units: Me["units"]): string {
   return units === "imperial" ? `${Math.round(kg * KG_TO_LB * 2) / 2} lb` : `${Math.round(kg * 100) / 100} kg`;
 }
 
+/** A completion ratio (0-1, F10.2) as a whole percent, kept inside 0-100 for the charts. */
+function toPercent(completion: number): number {
+  return Math.min(100, Math.max(0, Math.round(completion * 100)));
+}
+
+const RING_RADIUS = 30;
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
+/** Session completion as a ring with the percent in the middle (F10.11). */
+function CompletionRing({ percent }: { percent: number }) {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-3 flex items-center gap-3" data-testid="session-completion">
+      <div
+        role="progressbar"
+        aria-label={t("calendar.today.sessionCompletionLabel")}
+        aria-valuemin={0}
+        aria-valuenow={percent}
+        aria-valuemax={100}
+        className="relative h-20 w-20 shrink-0"
+      >
+        <svg viewBox="0 0 72 72" className="h-full w-full -rotate-90" aria-hidden="true">
+          <circle cx="36" cy="36" r={RING_RADIUS} fill="none" strokeWidth="8" className="stroke-line" />
+          <circle
+            cx="36"
+            cy="36"
+            r={RING_RADIUS}
+            fill="none"
+            strokeWidth="8"
+            strokeLinecap={percent > 0 && percent < 100 ? "round" : "butt"}
+            strokeDasharray={RING_LENGTH}
+            strokeDashoffset={RING_LENGTH * (1 - percent / 100)}
+            className="stroke-spruce"
+          />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center font-display text-step-1 font-bold">
+          {t("calendar.today.percent", { value: percent })}
+        </span>
+      </div>
+      <span className="font-semibold">{t("calendar.today.sessionCompletionLabel")}</span>
+    </div>
+  );
+}
+
 function ExerciseRow({
   exercise,
   units,
@@ -52,18 +96,29 @@ function ExerciseRow({
   ]
     .filter(Boolean)
     .join(" · ");
+  const percent = finished && exercise.completion != null ? toPercent(exercise.completion) : null;
   return (
     <li className="border-b border-line py-2">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <span className="font-semibold">
           {exercise.exercise.name} {exercise.is_pr && <PrBadge />}
         </span>
-        <span className="text-right text-step--1 text-slate">
+        <span className="shrink-0 text-right text-step--1 text-slate">
           {t("calendar.today.sets", { count: exercise.sets.length })}
           {target && ` · ${target}`}
-          {finished && exercise.completion != null && (
-            <span className="block font-semibold text-iron" data-testid="exercise-completion">
-              {t("calendar.today.exerciseCompletion", { value: Math.round(exercise.completion * 100) })}
+          {percent != null && (
+            <span className="mt-1 block" data-testid="exercise-completion">
+              <span className="block font-semibold text-iron">{t("calendar.today.exerciseCompletion", { value: percent })}</span>
+              <span
+                role="progressbar"
+                aria-label={t("calendar.today.exerciseCompletionLabel", { name: exercise.exercise.name })}
+                aria-valuemin={0}
+                aria-valuenow={percent}
+                aria-valuemax={100}
+                className="mt-1 ml-auto block h-2 w-28 overflow-hidden rounded-full bg-line"
+              >
+                <span className="block h-full bg-spruce" style={{ width: `${percent}%` }} />
+              </span>
             </span>
           )}
         </span>
@@ -122,7 +177,8 @@ function ReadOnlyMeals({ day }: { day: DayView }) {
 }
 
 /**
- * Today (spec F9): the athlete's session, meals, estimated energy balance and pending items.
+ * Today (spec F9): the estimated energy balance, the meals, the session, then the pending and
+ * the recently decided suggestions (D98).
  * `readOnly` is the coach context (F16.4): no workout link, no meal logging, no own banners; the
  * pending suggestions stay actionable (F11).
  */
@@ -132,7 +188,8 @@ export function TodayView({
   sessionLink,
   date = "today",
 }: {
-  me: Pick<Me, "id" | "units">;
+  /** `timezone` is the athlete's zone, used for the dates of the recent decisions. */
+  me: Pick<Me, "id" | "units"> & { timezone?: string };
   readOnly?: boolean;
   sessionLink?: (sessionId: string) => string;
   /** `today` (the user's day) or an ISO date, e.g. the day a coach note refers to. */
@@ -152,16 +209,21 @@ export function TodayView({
     <>
       {!readOnly && <TodayBanners />}
 
+      <Section id="today-energy" title={t("calendar.today.energy")}>
+        <EnergySummary energy={energy} compact={false} />
+      </Section>
+
+      <Section id="today-meals" title={t("calendar.today.meals")}>
+        <EditedBy name={coachEditor(plan.data?.meal_days.find((d) => d.weekday === day.data.weekday)?.edited_by)} />
+        {readOnly ? <ReadOnlyMeals day={day.data} /> : <MealsSection athleteId={me.id} day={day.data} />}
+      </Section>
+
       <Section id="today-training" title={t("calendar.today.training")}>
         <p className="mt-2 flex items-center gap-3 text-step-1">
           <StatusBadge kind={kind} />
           <span className="font-semibold">{session?.training_day_name ?? t("calendar.restDay")}</span>
         </p>
-        {session?.status === "done" && session.completion != null && (
-          <p className="mt-1 font-semibold" data-testid="session-completion">
-            {t("calendar.today.sessionCompletion", { value: Math.round(session.completion * 100) })}
-          </p>
-        )}
+        {session?.status === "done" && session.completion != null && <CompletionRing percent={toPercent(session.completion)} />}
         <EditedBy name={coachEditor(plan.data?.training_days.find((d) => d.weekday === day.data.weekday)?.edited_by)} />
         {session && readOnly && sessionLink && (
           <Link to={sessionLink(session.id)} className="mt-3 inline-flex min-h-11 items-center font-semibold text-spruce underline underline-offset-4">
@@ -202,17 +264,8 @@ export function TodayView({
         )}
       </Section>
 
-      <Section id="today-meals" title={t("calendar.today.meals")}>
-        <EditedBy name={coachEditor(plan.data?.meal_days.find((d) => d.weekday === day.data.weekday)?.edited_by)} />
-        {readOnly ? <ReadOnlyMeals day={day.data} /> : <MealsSection athleteId={me.id} day={day.data} />}
-      </Section>
-
-      <Section id="today-energy" title={t("calendar.today.energy")}>
-        <EnergySummary energy={energy} compact={false} />
-      </Section>
-
       <PendingSuggestions athleteId={me.id} units={me.units} className="mt-8 border-t-4 border-plate pt-3" />
-      <DecidedSuggestions athleteId={me.id} units={me.units} className="mt-8 border-t-4 border-plate pt-3" />
+      <DecidedSuggestions athleteId={me.id} units={me.units} timezone={me.timezone} className="mt-8 border-t-4 border-plate pt-3" />
 
       {(readOnly || dayNotes(day.data.notes).length > 0) && (
         <Section id="today-notes" title={t("notes.dayTitle")}>

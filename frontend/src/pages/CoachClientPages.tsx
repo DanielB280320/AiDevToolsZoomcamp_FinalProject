@@ -38,7 +38,7 @@ export function CoachClientTodayPage() {
         <span className="sr-only">{t("coach.client.tabs.today")}</span>
       </h1>
       <TodayView
-        me={{ id: scope.athleteId, units: scope.units }}
+        me={{ id: scope.athleteId, units: scope.units, timezone: scope.timezone }}
         readOnly
         sessionLink={(sessionId) => paths.coachClient(scope.athleteId, `/progress/session/${sessionId}`)}
       />
