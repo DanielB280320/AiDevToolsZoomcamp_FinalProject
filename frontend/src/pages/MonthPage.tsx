@@ -9,7 +9,7 @@ export function MonthPage() {
   return (
     <div className="max-w-[40rem]">
       <CalendarNav />
-      <MonthView athleteId={me.id} timezone={me.timezone} monthPath={paths.month} weekPath={paths.week} />
+      <MonthView athleteId={me.id} timezone={me.timezone} units={me.units} monthPath={paths.month} weekPath={paths.week} dayPath={paths.day} />
     </div>
   );
 }

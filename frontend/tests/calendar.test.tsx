@@ -402,8 +402,8 @@ describe("Month", () => {
     expect(kind(11)).toBe("partial"); // 9 Oct
     expect(kind(8)).toBe("rest");
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("October 2026");
-    // Each day links to its week.
-    expect(within(cells[7]!).getByRole("link")).toHaveAttribute("href", "/week?week=2026-10-05");
+    // Each day selects itself in the same month (D103); the detail links on to its week.
+    expect(within(cells[7]!).getByRole("link")).toHaveAttribute("href", "/month?month=2026-10&day=2026-10-05");
   });
 
   it("falls back to the current month for an invalid month param", async () => {

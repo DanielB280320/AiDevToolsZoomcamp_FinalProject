@@ -26,8 +26,14 @@ export function usePendingSuggestions(athleteId: string) {
   });
 }
 
-/** The most recent decided suggestions (accepted and rejected), newest decision first, with who decided. */
-export function useDecidedSuggestions(athleteId: string) {
+/** How many decisions "recent" means on Today. */
+const RECENT_DECISIONS = 5;
+
+/**
+ * Decided suggestions (accepted and rejected), newest decision first, with who decided: the most
+ * recent ones by default, every one with `all` (the Month view filters them by day, D103).
+ */
+export function useDecidedSuggestions(athleteId: string, all = false) {
   return useQuery({
     queryKey: ["suggestions", athleteId, "decided"] as const,
     queryFn: async ({ signal }) => {
@@ -41,11 +47,9 @@ export function useDecidedSuggestions(athleteId: string) {
           return data.items.filter((s) => s.status === status);
         }),
       );
-      return results
-        .flat()
-        .sort((a, b) => (b.decided_at ?? "").localeCompare(a.decided_at ?? ""))
-        .slice(0, 5);
+      return results.flat().sort((a, b) => (b.decided_at ?? "").localeCompare(a.decided_at ?? ""));
     },
+    select: (decided) => (all ? decided : decided.slice(0, RECENT_DECISIONS)),
   });
 }
 

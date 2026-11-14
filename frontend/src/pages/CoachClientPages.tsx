@@ -68,8 +68,10 @@ export function CoachClientMonthPage() {
     <MonthView
       athleteId={scope.athleteId}
       timezone={scope.timezone}
+      units={scope.units}
       monthPath={monthPath}
       weekPath={weekPath}
+      readOnly
     />
   );
 }
