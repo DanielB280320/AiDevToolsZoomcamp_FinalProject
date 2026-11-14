@@ -375,6 +375,7 @@ BUILDERS: dict[str, Builder] = {
         {"meal_key": plan(w)["meal_days"][0]["meals"][0]["meal_key"]}
     ),
     "POST /athletes/{athlete_id}/plan/regenerate": lambda w: Request(json={"scope": "training"}),
+    "GET /athletes/{athlete_id}/plans": lambda w: Request(),
     "GET /athletes/{athlete_id}/plan/versions": lambda w: Request(),
     "GET /athletes/{athlete_id}/plan/versions/{version}": lambda w: Request({"version": "1"}),
     "GET /athletes/{athlete_id}/days/{date}": lambda w: Request({"date": "2026-10-22"}),

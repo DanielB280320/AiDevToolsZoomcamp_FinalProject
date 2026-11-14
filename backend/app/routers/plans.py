@@ -12,6 +12,7 @@ from app.schemas.plans import (
     MealPlanUpdate,
     MealSwapList,
     Plan,
+    PlanList,
     PlanVersionList,
     RegeneratePlanRequest,
     TrainingPlanUpdate,
@@ -21,6 +22,8 @@ from app.services import meal_swaps, plan_edit, plans
 from app.services.clock import ClockDep
 
 router = APIRouter(prefix="/athletes/{athlete_id}/plan", tags=["Plan"])
+
+plans_router = APIRouter(prefix="/athletes/{athlete_id}/plans", tags=["Plan"])
 
 _PROBLEM: dict[str, Any] = {"model": Problem}
 _COMMON: dict[int | str, dict[str, Any]] = {400: _PROBLEM, 401: _PROBLEM, 403: _PROBLEM}
@@ -127,9 +130,13 @@ def regenerate_plan(
     response_model=PlanVersionList,
     responses=_COMMON,
 )
-def list_plan_versions(access: OwnerOrCoachAccess, session: SessionDep) -> PlanVersionList:
-    """All versions, newest first."""
-    return plan_edit.list_versions(session, access.athlete.id)
+def list_plan_versions(
+    access: OwnerOrCoachAccess,
+    session: SessionDep,
+    plan_no: Annotated[int | None, Query(ge=1)] = None,
+) -> PlanVersionList:
+    """All versions, newest first; `plan_no` keeps one plan's (its change timeline, D106)."""
+    return plan_edit.list_versions(session, access.athlete.id, plan_no)
 
 
 @router.get(
@@ -145,3 +152,14 @@ def get_plan_version(
 ) -> Plan:
     """One version, read-only."""
     return plan_edit.get_version(session, access.athlete.id, version)
+
+
+@plans_router.get(
+    "",
+    operation_id="listPlans",
+    response_model=PlanList,
+    responses=_COMMON,
+)
+def list_plans(access: OwnerOrCoachAccess, session: SessionDep) -> PlanList:
+    """One item per plan, newest first (D106)."""
+    return plan_edit.list_plans(session, access.athlete.id)

@@ -45,6 +45,40 @@ class _Carry:
 CARRY: Any = _Carry()
 
 
+def plan_numbers(session: Session, athlete_id: uuid.UUID) -> dict[int, int]:
+    """Plan number of every version of the athlete (D106): `{version: plan_no}`.
+
+    A stored `plan_no` wins. A null (a row the previous release wrote) belongs to the plan of the
+    preceding version, unless its change is `created_new`, which starts the next plan; the first
+    version is plan 1. Numbers never decrease with the version.
+    """
+    rows = session.execute(
+        select(Plan.id, Plan.version, Plan.plan_no)
+        .where(Plan.athlete_id == athlete_id)
+        .order_by(Plan.version)
+    ).all()
+    new_plans = {
+        plan_id
+        for plan_id, change in session.execute(
+            select(PlanChange.plan_id, PlanChange.change)
+            .join(Plan, Plan.id == PlanChange.plan_id)
+            .where(Plan.athlete_id == athlete_id)
+        )
+        if change.get("kind") == "created_new"
+    }
+    numbers: dict[int, int] = {}
+    current = 0
+    for plan_id, version, stored in rows:
+        if stored is not None:
+            current = stored
+        elif current == 0:
+            current = 1
+        elif plan_id in new_plans:
+            current += 1
+        numbers[version] = current
+    return numbers
+
+
 @dataclass(frozen=True)
 class NewPlannedExercise:
     exercise_id: uuid.UUID
@@ -100,6 +134,7 @@ def create_plan_version(
     change_at: dt.datetime | None = None,
     name: str | _Carry | None = CARRY,
     start_date: dt.date | _Carry | None = CARRY,
+    starts_plan: bool = False,
 ) -> Plan:
     """Store `days` as the athlete's next plan version and make it the active one.
 
@@ -114,7 +149,8 @@ def create_plan_version(
     `change` is the `PlanChange` summary (default: version created) recorded at `change_at`
     (default `now`; a suggestion accept keeps the plan's `created_at` but records the decision).
     `name` and `start_date` (D105) are carried forward from the previous active version unless
-    given (`createPlan` gives them; `None` clears).
+    given (`createPlan` gives them; `None` clears). `plan_no` (D106) is the previous version's plan
+    number, or the next one when `starts_plan` (onboarding is plan 1, `createPlan` starts the next).
     """
     session.execute(select(User.id).where(User.id == athlete_id).with_for_update()).one()
     previous = session.scalar(
@@ -141,6 +177,8 @@ def create_plan_version(
                 for d in sorted(previous.meal_days, key=lambda d: d.position)
             ]
         )
+    last_no = max(plan_numbers(session, athlete_id).values(), default=0)
+    plan_no = last_no + 1 if starts_plan or last_no == 0 else last_no
     latest = session.scalar(select(func.max(Plan.version)).where(Plan.athlete_id == athlete_id))
     session.execute(
         update(Plan)
@@ -158,6 +196,7 @@ def create_plan_version(
         updated_at=now,
         name=name,
         start_date=start_date,
+        plan_no=plan_no,
     )
     for day_order, day in enumerate(days):
         training_day = TrainingDay(
@@ -273,6 +312,7 @@ def plan_view(session: Session, plan: Plan, warnings: Sequence[str] = ()) -> out
             "id": plan.id,
             "athlete_id": plan.athlete_id,
             "version": plan.version,
+            "plan_no": plan_numbers(session, plan.athlete_id)[plan.version],
             "source": plan.source,
             "active": plan.active,
             "revision": plan.revision,

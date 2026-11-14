@@ -543,6 +543,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/athletes/{athlete_id}/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the athlete's plans
+         * @description One item per plan, newest first (D106). Only onboarding and the New plan form
+         *     (`createPlan`) start a plan; every other change is a version inside the plan
+         *     (see `listPlanVersions` with `plan_no`).
+         */
+        get: operations["listPlans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/athletes/{athlete_id}/plan/versions": {
         parameters: {
             query?: never;
@@ -555,7 +580,8 @@ export interface paths {
         };
         /**
          * List plan versions
-         * @description All versions, newest first.
+         * @description All versions, newest first, each with the change that produced it (D106). `plan_no`
+         *     keeps only the versions of one plan (its change timeline).
          */
         get: operations["listPlanVersions"];
         put?: never;
@@ -2043,6 +2069,8 @@ export interface components {
             id: components["schemas"]["Id"];
             athlete_id: components["schemas"]["Id"];
             version: number;
+            /** @description Number of the plan this version belongs to (D106). Only onboarding and `createPlan` start a new plan; every other change is a new version of the same plan. */
+            plan_no: number;
             source: components["schemas"]["PlanSource"];
             /** @description Only the active version is editable. */
             active: boolean;
@@ -2102,6 +2130,9 @@ export interface components {
         PlanVersionSummary: {
             id: components["schemas"]["Id"];
             version: number;
+            /** @description Number of the plan this version belongs to (D106). */
+            plan_no: number;
+            change: components["schemas"]["PlanChangeSummary"];
             source: components["schemas"]["PlanSource"];
             active: boolean;
             name: string | null;
@@ -2110,6 +2141,43 @@ export interface components {
             /** @description Null once the author (a linked coach) has deleted their account. */
             created_by: components["schemas"]["UserRef"] | null;
             created_at: components["schemas"]["Timestamp"];
+        };
+        /** @description What produced a plan version (D75(3), D106). Never holds plan content or the plan name. */
+        PlanChangeSummary: {
+            /**
+             * @description `created` is onboarding; `created_new` the New plan form; `unknown` is a row written before the kind was recorded.
+             * @enum {string}
+             */
+            kind: "created" | "created_new" | "training_edited" | "meals_edited" | "regenerated" | "suggestion_accepted" | "portions_rescaled" | "unknown";
+            /** @enum {string|null} */
+            author_role: "athlete" | "coach" | null;
+            /** @description Null once the author (a linked coach) has deleted their account. */
+            author: components["schemas"]["UserRef"] | null;
+            at: components["schemas"]["Timestamp"];
+        };
+        /** @description One plan of the athlete, grouping all its versions (D106). */
+        PlanSummary: {
+            plan_no: number;
+            /** @description User text; null for plans without a name. Never logged. */
+            name: string | null;
+            /** Format: date */
+            start_date: string | null;
+            /** @description When the plan was created (its first version). */
+            created_at: components["schemas"]["Timestamp"];
+            /** @description When the plan was last changed (equals `created_at` while it has no changes). */
+            last_changed_at: components["schemas"]["Timestamp"];
+            /** @description Number of versions after the first one. */
+            changes: number;
+            /** @description True for the plan that holds the active version. */
+            active: boolean;
+            /** @description Source of the latest version. */
+            source: components["schemas"]["PlanSource"];
+            first_version: number;
+            latest_version: number;
+        };
+        PlanList: {
+            /** @description Newest plan first. */
+            items: components["schemas"]["PlanSummary"][];
         };
         PlanVersionList: {
             items: components["schemas"]["PlanVersionSummary"][];
@@ -3768,9 +3836,37 @@ export interface operations {
             422: components["responses"]["UnprocessableEntity"];
         };
     };
-    listPlanVersions: {
+    listPlans: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plans. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listPlanVersions: {
+        parameters: {
+            query?: {
+                plan_no?: number;
+            };
             header?: never;
             path: {
                 /** @description Athlete user id, or `me` for the signed-in athlete. */

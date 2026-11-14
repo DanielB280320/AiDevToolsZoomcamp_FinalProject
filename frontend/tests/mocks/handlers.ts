@@ -63,6 +63,7 @@ export const handlers = [
       id: "plan-default",
       athlete_id: String(params.athleteId),
       version: 1,
+      plan_no: 1,
       source: "generated",
       active: true,
       revision: 0,
@@ -76,6 +77,7 @@ export const handlers = [
       meal_days: [],
     } satisfies Schemas["Plan"]),
   ),
+  http.get(apiUrl("/athletes/:athleteId/plans"), () => HttpResponse.json({ items: [] } satisfies Schemas["PlanList"])),
   http.get(apiUrl("/athletes/:athleteId/charts/weekly-summary"), () => HttpResponse.json(weeklySummaryFixture())),
   http.get(apiUrl("/athletes/:athleteId/charts/totals"), () =>
     HttpResponse.json({ sessions_done: 0, personal_records: 0, first_session_date: null } satisfies Schemas["ProgressTotals"]),

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import type { Plan } from "../../api/plan";
+import { type Plan, usePlans } from "../../api/plan";
 import { ClipboardIcon } from "../../components/icons";
 import { localDay } from "../../lib/today";
 
@@ -28,6 +28,8 @@ export function PlanSummary({
   viewer: Viewer;
 }) {
   const { t, i18n } = useTranslation();
+  const plans = usePlans(plan.athlete_id);
+  const changes = plans.data?.find((p) => p.plan_no === plan.plan_no)?.changes;
   const today = localDay(new Date(), timezone, i18n.language).isoDate;
   const mealCount = plan.meal_days.reduce(
     (sum, day) => sum + day.meals.length,
@@ -62,7 +64,7 @@ export function PlanSummary({
         {t("plan.current.title")}
       </h2>
       <p className="mt-1 break-words font-display text-step-1 font-bold">
-        {plan.name ?? t("plan.current.fallbackName", { version: plan.version })}
+        {plan.name ?? t("plan.current.fallbackName", { number: plan.plan_no })}
       </p>
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-step--1">
         {started && (
@@ -71,13 +73,14 @@ export function PlanSummary({
             <dd>{started}</dd>
           </>
         )}
-        <dt className="font-semibold">{t("plan.current.version")}</dt>
-        <dd>
-          {t("plan.current.versionValue", {
-            version: plan.version,
-            source: t(`plan.history.sources.${plan.source}`),
-          })}
-        </dd>
+        <dt className="font-semibold">{t("plan.current.origin")}</dt>
+        <dd>{t(`plan.history.sources.${plan.source}`)}</dd>
+        {changes !== undefined && (
+          <>
+            <dt className="font-semibold">{t("plan.current.changes")}</dt>
+            <dd>{t("plan.current.changesValue", { count: changes })}</dd>
+          </>
+        )}
         <dt className="font-semibold">{t("plan.current.lastChange")}</dt>
         <dd>{changed}</dd>
         <dt className="font-semibold">{t("plan.current.trainingDays")}</dt>

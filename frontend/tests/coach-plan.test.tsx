@@ -13,6 +13,26 @@ type Schemas = components["schemas"];
 
 const ANA = "a-1";
 
+function basePlan(): Schemas["Plan"] {
+  return {
+    id: "plan-1",
+    athlete_id: ANA,
+    version: 1,
+    plan_no: 1,
+    source: "generated",
+    active: true,
+    revision: 3,
+    name: null,
+    start_date: null,
+    created_by: { id: ANA, display_name: "Alice", role: "athlete" },
+    created_at: "2026-10-20T08:00:00Z",
+    updated_at: "2026-10-20T08:00:00Z",
+    warnings: [],
+    training_days: [],
+    meal_days: [],
+  };
+}
+
 describe("plan editor in the coach context", () => {
   it("saves through PUT athletes/{athlete_id}/plan/training with the plan's revision", async () => {
     server.use(
@@ -41,6 +61,7 @@ describe("plan editor in the coach context", () => {
       id: "plan-1",
       athlete_id: ANA,
       version: 1,
+      plan_no: 1,
       source: "generated",
       active: true,
       revision: 3,
@@ -86,5 +107,63 @@ describe("plan editor in the coach context", () => {
     await user.type(sets, "4");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(puts).toEqual([{ path: `/api/v1/athletes/${ANA}/plan/training`, revision: 3 }]));
+  });
+  it("words the History tab for the coach: the client, coach names and their plans", async () => {
+    server.use(
+      meOk(meFixture({ id: "c-1", display_name: "Cleo", role: "coach" })),
+      http.get(apiUrl("/coach/athletes"), () =>
+        HttpResponse.json({
+          items: [
+            {
+              athlete: { id: ANA, display_name: "Alice", role: "athlete" },
+              units: "metric",
+              timezone: "Europe/Madrid",
+              link_id: "l-1",
+              linked_since: "2026-10-01T10:00:00Z",
+              needs_attention: false,
+              attention_reasons: [],
+              training_adherence_7d: null,
+              last_log_date: null,
+              pending_suggestion_count: 0,
+            },
+          ],
+        } satisfies Schemas["CoachAthleteList"]),
+      ),
+    );
+    const athlete = { id: ANA, display_name: "Alice", role: "athlete" } as const;
+    const cleo = { id: "c-1", display_name: "Cleo", role: "coach" } as const;
+    const at = "2026-10-20T08:00:00Z";
+    const entry = (n: number, kind: Schemas["PlanChangeSummary"]["kind"], who: typeof athlete | typeof cleo): Schemas["PlanVersionSummary"] => ({
+      id: `p-${n}`,
+      version: n,
+      plan_no: 1,
+      change: { kind, author_role: who.role, author: who, at },
+      source: "custom",
+      active: n === 2,
+      name: null,
+      start_date: null,
+      created_by: who,
+      created_at: at,
+    });
+    server.use(
+      http.get(apiUrl("/athletes/:athleteId/plan"), () => HttpResponse.json({ ...basePlan(), id: "p-2" })),
+      http.get(apiUrl("/athletes/:athleteId/plans"), () =>
+        HttpResponse.json({
+          items: [{ plan_no: 1, name: "Base", start_date: null, created_at: at, last_changed_at: at, changes: 1, active: true, source: "custom", first_version: 1, latest_version: 2 }],
+        } satisfies Schemas["PlanList"]),
+      ),
+      http.get(apiUrl("/athletes/:athleteId/plan/versions"), () =>
+        HttpResponse.json({ items: [entry(2, "training_edited", cleo), entry(1, "created", athlete)] } satisfies Schemas["PlanVersionList"]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp(`/coach/clients/${ANA}/plan`);
+    await user.click(await screen.findByRole("tab", { name: "History" }));
+    expect(await screen.findByText(/Every plan created for the client/)).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Open Base" }));
+    const entries = await within(await screen.findByTestId("plan-timeline")).findAllByRole("listitem");
+    expect(entries[0]).toHaveTextContent("Training edited");
+    expect(entries[0]).toHaveTextContent("Coach Cleo");
+    expect(entries[1]).toHaveTextContent("The client");
   });
 });

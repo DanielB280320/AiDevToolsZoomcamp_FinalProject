@@ -272,6 +272,7 @@ describe("'edited by' labels", () => {
     id: "plan-1",
     athlete_id: meFixture().id,
     version: 2,
+    plan_no: 1,
     source: "custom",
     active: true,
     revision: 2,

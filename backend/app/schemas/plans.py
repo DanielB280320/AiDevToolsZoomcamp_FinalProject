@@ -95,6 +95,7 @@ class Plan(ResponseModel):
     id: uuid.UUID
     athlete_id: uuid.UUID
     version: int
+    plan_no: int
     source: PlanSource
     active: bool
     revision: int
@@ -108,9 +109,47 @@ class Plan(ResponseModel):
     warnings: list[str]
 
 
+PlanChangeKind = Literal[
+    "created",
+    "created_new",
+    "training_edited",
+    "meals_edited",
+    "regenerated",
+    "suggestion_accepted",
+    "portions_rescaled",
+    "unknown",
+]
+
+
+class PlanChangeSummary(ResponseModel):
+    kind: PlanChangeKind
+    author_role: Literal["athlete", "coach"] | None
+    author: UserRef | None
+    at: dt.datetime
+
+
+class PlanSummary(ResponseModel):
+    plan_no: int
+    name: str | None
+    start_date: dt.date | None
+    created_at: dt.datetime
+    last_changed_at: dt.datetime
+    changes: int
+    active: bool
+    source: PlanSource
+    first_version: int
+    latest_version: int
+
+
+class PlanList(ResponseModel):
+    items: list[PlanSummary]
+
+
 class PlanVersionSummary(ResponseModel):
     id: uuid.UUID
     version: int
+    plan_no: int
+    change: PlanChangeSummary
     source: PlanSource
     active: bool
     name: str | None
