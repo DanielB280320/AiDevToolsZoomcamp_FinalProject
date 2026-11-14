@@ -173,6 +173,7 @@ describe("coach context", () => {
     server.use(http.get(apiUrl("/athletes/:athleteId/body-metrics"), () => HttpResponse.json({ items: [] })));
     renderApp(`/coach/clients/${ANA}/body`);
     expect(await screen.findByText(en.body.empty)).toBeInTheDocument();
+    expect(screen.getByTestId("body-description")).toHaveTextContent(en.body.about.coach);
     expect(screen.queryByRole("button", { name: /log|save/i })).not.toBeInTheDocument();
   });
 
