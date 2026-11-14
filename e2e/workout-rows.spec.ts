@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { onboard, run, signIn, signUp } from "./helpers";
+import { giveFirstStrengthExerciseAWeight, onboard, run, signIn, signUp } from "./helpers";
 
 /**
  * #223 (F10.6-F10.10, D95, D96): the workout screen at 360 px. Every exercise starts collapsed;
@@ -18,6 +18,8 @@ test("workout cards at 360 px: collapsed start, wrapping cards, check, complete 
   const tag = run();
   const athlete = await signUp(page.context().request, "athlete", `Cards ${tag.slice(-6)}`, tag);
   await onboard(page.context().request, { trainToday: true });
+  // The first strength exercise of each day gets a weight; the others stay week-1 weightless.
+  await giveFirstStrengthExerciseAWeight(page.context().request);
   await signIn(page, athlete);
   await expect(page).toHaveURL(/\/today$/);
 
@@ -28,7 +30,9 @@ test("workout cards at 360 px: collapsed start, wrapping cards, check, complete 
     await expect(headers.first()).toBeVisible();
     const count = await headers.count();
     for (let i = 0; i < count; i++) await expect(headers.nth(i)).toHaveAttribute("aria-expanded", "false");
-    await expect(page.getByTestId("set-card")).toHaveCount(0);
+    // The panels are hidden, not removed: no card is visible.
+    await expect(page.getByTestId("set-card").first()).toBeHidden();
+    for (const card of await page.getByTestId("set-card").all()) await expect(card).toBeHidden();
   });
 
   const firstStrength = page.getByRole("region").filter({ has: page.getByText("Weight not defined") });
@@ -74,15 +78,28 @@ test("workout cards at 360 px: collapsed start, wrapping cards, check, complete 
     await expect(page.getByTestId("set-card").filter({ hasText: "20 kg" })).toHaveCount(1);
   });
 
-  await test.step("complete all as planned: no rest timer, workout stays open", async () => {
+  await test.step("complete all as planned logs the sets that have a weight and leaves weightless strength sets", async () => {
+    const cards = page.getByTestId("set-card");
+    const total = await cards.count();
+    const weightless = await cards.filter({ hasText: "Weight not defined" }).count();
+    expect(weightless, "week-1 strength sets without a weight remain").toBeGreaterThan(0);
+    expect(total - weightless, "there are sets it can log").toBeGreaterThan(1);
+
     const complete = page.getByRole("button", { name: "Complete all as planned" });
-    // Shown only when some unlogged set has a target it can copy (not for weightless strength sets).
-    if ((await complete.count()) > 0) {
-      await complete.click();
-      await page.getByRole("button", { name: "Yes, complete them" }).click();
-      await expect(complete).toHaveCount(0);
-      await expect(page.getByRole("timer")).toHaveCount(0);
-    }
+    await expect(complete).toBeVisible();
+    await complete.click();
+    await page.getByRole("button", { name: "Yes, complete them" }).click();
+    await expect(complete).toHaveCount(0);
+    await expect(page.getByRole("timer")).toHaveCount(0);
+
+    // Pressed: every set except the weightless ones and the one entered by hand (not "as planned").
+    const pressed = page.getByRole("button", { name: /^Done as planned, /, pressed: true });
+    await expect(pressed).toHaveCount(total - weightless - 1);
+    // The weightless strength sets are still unlogged.
+    await expect(cards.filter({ hasText: "Weight not defined" })).toHaveCount(weightless);
+    await expect(
+      cards.filter({ hasText: "Weight not defined" }).getByRole("button", { name: /^Done as planned, /, pressed: false }),
+    ).toHaveCount(weightless);
     await expect(page.getByRole("button", { name: "Finish workout" })).toBeVisible();
     expect(await page.evaluate(noSideways)).toBeLessThanOrEqual(0);
   });
