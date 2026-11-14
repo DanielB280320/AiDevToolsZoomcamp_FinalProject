@@ -244,7 +244,9 @@
       "reps_other": "{{count}} reps",
       "seconds": "{{count}} s",
       "exerciseCompletion": "{{value}}% completed",
-      "sessionCompletion": "Session completion: {{value}}%",
+      "exerciseCompletionLabel": "{{name}} completion",
+      "sessionCompletionLabel": "Session completion",
+      "percent": "{{value}}%",
       "slot": {
         "breakfast": "Breakfast",
         "lunch": "Lunch",

@@ -258,7 +258,8 @@ describe("decisions made by the coach", () => {
     renderApp("/today");
     const rows = await screen.findAllByTestId("decided-suggestion");
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent("Accepted by Cleo (coach)");
+    expect(rows[0]).toHaveTextContent("Accepted by Cleo (coach) · Oct 24, 2026");
+    expect(rows[1]).toHaveTextContent("Rejected · Oct 24, 2026");
     expect(rows[1]).toHaveTextContent(en.suggestions.decided.rejected);
     expect(rows[1]).not.toHaveTextContent("Ana");
   });

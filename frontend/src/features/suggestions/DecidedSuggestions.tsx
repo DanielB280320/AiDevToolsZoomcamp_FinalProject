@@ -11,17 +11,22 @@ function titleOf(t: (key: string) => string, suggestion: Suggestion): string {
 
 /**
  * The latest decided suggestions with who decided them (F11, F16): "Accepted by <coach>" when a
- * coach decided, plain "Accepted" / "Rejected" for the athlete's own decisions. Hidden when empty.
+ * coach decided, plain "Accepted" / "Rejected" for the athlete's own decisions, each with the date it was
+ * decided (D98). Hidden when empty.
  */
 export function DecidedSuggestions({
   athleteId,
+  timezone,
   className = "",
 }: {
   athleteId: string;
   units?: UnitSystem;
+  /** The athlete's time zone for the decision dates; the browser's zone when omitted. */
+  timezone?: string;
   className?: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const dateOf = (iso: string) => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeZone: timezone }).format(new Date(iso));
   const headingId = useId();
   const decided = useDecidedSuggestions(athleteId);
   if (!decided.data || decided.data.length === 0) return null;
@@ -44,6 +49,12 @@ export function DecidedSuggestions({
                   : by
                     ? t("suggestions.decided.rejectedBy", { name: by })
                     : t("suggestions.decided.rejected")}
+                {s.decided_at && (
+                  <>
+                    {" · "}
+                    <time dateTime={s.decided_at}>{dateOf(s.decided_at)}</time>
+                  </>
+                )}
               </p>
             </li>
           );
