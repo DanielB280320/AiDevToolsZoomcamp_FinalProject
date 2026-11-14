@@ -324,6 +324,39 @@ def test_body_chart_empty_default_and_invalid_weeks(api: Api) -> None:
     assert problem(get(api, "body", weeks=13), 400, "bad_request")
 
 
+# ───────────── totals to date ─────────────
+
+
+def test_totals_count_finished_sessions_and_records_over_the_whole_history(
+    seeded: tuple[Api, Seeded],
+) -> None:
+    api, seed = seeded
+    _history(api, seed)  # strength tops 50, 52.5, 50, 57: three records; one unfinished session
+    with Session(api.app.state.engine) as db:
+        add_session(db, seed, dt.date(2025, 6, 2), sets=[(8, 40, 8, 40)])  # over a year ago
+        add_session(db, seed, dt.date(2026, 10, 19), timed_seconds=500)  # first timed: a record
+        add_session(db, seed, dt.date(2026, 10, 22), timed_seconds=450)  # today, no record
+        add_session(db, seed, dt.date(2026, 10, 23), sets=[(8, 99, 8, 55)])  # tomorrow: ignored
+        db.commit()
+    body = ok(api, "totals", "ProgressTotals")
+    # 40 (2025), 50, 52.5 and 57 kg are records, 50 kg on 8 Oct is not; plus the first timed one.
+    assert body == {"sessions_done": 7, "personal_records": 5, "first_session_date": "2025-06-02"}
+
+
+def test_totals_ignore_skipped_sets_and_are_zero_without_history(
+    seeded: tuple[Api, Seeded],
+) -> None:
+    api, seed = seeded
+    empty = {"sessions_done": 0, "personal_records": 0, "first_session_date": None}
+    assert ok(api, "totals", "ProgressTotals") == empty
+    with Session(api.app.state.engine) as db:
+        add_session(db, seed, dt.date(2026, 10, 1), sets=[(8, 50, 8, 50)])
+        add_session(db, seed, dt.date(2026, 10, 8), sets=[(8, 60, 8, 60)], skipped_sets=(1,))
+        db.commit()
+    body = ok(api, "totals", "ProgressTotals")
+    assert body == {"sessions_done": 2, "personal_records": 1, "first_session_date": "2026-10-01"}
+
+
 # ───────────── authorization ─────────────
 
 PATHS = [
@@ -332,6 +365,7 @@ PATHS = [
     "adherence?from=2026-10-19&to=2026-10-25",
     "weekly-summary",
     "body",
+    "totals",
 ]
 
 

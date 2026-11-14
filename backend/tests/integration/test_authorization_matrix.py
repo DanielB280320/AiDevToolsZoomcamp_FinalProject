@@ -416,6 +416,7 @@ BUILDERS: dict[str, Builder] = {
     "GET /athletes/{athlete_id}/charts/adherence": lambda w: Request(params=RANGE),
     "GET /athletes/{athlete_id}/charts/weekly-summary": lambda w: Request(),
     "GET /athletes/{athlete_id}/charts/body": lambda w: Request(),
+    "GET /athletes/{athlete_id}/charts/totals": lambda w: Request(),
 }
 
 

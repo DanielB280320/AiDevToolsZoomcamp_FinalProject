@@ -61,3 +61,11 @@
     }
   }
 }
+
+/* A strip that scrolls sideways (tab bars on a phone) without the browser's scrollbar and arrows. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

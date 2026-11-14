@@ -15,6 +15,7 @@ export type AdherenceWeek = Schemas["AdherenceWeek"];
 export type WeeklySummary = Schemas["WeeklySummary"];
 export type BodyChart = Schemas["BodyChart"];
 export type BodyChartPoint = Schemas["BodyChartPoint"];
+export type ProgressTotals = Schemas["ProgressTotals"];
 export type DatedValueSeries = WeeklySummary["sparklines"]["weight_avg_kg"];
 
 /** The only range lengths the chart endpoints accept (D76(4)). */
@@ -92,6 +93,21 @@ export function useBodyChart(athleteId: string, weeks: ChartWeeks) {
     queryFn: async ({ signal }) => {
       const { data, error, response } = await api.GET("/athletes/{athlete_id}/charts/body", {
         params: { path: { athlete_id: athleteId }, query: { weeks } },
+        signal,
+      });
+      if (data) return data;
+      throw apiError(response, error);
+    },
+  });
+}
+
+/** All-time finished sessions and personal records (`getProgressTotals`), for Today's overview. */
+export function useProgressTotals(athleteId: string) {
+  return useQuery({
+    queryKey: chartsKey(athleteId, "totals"),
+    queryFn: async ({ signal }) => {
+      const { data, error, response } = await api.GET("/athletes/{athlete_id}/charts/totals", {
+        params: { path: { athlete_id: athleteId } },
         signal,
       });
       if (data) return data;

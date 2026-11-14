@@ -1834,6 +1834,33 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /athletes/{athlete_id}/charts/totals:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Charts]
+      operationId: getProgressTotals
+      summary: All-time totals for the overview on Today
+      description: |
+        Finished sessions and personal records up to today (athlete's time zone), over the whole
+        history (F9.5, D101). A personal record uses the ranking of the exercise chart (D76(4),
+        D88): counted once per finished session and exercise whose top set beats every earlier
+        finished session of that exercise; the first session of an exercise counts.
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: Totals.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressTotals'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   # ───────────────────────────── Coach ─────────────────────────────
   /coach/profile:
     get:
@@ -5075,6 +5102,23 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BodyChartPoint'
+    ProgressTotals:
+      type: object
+      required: [sessions_done, personal_records, first_session_date]
+      properties:
+        sessions_done:
+          type: integer
+          minimum: 0
+          description: Finished sessions up to today.
+        personal_records:
+          type: integer
+          minimum: 0
+          description: Personal records set in finished sessions up to today.
+        first_session_date:
+          description: Date of the first finished session; `null` when there is none.
+          oneOf:
+            - $ref: '#/components/schemas/LocalDate'
+            - type: 'null'
 
     # ───────── Coach ─────────
     CoachProfileInput:

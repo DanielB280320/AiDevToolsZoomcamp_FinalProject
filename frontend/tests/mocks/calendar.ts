@@ -42,7 +42,9 @@ export function calendarDayFixture(date: string, overrides: Partial<Schemas["Cal
   };
 }
 
-export function dayViewFixture(date: string, overrides: Partial<Schemas["DayView"]> = {}): Schemas["DayView"] {
+export function dayViewFixture(requested: string, overrides: Partial<Schemas["DayView"]> = {}): Schemas["DayView"] {
+  // The API answers `days/today` with the real local date (`LocalDate`), never the word "today".
+  const date = requested === "today" ? "2026-10-24" : requested;
   return {
     date,
     weekday: "mon",
@@ -89,7 +91,7 @@ export function sessionFixture(date: string, overrides: Partial<Schemas["Session
 /** Default: today is a rest day. Tests override with `server.use(...)`. */
 export const defaultDay = () =>
   http.get(url("/athletes/:athleteId/days/:date"), ({ params }) =>
-    HttpResponse.json(dayViewFixture(params.date === "today" ? "2026-10-24" : String(params.date))),
+    HttpResponse.json(dayViewFixture(String(params.date))),
   );
 
 export const defaultCalendar = () =>

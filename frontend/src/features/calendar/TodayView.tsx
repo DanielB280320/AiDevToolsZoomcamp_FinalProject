@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { type DayView, useDay } from "../../api/calendar";
 import { usePlan } from "../../api/plan";
 import type { Me } from "../../api/session";
+import { DayChecklist, MEALS_SECTION_ID, SUGGESTIONS_SECTION_ID, TRAINING_SECTION_ID } from "./DayChecklist";
 import { EnergySummary } from "./EnergySummary";
 import { QueryState } from "./QueryState";
 import { StatusBadge } from "./StatusBadge";
@@ -222,7 +223,7 @@ function ReadOnlyMeals({ day }: { day: DayView }) {
 }
 
 /**
- * Today (spec F9): the estimated energy balance, the meals, the session, then the pending and
+ * Today (spec F9): the day checklist (what is still open, D100), the estimated energy balance, the meals, the session, then the pending and
  * the recently decided suggestions (D98).
  * `readOnly` is the coach context (F16.4): no workout link, no meal logging, no own banners; the
  * pending suggestions stay actionable (F11).
@@ -254,18 +255,19 @@ export function TodayView({
   const trainingState = !session ? "rest" : session.status === "done" ? "done" : session.status === "planned" ? "planned" : "inProgress";
   return (
     <>
+      <DayChecklist day={day.data} athleteId={me.id} who={who} units={me.units} progressLink={readOnly ? undefined : paths.progress} />
       {!readOnly && <TodayBanners />}
 
       <Section id="today-energy" description={t("calendar.today.about.energy")} title={t("calendar.today.energy")} icon={<FlameIcon className={SECTION_ICON} />}>
         <EnergySummary energy={energy} compact={false} />
       </Section>
 
-      <Section id="today-meals" description={t(`calendar.today.about.meals.${who}`)} title={t("calendar.today.meals")} icon={<UtensilsIcon className={SECTION_ICON} />}>
+      <Section id={MEALS_SECTION_ID} description={t(`calendar.today.about.meals.${who}`)} title={t("calendar.today.meals")} icon={<UtensilsIcon className={SECTION_ICON} />}>
         <EditedBy name={coachEditor(plan.data?.meal_days.find((d) => d.weekday === day.data.weekday)?.edited_by)} />
         {readOnly ? <ReadOnlyMeals day={day.data} /> : <MealsSection athleteId={me.id} day={day.data} />}
       </Section>
 
-      <Section id="today-training" description={t(`calendar.today.about.training.${who}.${trainingState}`)} title={t("calendar.today.training")} icon={<DumbbellIcon className={SECTION_ICON} />}>
+      <Section id={TRAINING_SECTION_ID} description={t(`calendar.today.about.training.${who}.${trainingState}`)} title={t("calendar.today.training")} icon={<DumbbellIcon className={SECTION_ICON} />}>
         <p className="mt-2 flex items-center gap-3 text-step-1">
           <StatusBadge kind={kind} />
           <span className="font-semibold">{session?.training_day_name ?? t("calendar.restDay")}</span>
@@ -312,6 +314,7 @@ export function TodayView({
       </Section>
 
       <PendingSuggestions
+        id={SUGGESTIONS_SECTION_ID}
         athleteId={me.id}
         units={me.units}
         className="mt-8 border-t-4 border-plate pt-3"
