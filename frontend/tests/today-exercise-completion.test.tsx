@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
@@ -75,5 +76,85 @@ describe("Today: completion of the session and per exercise after the session is
     await row("Back squat");
     expect(screen.queryByTestId("exercise-completion")).not.toBeInTheDocument();
     expect(screen.queryByTestId("session-completion")).not.toBeInTheDocument();
+  });
+});
+
+describe("Today: icons, descriptions and the session chart of an exercise (D99)", () => {
+  const chartSet = (setNo: number, reps: number | null): Schemas["SessionChartSet"] => ({
+    set_no: setNo,
+    status: reps === null ? "missed" : "met",
+    completion: reps === null ? 0 : 1,
+    target_reps: 8,
+    target_weight_kg: 60,
+    target_seconds: null,
+    reps,
+    weight_kg: reps === null ? null : 60,
+    seconds: null,
+  });
+  const chart: Schemas["SessionChart"] = {
+    session_id: "s-1",
+    date: "2026-10-26",
+    training_day_name: "Push",
+    status: "done",
+    completion: 0.6111,
+    kcal: 300,
+    exercises: [
+      { exercise: exercises[0]!.exercise, is_extra: false, completion: 1, sets: [chartSet(1, 8)] },
+      { exercise: exercises[1]!.exercise, is_extra: false, completion: 0.5, sets: [chartSet(1, 8), chartSet(2, null)] },
+    ],
+  };
+  const chartOk = () => http.get(apiUrl("/athletes/a-1/charts/session/s-1"), () => HttpResponse.json(chart));
+
+  it("opens and closes the per-set chart of the selected exercise only", async () => {
+    server.use(meOk(meFixture({ id: "a-1", role: "athlete" })), dayWith("done"), chartOk());
+    renderApp("/today");
+    const bench = await row("Bench press");
+    const toggle = within(bench).getByRole("button", { name: "Bench press" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("exercise-session-chart")).not.toBeInTheDocument();
+
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const region = within(bench).getByRole("region", { name: "Session chart for Bench press" });
+    expect(await within(region).findByRole("img", { name: "Target versus actual per set for Bench press" })).toBeInTheDocument();
+    const sets = within(region).getAllByTestId("set-row");
+    expect(sets.map((s) => s.dataset.status)).toEqual(["met", "missed"]);
+    // Only the selected exercise is charted.
+    expect(screen.getAllByTestId("exercise-session-chart")).toHaveLength(1);
+
+    await userEvent.click(toggle);
+    expect(screen.queryByTestId("exercise-session-chart")).not.toBeInTheDocument();
+  });
+
+  it("says so when the session chart has no sets for the exercise", async () => {
+    server.use(meOk(meFixture({ id: "a-1", role: "athlete" })), dayWith("in_progress"), chartOk());
+    renderApp("/today");
+    const curl = await row("Cable curl");
+    await userEvent.click(within(curl).getByRole("button", { name: "Cable curl" }));
+    expect(await within(curl).findByText("This exercise has no sets to chart.")).toBeInTheDocument();
+  });
+
+  it("describes each section and what the athlete is expected to do", async () => {
+    server.use(meOk(meFixture({ id: "a-1", role: "athlete" })), dayWith("planned"));
+    renderApp("/today");
+    await row("Back squat");
+    const described = (title: string) => screen.getByRole("heading", { level: 2, name: title }).closest("section") as HTMLElement;
+    expect(within(described("Estimated energy today")).getByTestId("section-description")).toHaveTextContent(/Nothing to do here/);
+    expect(within(described("Meals")).getByTestId("section-description")).toHaveTextContent(/Mark each meal/);
+    expect(within(described("Training")).getByTestId("section-description")).toHaveTextContent(/Start the workout and log each set/);
+  });
+
+  it("puts a decorative icon on each section title and each calorie figure", async () => {
+    server.use(meOk(meFixture({ id: "a-1", role: "athlete" })), dayWith("done"));
+    renderApp("/today");
+    await row("Back squat");
+    for (const title of ["Estimated energy today", "Meals", "Training"]) {
+      // The icon adds nothing to the heading's name.
+      const heading = screen.getByRole("heading", { level: 2, name: title });
+      expect(heading.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+    }
+    for (const label of ["Eaten (kcal)", "Burned (kcal)", "Balance (kcal)", "Target balance (kcal)"]) {
+      expect(screen.getByText(label).querySelector("svg[aria-hidden='true']")).not.toBeNull();
+    }
   });
 });

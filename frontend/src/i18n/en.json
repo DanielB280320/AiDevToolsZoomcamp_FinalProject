@@ -246,6 +246,34 @@
       "exerciseCompletion": "{{value}}% completed",
       "exerciseCompletionLabel": "{{name}} completion",
       "sessionCompletionLabel": "Session completion",
+      "exerciseChartRegion": "Session chart for {{name}}",
+      "about": {
+        "energy": "Calories eaten and burned so far today, and how the balance compares with the goal's target. Nothing to do here: it updates as meals and sets are logged.",
+        "meals": {
+          "athlete": "The meals planned for today. Mark each meal as eaten, adjusted or skipped, and add anything extra you ate, so the calorie numbers stay accurate.",
+          "coach": "The meals planned for this day and whether your client logged them. Nothing to do here."
+        },
+        "training": {
+          "athlete": {
+            "rest": "No workout is planned for today. Nothing to do: rest is part of the plan.",
+            "planned": "The workout planned for today. Start the workout and log each set. Select an exercise to see its targets as a chart.",
+            "inProgress": "Today's workout is under way. Continue the workout and log the remaining sets. Select an exercise to compare target and actual per set.",
+            "done": "Today's workout is finished. Nothing left to do: select an exercise to compare target and actual per set."
+          },
+          "coach": {
+            "rest": "No workout is planned for your client on this day. Nothing to do here.",
+            "planned": "The workout planned for your client. Select an exercise to see its targets as a chart, and leave a note if needed.",
+            "inProgress": "Your client's workout is under way. Select an exercise to compare target and actual per set, and leave a note if needed.",
+            "done": "Your client finished this workout. Select an exercise to compare target and actual per set, and leave a note if needed."
+          }
+        },
+        "suggestions": "Changes FitWise proposes from the recent logs, each with its reason. Accept, edit or reject each one.",
+        "decisions": "Suggestions that were already accepted or rejected. For reference only: nothing to do here.",
+        "notes": {
+          "athlete": "Notes from your coach about this day. Nothing to do: read them before you train.",
+          "coach": "Your notes about this day, visible to your client. Add one if needed."
+        }
+      },
       "percent": "{{value}}%",
       "slot": {
         "breakfast": "Breakfast",
@@ -748,6 +776,7 @@
       "back": "Back to Progress",
       "viewChart": "View session chart",
       "empty": "No sets were logged in this session.",
+      "exerciseEmpty": "This exercise has no sets to chart.",
       "chartLabel": "Target versus actual per set for {{name}}",
       "target": "Target",
       "actual": "Actual",

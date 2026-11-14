@@ -16,20 +16,15 @@ const STATUS_COLOR = {
   extra: "text-slate",
 } as const;
 
-function ExerciseSets({ entry, units }: { entry: SessionChartExercise; units: UnitSystem }) {
+/** The target vs. actual bars of one exercise and its set list. */
+function SetsChart({ entry, units }: { entry: SessionChartExercise; units: UnitSystem }) {
   const { t } = useTranslation();
   const measure = setMeasure(entry.sets);
   const bars = setBars(entry.sets, measure);
-  const completion = percent(entry.completion);
   const unit = weightUnit(units);
 
   return (
-    <section aria-labelledby={`ex-${entry.exercise.id}`} className="mt-6 min-w-0" data-testid="session-exercise">
-      <h3 id={`ex-${entry.exercise.id}`} className="font-display text-step-1 font-bold">
-        {entry.exercise.name}
-        {entry.is_extra && <span className="ml-2 text-step--1 font-semibold text-slate">{t("charts.session.extra")}</span>}
-        {completion !== null && <span className="ml-2 text-step--1 font-semibold text-slate">{t("charts.percent", { value: completion })}</span>}
-      </h3>
+    <>
       <ChartBox label={t("charts.session.chartLabel", { name: entry.exercise.name })} height={180}>
         <BarChart data={bars} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
           <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
@@ -69,6 +64,21 @@ function ExerciseSets({ entry, units }: { entry: SessionChartExercise; units: Un
           );
         })}
       </ol>
+    </>
+  );
+}
+
+function ExerciseSets({ entry, units }: { entry: SessionChartExercise; units: UnitSystem }) {
+  const { t } = useTranslation();
+  const completion = percent(entry.completion);
+  return (
+    <section aria-labelledby={`ex-${entry.exercise.id}`} className="mt-6 min-w-0" data-testid="session-exercise">
+      <h3 id={`ex-${entry.exercise.id}`} className="font-display text-step-1 font-bold">
+        {entry.exercise.name}
+        {entry.is_extra && <span className="ml-2 text-step--1 font-semibold text-slate">{t("charts.session.extra")}</span>}
+        {completion !== null && <span className="ml-2 text-step--1 font-semibold text-slate">{t("charts.percent", { value: completion })}</span>}
+      </h3>
+      <SetsChart entry={entry} units={units} />
     </section>
   );
 }
@@ -97,6 +107,37 @@ export function SessionChartView({ athleteId, sessionId, units }: { athleteId: s
   return (
     <ChartState query={query} isEmpty={(d) => d.exercises.length === 0} emptyMessage={t("charts.session.empty")}>
       {(data) => <SessionBody data={data} units={units} />}
+    </ChartState>
+  );
+}
+
+/**
+ * The session chart of a single exercise (D99): the same bars and set list as the session view,
+ * for the exercise opened on Today. The heading is the caller's (the exercise row).
+ */
+export function SessionExerciseChart({
+  athleteId,
+  sessionId,
+  exerciseId,
+  units,
+}: {
+  athleteId: string;
+  sessionId: string;
+  exerciseId: string;
+  units: UnitSystem;
+}) {
+  const { t } = useTranslation();
+  const query = useSessionChart(athleteId, sessionId);
+  return (
+    <ChartState
+      query={query}
+      isEmpty={(d) => !d.exercises.some((e) => e.exercise.id === exerciseId && e.sets.length > 0)}
+      emptyMessage={t("charts.session.exerciseEmpty")}
+    >
+      {(data) => {
+        const entry = data.exercises.find((e) => e.exercise.id === exerciseId);
+        return entry ? <SetsChart entry={entry} units={units} /> : null;
+      }}
     </ChartState>
   );
 }

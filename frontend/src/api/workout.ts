@@ -35,6 +35,8 @@ function invalidateAfterLogging(queryClient: QueryClient, sessionId: string) {
   void queryClient.invalidateQueries({ queryKey: ["day"] });
   void queryClient.invalidateQueries({ queryKey: ["calendar"] });
   void queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+  // The per-set chart of the session, opened from an exercise on Today (D99).
+  void queryClient.invalidateQueries({ queryKey: ["charts"] });
 }
 
 /** Idempotent per (session, exercise, set number): retrying the same input never duplicates a set. */
