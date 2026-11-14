@@ -291,7 +291,42 @@
       "startWorkout": "Start workout",
       "continueWorkout": "Continue workout",
       "viewWorkout": "View workout",
-      "notLogged": "Not logged"
+      "notLogged": "Not logged",
+      "checklist": {
+        "title": "Day checklist",
+        "about": {
+          "athlete": "The goal you are working towards, and what today asks of you. Log every planned meal, finish the workout and answer the suggestions: when nothing is pending, the day is complete.",
+          "coach": "The goal your client is working towards, and what this day asks of them: planned meals logged, the workout finished and the suggestions answered."
+        },
+        "complete": "Day complete: nothing is pending.",
+        "open_one": "{{count}} of {{total}} still pending",
+        "open_other": "{{count}} of {{total}} still pending",
+        "done": "Done",
+        "pending": "Pending",
+        "meals_one": "{{logged}} of {{count}} planned meal logged",
+        "meals_other": "{{logged}} of {{count}} planned meals logged",
+        "training": {
+          "rest": "Rest day: no workout planned",
+          "planned": "Workout not started",
+          "inProgress": "Workout in progress: log the remaining sets and finish it",
+          "done": "Workout finished",
+          "missed": "Workout missed"
+        },
+        "suggestions_one": "{{count}} suggestion to answer",
+        "suggestions_other": "{{count}} suggestions to answer",
+        "suggestionsNone": "No suggestions waiting for an answer",
+        "goal": {
+          "athlete": "Your goal",
+          "coach": "Client's goal",
+          "detail": {
+            "recomposition": "Lose fat and build muscle at the same time.",
+            "muscle_gain": "Build muscle with a small calorie surplus.",
+            "cutting": "Lose fat with a calorie deficit while keeping muscle.",
+            "maintenance": "Hold the current weight and keep training.",
+            "wellness": "Stay active and healthy."
+          }
+        }
+      }
     }
   },
   "suggestions": {

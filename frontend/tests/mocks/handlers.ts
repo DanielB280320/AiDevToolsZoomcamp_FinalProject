@@ -8,6 +8,27 @@ type Schemas = components["schemas"];
 /** MSW pattern for an API path on any origin, e.g. apiUrl("/healthz") matches http://localhost:3000/api/v1/healthz. */
 export const apiUrl = (path: string) => `*/api/v1${path}`;
 
+export function athleteProfileFixture(overrides: Partial<Schemas["AthleteProfile"]> = {}): Schemas["AthleteProfile"] {
+  return {
+    athlete_id: "3f0b6a1e-6a55-4f3c-9a43-1c2a3a4b5c6d",
+    sex: "male",
+    height_cm: 180,
+    lifestyle: "sedentary",
+    goal: "cutting",
+    experience: "beginner",
+    days_per_week: 3,
+    preferred_days: ["mon", "wed", "fri"],
+    session_minutes: 60,
+    equipment: "full_gym",
+    avoided_exercise_ids: [],
+    diet: "omnivore",
+    allergies: [],
+    meals_per_day: 3,
+    updated_at: "2026-10-20T08:00:00Z",
+    ...overrides,
+  };
+}
+
 /** Default handlers: the happy path for every endpoint the shell calls. Responses follow openapi.yaml. */
 export const handlers = [
   http.get(apiUrl("/healthz"), () => HttpResponse.json({ status: "ok", version: "test" } satisfies Schemas["Health"])),
@@ -34,6 +55,7 @@ export const handlers = [
       meal_days: [],
     } satisfies Schemas["Plan"]),
   ),
+  http.get(apiUrl("/athletes/:athleteId/profile"), () => HttpResponse.json(athleteProfileFixture())),
   http.get(apiUrl("/athletes/:athleteId/suggestions"), () =>
     HttpResponse.json({ items: [], weigh_in_hint: null } satisfies Schemas["SuggestionList"]),
   ),

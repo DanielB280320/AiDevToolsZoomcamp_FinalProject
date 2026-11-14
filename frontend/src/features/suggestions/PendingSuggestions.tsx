@@ -7,6 +7,7 @@ import { SuggestionCard } from "./SuggestionCard";
 
 /** Pending suggestions for the athlete, with accept / edit / reject. Renders nothing when there are none. */
 export function PendingSuggestions({
+  id,
   athleteId,
   units,
   className = "",
@@ -14,6 +15,8 @@ export function PendingSuggestions({
   description,
   emptyMessage,
 }: {
+  /** Anchor of the section, so the day checklist can link to it. */
+  id?: string;
   athleteId: string;
   units: UnitSystem;
   className?: string;
@@ -36,7 +39,7 @@ export function PendingSuggestions({
   }
   if (!pending.data || (pending.data.length === 0 && !emptyMessage)) return null;
   return (
-    <section aria-labelledby={headingId} className={className}>
+    <section id={id} aria-labelledby={headingId} className={className}>
       <h2 id={headingId} className="flex items-center gap-2 font-display text-step-2 font-bold">
         {icon}
         {t("suggestions.title")}

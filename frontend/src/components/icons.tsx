@@ -115,3 +115,17 @@ export function ChevronDownIcon(props: IconProps) {
     </Icon>
   );
 }
+
+/** Day checklist: what is done and what is still open. */
+export function ChecklistIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m3 6 1.5 1.5L7 5" />
+      <path d="m3 12 1.5 1.5L7 11" />
+      <path d="m3 18 1.5 1.5L7 17" />
+      <path d="M11 6h10" />
+      <path d="M11 12h10" />
+      <path d="M11 18h10" />
+    </Icon>
+  );
+}
