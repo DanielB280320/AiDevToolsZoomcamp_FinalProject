@@ -3,8 +3,20 @@ import { useTranslation } from "react-i18next";
 
 import type { MealSlot } from "../../api/meals";
 import { isApiError } from "../../api/errors";
-import { useSaveMeals, type MealDay, type MealSwap, type Weekday } from "../../api/plan";
-import { BUTTON, FieldError, ICON_BUTTON, SelectInput, TextInput } from "./fields";
+import {
+  useSaveMeals,
+  type MealDay,
+  type MealSwap,
+  type Weekday,
+} from "../../api/plan";
+import {
+  BUTTON,
+  FieldError,
+  ICON_BUTTON,
+  SelectInput,
+  TextInput,
+} from "./fields";
+import { DayRow } from "./DayRow";
 import { DuplicateDay } from "./DuplicateDay";
 import { MealPicker, SLOTS } from "./MealPicker";
 import { MealSwaps } from "./MealSwaps";
@@ -32,11 +44,31 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
   const [server, setServer] = useState<Record<string, string>>({});
   const [picker, setPicker] = useState<Picker>(null);
   const [swapping, setSwapping] = useState<string | null>(null);
+  // Days are collapsed by default; a day opens when it has an error or content was copied into it (D105).
+  const [open, setOpen] = useState<ReadonlySet<Weekday>>(() => new Set());
   const save = useSaveMeals(athleteId);
   const dirty = JSON.stringify(days) !== initial;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
 
-  const error = (path: string): string | undefined => (local[path] ? t(`plan.errors.${local[path]}`) : server[path]);
+  const openDays = (weekdays: Weekday[]) =>
+    setOpen((was) => new Set([...was, ...weekdays]));
+  const openWithErrors = (
+    draft: DraftMealDay[],
+    errors: Record<string, unknown>,
+  ) =>
+    openDays(
+      draft
+        .filter(
+          (day) =>
+            requestIndex(draft, day.weekday) >= 0 &&
+            Object.keys(errors).some((path) =>
+              path.startsWith(`meal_days[${requestIndex(draft, day.weekday)}]`),
+            ),
+        )
+        .map((day) => day.weekday),
+    );
+  const error = (path: string): string | undefined =>
+    local[path] ? t(`plan.errors.${local[path]}`) : server[path];
   const edit = (next: DraftMealDay[]) => {
     setDays(next);
     setLocal({});
@@ -49,6 +81,7 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
     const built = buildMealUpdate(draft, conflict ? plan.revision : baseRevision);
     if (!built.body) {
       setLocal(built.errors);
+      openWithErrors(draft, built.errors);
       return;
     }
     save.mutate(built.body, {
@@ -57,7 +90,13 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
       },
       onError: (failure) => {
         if (isApiError(failure) && failure.status === 409) onConflict();
-        else if (isApiError(failure) && failure.problem.code === "invalid_plan") setServer(failure.problem.fieldErrors);
+        else if (
+          isApiError(failure) &&
+          failure.problem.code === "invalid_plan"
+        ) {
+          setServer(failure.problem.fieldErrors);
+          openWithErrors(draft, failure.problem.fieldErrors);
+        }
       },
     });
   };
@@ -82,14 +121,39 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
         {days.map((day) => {
           const d = requestIndex(days, day.weekday);
           const title = `meal-day-${day.weekday}`;
-          const open = picker?.weekday === day.weekday ? picker : null;
-          const warning = plan.meal_days.find((m: MealDay) => m.weekday === day.weekday)?.warning;
+          const pick = picker?.weekday === day.weekday ? picker : null;
+          const warning = plan.meal_days.find(
+            (m: MealDay) => m.weekday === day.weekday,
+          )?.warning;
           return (
-            <li key={day.uid} aria-labelledby={`${title}-title`} className="border-l-4 border-plate pl-3">
-              <h3 id={`${title}-title`} className="font-display text-step-2 font-bold">
-                {t(`plan.weekdayLong.${day.weekday}`)}
-              </h3>
-              {day.editedBy && <p className="text-step--1 font-semibold text-slate">{t("plan.editedBy", { name: day.editedBy })}</p>}
+            <DayRow
+              key={day.uid}
+              id={title}
+              open={open.has(day.weekday)}
+              onToggle={() =>
+                setOpen(
+                  (was) =>
+                    new Set(
+                      was.has(day.weekday)
+                        ? [...was].filter((w) => w !== day.weekday)
+                        : [...was, day.weekday],
+                    ),
+                )
+              }
+              title={t(`plan.weekdayLong.${day.weekday}`)}
+              summary={
+                day.meals.length === 0
+                  ? t("plan.days.noMeals")
+                  : t("plan.days.meals", { count: day.meals.length })
+              }
+              note={
+                day.editedBy ? (
+                  <p className="text-step--1 font-semibold text-slate">
+                    {t("plan.editedBy", { name: day.editedBy })}
+                  </p>
+                ) : null
+              }
+            >
               {warning && <p className="text-step--1 text-slate">{warning}</p>}
               {day.meals.length === 0 && <p className="text-slate">{t("plan.meals.empty")}</p>}
               <ul className="mt-2 flex flex-col gap-3">
@@ -150,16 +214,46 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
                   );
                 })}
               </ul>
-              <DuplicateDay idPrefix={title} from={day.weekday} hasContent={(w) => (days.find((x) => x.weekday === w)?.meals.length ?? 0) > 0} onCopy={(w) => edit(duplicateMealDay(days, day.weekday, w))} />
-              {open ? (
+              <DuplicateDay
+                idPrefix={title}
+                from={day.weekday}
+                hasContent={(w) =>
+                  (days.find((x) => x.weekday === w)?.meals.length ?? 0) > 0
+                }
+                onCopy={(w) => {
+                  edit(duplicateMealDay(days, day.weekday, w));
+                  openDays([w]);
+                }}
+              />
+              {pick ? (
                 <MealPicker
-                  slot={pickerSlot(day, open.replace)}
-                  askSlot={open.replace === null}
+                  slot={pickerSlot(day, pick.replace)}
+                  askSlot={pick.replace === null}
                   onCancel={() => setPicker(null)}
                   onPick={(meal, slot) => {
-                    const target = open.replace ? day.meals.find((m) => m.uid === open.replace) : undefined;
-                    const fresh = draftFromLibraryMeal(meal, target?.slot ?? slot, target?.gramsEdited ? "1" : target?.portion ?? "1", target?.id);
-                    edit(days.map((x) => (x.weekday === day.weekday ? { ...x, meals: target ? x.meals.map((m) => (m.uid === target.uid ? fresh : m)) : [...x.meals, fresh] } : x)));
+                    const target = pick.replace
+                      ? day.meals.find((m) => m.uid === pick.replace)
+                      : undefined;
+                    const fresh = draftFromLibraryMeal(
+                      meal,
+                      target?.slot ?? slot,
+                      target?.gramsEdited ? "1" : (target?.portion ?? "1"),
+                      target?.id,
+                    );
+                    edit(
+                      days.map((x) =>
+                        x.weekday === day.weekday
+                          ? {
+                              ...x,
+                              meals: target
+                                ? x.meals.map((m) =>
+                                    m.uid === target.uid ? fresh : m,
+                                  )
+                                : [...x.meals, fresh],
+                            }
+                          : x,
+                      ),
+                    );
                     setPicker(null);
                   }}
                 />
@@ -168,7 +262,7 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
                   {t("plan.meals.add")}
                 </button>
               )}
-            </li>
+            </DayRow>
           );
         })}
       </ul>

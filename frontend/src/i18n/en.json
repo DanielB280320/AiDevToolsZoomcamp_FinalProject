@@ -972,7 +972,6 @@
   "plan": {
     "title": "Plan",
     "loading": "Loading your plan…",
-    "status": "Version {{version}}, {{source}}",
     "coachNotice": "Plans are edited from a client's page. Open a client from the client list.",
     "save": "Save changes",
     "saving": "Saving…",
@@ -1125,17 +1124,6 @@
         "failed": "Couldn't create the meal."
       }
     },
-    "regenerate": {
-      "title": "Regenerate suggested plan",
-      "lead": "Build a new plan from your current profile and targets.",
-      "button": "Regenerate plan",
-      "confirmTitle": "Regenerate your plan?",
-      "confirmBody": "This creates a new plan version. Previous versions stay readable in History. Logs of regenerated meals appear as extra meals, because the new meals are different.",
-      "unsaved": "Your unsaved changes will be lost.",
-      "confirm": "Yes, regenerate",
-      "done": "Plan regenerated.",
-      "failed": "FitWise couldn't regenerate the plan. Try again."
-    },
     "history": {
       "version": "Version {{version}}",
       "active": "Active",
@@ -1156,7 +1144,8 @@
       "back": "Back to versions",
       "viewing": "Version {{version}}",
       "readOnly": "Read-only: you are viewing an older version. Nothing here can be edited.",
-      "failed": "Couldn't load the plan versions."
+      "failed": "Couldn't load the plan versions.",
+      "name": "Name"
     },
     "view": {
       "training": "Training",
@@ -1165,6 +1154,96 @@
       "timed": "{{sets}} sets of {{seconds}} s",
       "calibrate": "a weight to choose",
       "meal": "{{slot}}: {{name}} ({{kcal}} kcal)"
+    },
+    "about": {
+      "athlete": "Your training and meal plan for the week. Create a new plan, adjust the training days and meals, and check earlier versions. Changes apply from today; past sessions and logs never change.",
+      "coach": "The client's training and meal plan. Review it, edit the days and meals, or create a new plan for them. Changes apply from today; past sessions and logs never change."
+    },
+    "current": {
+      "title": "Current plan",
+      "fallbackName": "Plan, version {{version}}",
+      "startDate": "Started",
+      "startDateValue": "{{date}} (week {{week}})",
+      "version": "Version",
+      "versionValue": "{{version}}, {{source}}",
+      "lastChange": "Last change",
+      "trainingDays": "Training days per week",
+      "meals": "Planned meals",
+      "mealsValue_one": "{{count}} meal in {{days}} days",
+      "mealsValue_other": "{{count}} meals in {{days}} days",
+      "review": {
+        "athlete": "Review that the training days fit your week and that the meals match your goal, then edit them in the Training and Meals tabs.",
+        "coach": "Review that the training days fit the client's week and that the meals match their goal, then edit them in the Training and Meals tabs."
+      }
+    },
+    "tabAbout": {
+      "training": {
+        "athlete": "Add the days you train and pick the exercises for each one. For every exercise set the sets, reps, weight, rest and the progression rule, then press Save changes. Open a day to edit it.",
+        "coach": "Add or edit the client's training days and exercises: sets, reps, weight, rest and the progression rule, then press Save changes. Open a day to edit it."
+      },
+      "meals": {
+        "athlete": "For each day add meals or replace them, choose the meal slot, adjust the portion or the grams of each food, or swap a meal for a similar one, then press Save changes. Open a day to edit it.",
+        "coach": "For each day add or replace the client's meals, choose the slot, adjust the portion or the grams, or swap a meal for a similar one, then press Save changes. Open a day to edit it."
+      },
+      "history": {
+        "athlete": "Every change to your plan is kept as a version. Open one to see what the plan was; versions are read-only, and the active one is the plan you follow.",
+        "coach": "Every change to the client's plan is kept as a version. Open one to see what the plan was; versions are read-only, and the active one is the plan the client follows."
+      }
+    },
+    "days": {
+      "exercises_one": "{{count}} exercise",
+      "exercises_other": "{{count}} exercises",
+      "meals_one": "{{count}} meal",
+      "meals_other": "{{count}} meals",
+      "noMeals": "no meals",
+      "noExercises": "no exercises",
+      "summary": "{{weekday}} · {{name}} · {{what}}",
+      "mealSummary": "{{weekday}} · {{what}}"
+    },
+    "newPlan": {
+      "title": "New plan",
+      "lead": "Start a new plan with its own name and start date. It replaces the current plan from today; the current plan stays in History.",
+      "button": "New plan",
+      "name": "Plan name",
+      "nameHint": "Up to 60 characters, for example Summer cut.",
+      "startDate": "Start date",
+      "startDateHint": "Today or earlier. It is a label: it does not move any workout or meal.",
+      "startFrom": "Start from",
+      "startFromEmpty": "Empty plan",
+      "startFromGenerated": "Generated from my profile",
+      "startFromEmptyHint": "No training days and no meals. You build it in the Training and Meals tabs.",
+      "startFromGeneratedHint": "FitWise builds training and meals from your profile and targets.",
+      "scope": "What to generate",
+      "scopeAll": "Training and meals",
+      "scopeTraining": "Training only",
+      "scopeMeals": "Meals only",
+      "scopeHint": "What you do not generate is copied from the current plan.",
+      "replaces": "Creating it replaces the current plan from today. The current plan stays in History and past sessions and logs are unchanged.",
+      "unsaved": "Your unsaved changes will be lost.",
+      "submit": "Create plan",
+      "creating": "Creating…",
+      "done": "New plan created: {{name}}.",
+      "failed": "FitWise couldn't create the plan. Try again.",
+      "errors": {
+        "nameRequired": "Enter a name for the plan.",
+        "nameTooLong": "Use at most 60 characters.",
+        "startRequired": "Enter a start date.",
+        "future": "The start date can't be in the future."
+      }
+    },
+    "progression": {
+      "title": "Progression methods",
+      "lead": "How the weight and reps of an exercise are suggested as you train. A suggestion is never applied by itself: you accept or reject it.",
+      "linear": "Linear progression: one fixed number of reps. When every working set reaches it at the planned weight, the next session suggests the weight plus the increment.",
+      "double": "Double progression: a range of reps. First add reps at the same weight until every working set reaches the top of the range; then the weight goes up by the increment and the reps restart at the bottom.",
+      "manual": "Manual: FitWise makes no suggestions for this exercise. You change the targets yourself.",
+      "increment": "Increment: how much weight is added when the method suggests going up.",
+      "deload": "Allow deload weeks: after 3 finished sessions in a row below the target at the same weight, FitWise may suggest a lighter weight (90 % of it, rounded down to the plate step) and then starts counting again.",
+      "hint": {
+        "linear": "Linear: hit the fixed reps on every set and the next session suggests the weight plus the increment.",
+        "double": "Double: add reps until every set reaches the top of the range, then the weight goes up by the increment and the reps restart at the bottom.",
+        "manual": "Manual: no suggestions; you change the targets yourself."
+      }
     }
   },
   "notes": {

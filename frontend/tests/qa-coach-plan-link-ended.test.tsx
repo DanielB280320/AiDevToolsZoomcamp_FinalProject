@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -35,6 +35,8 @@ const plan: Schemas["Plan"] = {
   source: "generated",
   active: true,
   revision: 3,
+  name: null,
+  start_date: null,
   created_by: { id: ANA, display_name: "Alice", role: "athlete" },
   created_at: "2026-10-20T08:00:00Z",
   updated_at: "2026-10-20T08:00:00Z",
@@ -70,6 +72,8 @@ describe("QA #48: coach plan save after the link ended", () => {
     );
     const user = userEvent.setup();
     renderApp(`/coach/clients/${ANA}/plan`);
+    // Days are collapsed by default (D105): open the first one.
+    await user.click(within(await screen.findByRole("heading", { level: 3, name: /exercise/ })).getByRole("button"));
     const sets = (await screen.findAllByLabelText("Sets"))[0]!;
     await user.clear(sets);
     await user.type(sets, "4");

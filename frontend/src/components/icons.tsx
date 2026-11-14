@@ -3,7 +3,10 @@ import type { ReactNode } from "react";
 type IconProps = { className?: string };
 
 /** Decorative line icon: always next to a text label, so it is hidden from assistive technology. */
-function Icon({ className = "size-6", children }: IconProps & { children: ReactNode }) {
+function Icon({
+  className = "size-6",
+  children,
+}: IconProps & { children: ReactNode }) {
   return (
     <svg
       aria-hidden="true"
@@ -112,6 +115,40 @@ export function ChevronDownIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="m6 9 6 6 6-6" />
+    </Icon>
+  );
+}
+
+/** Plan history: earlier versions of the plan. */
+export function HistoryIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l3 2" />
+    </Icon>
+  );
+}
+
+/** The current plan: a clipboard. */
+export function ClipboardIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="M9 12h6" />
+      <path d="M9 16h6" />
+    </Icon>
+  );
+}
+
+/** Create something new, such as a new plan. */
+export function PlusCircleIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v8" />
+      <path d="M8 12h8" />
     </Icon>
   );
 }

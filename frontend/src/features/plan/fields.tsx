@@ -73,7 +73,15 @@ export function SelectInput({
   onChange,
   options,
   error,
-}: BaseProps & { value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }) {
+  hint,
+}: BaseProps & {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const describedBy =
+    [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(" ") ||
+    undefined;
   return (
     <div className="min-w-0">
       <label htmlFor={id} className="block font-semibold">
@@ -84,7 +92,7 @@ export function SelectInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
+        aria-describedby={describedBy}
         className={CONTROL}
       >
         {options.map((option) => (
@@ -93,6 +101,52 @@ export function SelectInput({
           </option>
         ))}
       </select>
+      {hint && (
+        <p id={`${id}-hint`} className="mt-1 text-step--1 text-slate">
+          {hint}
+        </p>
+      )}
+      {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
+    </div>
+  );
+}
+
+export function DateInput({
+  id,
+  label,
+  value,
+  onChange,
+  max,
+  error,
+  hint,
+}: BaseProps & {
+  value: string;
+  onChange: (value: string) => void;
+  max?: string;
+}) {
+  const describedBy =
+    [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(" ") ||
+    undefined;
+  return (
+    <div className="min-w-0">
+      <label htmlFor={id} className="block font-semibold">
+        {label}
+      </label>
+      <input
+        id={id}
+        type="date"
+        value={value}
+        max={max}
+        onChange={(event) => onChange(event.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={CONTROL}
+      />
+      {hint && (
+        <p id={`${id}-hint`} className="mt-1 text-step--1 text-slate">
+          {hint}
+        </p>
+      )}
       {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
     </div>
   );
