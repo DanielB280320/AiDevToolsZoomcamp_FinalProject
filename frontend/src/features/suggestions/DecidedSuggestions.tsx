@@ -12,7 +12,8 @@ function titleOf(t: (key: string) => string, suggestion: Suggestion): string {
 /**
  * The latest decided suggestions with who decided them (F11, F16): "Accepted by <coach>" when a
  * coach decided, plain "Accepted" / "Rejected" for the athlete's own decisions, each with the date it was
- * decided (D98). Hidden when empty.
+ * decided (D98). Hidden when empty. With `day` it lists the decisions made on that day instead
+ * (the Month view's day detail, D103) and says so when there were none.
  */
 export function DecidedSuggestions({
   athleteId,
@@ -20,6 +21,7 @@ export function DecidedSuggestions({
   className = "",
   icon,
   description,
+  day,
 }: {
   athleteId: string;
   units?: UnitSystem;
@@ -30,25 +32,37 @@ export function DecidedSuggestions({
   icon?: React.ReactNode;
   /** One or two sentences under the heading: what the section is and what to do with it. */
   description?: string;
+  /** Only the decisions made on this day (`YYYY-MM-DD` in `timezone`), under a smaller heading. */
+  day?: string;
 }) {
   const { t, i18n } = useTranslation();
   const dateOf = (iso: string) => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeZone: timezone }).format(new Date(iso));
+  // en-CA formats a date as YYYY-MM-DD: the calendar day of the decision in the athlete's zone.
+  const isoDayOf = (iso: string) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
   const headingId = useId();
-  const decided = useDecidedSuggestions(athleteId);
-  if (!decided.data || decided.data.length === 0) return null;
+  const decided = useDecidedSuggestions(athleteId, day !== undefined);
+  if (!decided.data) return null;
+  const items =
+    day === undefined
+      ? decided.data
+      : decided.data.filter((s) => s.decided_at && isoDayOf(s.decided_at) === day);
+  if (items.length === 0 && day === undefined) return null;
+  const Heading = day === undefined ? "h2" : "h3";
   return (
     <section aria-labelledby={headingId} className={className}>
-      <h2 id={headingId} className="flex items-center gap-2 font-display text-step-2 font-bold">
+      <Heading id={headingId} className={`flex items-center gap-2 font-display font-bold ${day === undefined ? "text-step-2" : "text-step-1"}`}>
         {icon}
-        {t("suggestions.decided.title")}
-      </h2>
+        {t(day === undefined ? "suggestions.decided.title" : "suggestions.decided.dayTitle")}
+      </Heading>
       {description && (
         <p className="mt-1 text-step--1 text-slate" data-testid="section-description">
           {description}
         </p>
       )}
+      {items.length === 0 && <p className="mt-1 text-slate">{t("suggestions.decided.dayEmpty")}</p>}
       <ul className="mt-1">
-        {decided.data.map((s) => {
+        {items.map((s) => {
           const by = s.decided_by?.role === "coach" ? s.decided_by.display_name : null;
           return (
             <li key={s.id} data-testid="decided-suggestion" className="border-b border-line py-2">

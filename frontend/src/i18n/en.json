@@ -231,7 +231,44 @@
       "next": "Next month",
       "listLabel": "Days of the month",
       "nutrition": "{{percent}}%",
-      "legend": "Badge: training status. Percentage: planned meals eaten. Select a day to see its week."
+      "legend": "Badge: training status. Percentage: planned meals eaten. Hover a day for a summary; select it to see its workout, meals and decisions below.",
+      "selected": "selected",
+      "about": {
+        "athlete": "Your month at a glance: each day's training status and the share of planned meals you ate. Review it to spot patterns: missed workouts, partial sessions, days without meals logged. Select a day to see everything about it. Nothing to log here: sets and meals are logged on Today.",
+        "coach": "Your client's month at a glance: each day's training status and the share of planned meals eaten. Review it to spot patterns: missed workouts, partial sessions, days without meals logged. Select a day to see everything about it."
+      },
+      "kpis": {
+        "title": "{{month}} in figures",
+        "soFar": "Days up to today.",
+        "whole": "The whole month.",
+        "future": "This month has not started yet.",
+        "workouts": "Workouts done",
+        "ofValue": "{{done}} of {{planned}}",
+        "upcoming_one": "{{count}} still planned",
+        "upcoming_other": "{{count}} still planned",
+        "completion": "Average completion",
+        "completionHint": "Of finished workouts",
+        "missed": "Workouts missed",
+        "meals": "Planned meals eaten",
+        "kcal": "Average calories eaten",
+        "kcalValue": "{{value}} kcal",
+        "kcalHint_one": "Estimated, over {{count}} day with meals logged",
+        "kcalHint_other": "Estimated, over {{count}} days with meals logged"
+      },
+      "tip": {
+        "training": "{{name}} · {{status}}",
+        "energy": "Eaten {{eaten}} kcal · burned {{burned}} kcal (estimated)"
+      },
+      "day": {
+        "open": "Open this day",
+        "week": "See its week",
+        "energy": "Estimated energy",
+        "notes": "Coach notes",
+        "records": "Personal records set this day",
+        "kcal": "{{value}} kcal",
+        "extraMeal": "Extra",
+        "extraLogged": "Logged outside the plan"
+      }
     },
     "move": {
       "open": "Move",
@@ -393,6 +430,8 @@
     },
     "decided": {
       "title": "Recent decisions",
+      "dayTitle": "Decisions made this day",
+      "dayEmpty": "No suggestion was accepted or rejected on this day.",
       "accepted": "Accepted",
       "rejected": "Rejected",
       "acceptedBy": "Accepted by {{name}} (coach)",

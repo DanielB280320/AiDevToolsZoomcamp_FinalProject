@@ -30,7 +30,7 @@ function formatWeight(kg: number, units: Me["units"]): string {
 }
 
 /** A completion ratio (0-1, F10.2) as a whole percent, kept inside 0-100 for the charts. */
-function toPercent(completion: number): number {
+export function toPercent(completion: number): number {
   return Math.min(100, Math.max(0, Math.round(completion * 100)));
 }
 
@@ -38,7 +38,7 @@ const RING_RADIUS = 30;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
 /** Session completion as a ring with the percent in the middle (F10.11). */
-function CompletionRing({ percent }: { percent: number }) {
+export function CompletionRing({ percent }: { percent: number }) {
   const { t } = useTranslation();
   return (
     <div className="mt-3 flex items-center gap-3" data-testid="session-completion">

@@ -10,7 +10,8 @@ import { displayWeight, percent } from "../charts/chartData";
 /** The longest range the body chart offers: the weight change looks back this far (D100). */
 const LOOKBACK_WEEKS = 52;
 
-function Tile({ id, label, value, hint }: { id: string; label: string; value: string; hint?: string }) {
+/** One figure of a KPI row: label, value and an optional hint. */
+export function Tile({ id, label, value, hint }: { id: string; label: string; value: string; hint?: string }) {
   return (
     <div data-testid={`kpi-${id}`} className="min-w-0 border-t-4 border-iron pt-2">
       <dt className="text-step--1 font-semibold uppercase tracking-wide text-slate">{label}</dt>

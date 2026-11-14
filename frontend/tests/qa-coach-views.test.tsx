@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -82,6 +82,14 @@ describe("QA #48: coach-context views", () => {
     },
   );
 
+  it("Month is worded for the coach and its day detail has no link to the athlete's own day (D103)", async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    renderApp(`/coach/clients/${ANA}/month?month=${day.slice(0, 7)}&day=${day}`);
+    expect(await screen.findByTestId("month-description")).toHaveTextContent(/^Your client's month at a glance/);
+    const detail = await screen.findByTestId("month-day-detail");
+    expect(within(detail).getByRole("link", { name: "See its week" })).toHaveAttribute("href", expect.stringContaining(`/coach/clients/${ANA}/week?week=`));
+    expect(within(detail).queryByRole("link", { name: "Open this day" })).not.toBeInTheDocument();
+  });
 });
 
 // Monday 26 October 2026 in Madrid; Wednesday has a planned session and free days follow it.
