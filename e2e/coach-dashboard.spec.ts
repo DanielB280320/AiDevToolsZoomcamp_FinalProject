@@ -144,8 +144,8 @@ test("coach reviews a client, decides suggestions, edits the plan; the athlete s
 
     await test.step("edits the plan", async () => {
       await page.getByRole("link", { name: "Plan", exact: true }).click();
-      // Days are collapsed by default (D105): open the first one.
-      await page.getByRole("heading", { level: 3 }).first().getByRole("button").click();
+      // Days are collapsed by default (D105): open the first one that has exercises.
+      await page.getByRole("heading", { level: 3 }).filter({ hasText: /\d+ exercises?$/ }).first().getByRole("button").click();
       const sets = page.getByLabel("Sets").first();
       await sets.fill("4");
       await page.getByRole("button", { name: "Save changes" }).click();
