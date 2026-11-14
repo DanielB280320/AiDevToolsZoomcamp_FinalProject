@@ -1,3 +1,4 @@
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
@@ -8,8 +9,10 @@ import { EnergySummary } from "./EnergySummary";
 import { QueryState } from "./QueryState";
 import { StatusBadge } from "./StatusBadge";
 import { badgeKind } from "./status";
+import { CheckCircleIcon, ChevronDownIcon, DumbbellIcon, FlameIcon, LightbulbIcon, NoteIcon, UtensilsIcon } from "../../components/icons";
 import { PrBadge } from "../../components/PrBadge";
 import { paths } from "../../paths";
+import { SessionExerciseChart } from "../charts/SessionChartView";
 import { NoteThread, dayNotes, exerciseNotes, sessionNotes } from "../notes/NoteThread";
 import { MealsSection } from "../meals/MealsSection";
 import { TodayBanners } from "../notifications/TodayBanners";
@@ -88,6 +91,8 @@ function ExerciseRow({
   finished: boolean;
 }) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const chartId = useId();
   const first = exercise.sets[0];
   const target = [
     first?.target_reps != null ? t("calendar.today.reps", { count: first.target_reps }) : null,
@@ -101,7 +106,17 @@ function ExerciseRow({
     <li className="border-b border-line py-2">
       <div className="flex items-center justify-between gap-3">
         <span className="font-semibold">
-          {exercise.exercise.name} {exercise.is_pr && <PrBadge />}
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={chartId}
+            onClick={() => setOpen((was) => !was)}
+            className="inline-flex min-h-11 items-center gap-1 text-left font-semibold hover:text-spruce"
+          >
+            <ChevronDownIcon className={`size-5 text-spruce transition-transform ${open ? "rotate-180" : ""}`} />
+            {exercise.exercise.name}
+          </button>{" "}
+          {exercise.is_pr && <PrBadge />}
         </span>
         <span className="shrink-0 text-right text-step--1 text-slate">
           {t("calendar.today.sets", { count: exercise.sets.length })}
@@ -123,6 +138,17 @@ function ExerciseRow({
           )}
         </span>
       </div>
+      {open && (
+        <div
+          id={chartId}
+          role="region"
+          aria-label={t("calendar.today.exerciseChartRegion", { name: exercise.exercise.name })}
+          className="mt-1 min-w-0"
+          data-testid="exercise-session-chart"
+        >
+          <SessionExerciseChart athleteId={athleteId} sessionId={sessionId} exerciseId={exercise.exercise.id} units={units} />
+        </div>
+      )}
       <NoteThread
         athleteId={athleteId}
         notes={exerciseNotes(notes, exercise.exercise.id)}
@@ -133,12 +159,31 @@ function ExerciseRow({
   );
 }
 
-function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+const SECTION_ICON = "size-7 text-spruce";
+
+function Section({
+  id,
+  title,
+  icon,
+  description,
+  children,
+}: {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  /** What the section is and whether the reader is expected to act (D99). */
+  description: string;
+  children: React.ReactNode;
+}) {
   return (
     <section aria-labelledby={id} className="mt-8 border-t-4 border-iron pt-3">
-      <h2 id={id} className="font-display text-step-2 font-bold">
+      <h2 id={id} className="flex items-center gap-2 font-display text-step-2 font-bold">
+        {icon}
         {title}
       </h2>
+      <p className="mt-1 text-step--1 text-slate" data-testid="section-description">
+        {description}
+      </p>
       {children}
     </section>
   );
@@ -205,20 +250,22 @@ export function TodayView({
 
   const { session, energy } = day.data;
   const kind = badgeKind(day.data.training_status, day.data.training_completion);
+  const who = readOnly ? "coach" : "athlete";
+  const trainingState = !session ? "rest" : session.status === "done" ? "done" : session.status === "planned" ? "planned" : "inProgress";
   return (
     <>
       {!readOnly && <TodayBanners />}
 
-      <Section id="today-energy" title={t("calendar.today.energy")}>
+      <Section id="today-energy" description={t("calendar.today.about.energy")} title={t("calendar.today.energy")} icon={<FlameIcon className={SECTION_ICON} />}>
         <EnergySummary energy={energy} compact={false} />
       </Section>
 
-      <Section id="today-meals" title={t("calendar.today.meals")}>
+      <Section id="today-meals" description={t(`calendar.today.about.meals.${who}`)} title={t("calendar.today.meals")} icon={<UtensilsIcon className={SECTION_ICON} />}>
         <EditedBy name={coachEditor(plan.data?.meal_days.find((d) => d.weekday === day.data.weekday)?.edited_by)} />
         {readOnly ? <ReadOnlyMeals day={day.data} /> : <MealsSection athleteId={me.id} day={day.data} />}
       </Section>
 
-      <Section id="today-training" title={t("calendar.today.training")}>
+      <Section id="today-training" description={t(`calendar.today.about.training.${who}.${trainingState}`)} title={t("calendar.today.training")} icon={<DumbbellIcon className={SECTION_ICON} />}>
         <p className="mt-2 flex items-center gap-3 text-step-1">
           <StatusBadge kind={kind} />
           <span className="font-semibold">{session?.training_day_name ?? t("calendar.restDay")}</span>
@@ -264,11 +311,24 @@ export function TodayView({
         )}
       </Section>
 
-      <PendingSuggestions athleteId={me.id} units={me.units} className="mt-8 border-t-4 border-plate pt-3" />
-      <DecidedSuggestions athleteId={me.id} units={me.units} timezone={me.timezone} className="mt-8 border-t-4 border-plate pt-3" />
+      <PendingSuggestions
+        athleteId={me.id}
+        units={me.units}
+        className="mt-8 border-t-4 border-plate pt-3"
+        icon={<LightbulbIcon className={SECTION_ICON} />}
+        description={t("calendar.today.about.suggestions")}
+      />
+      <DecidedSuggestions
+        athleteId={me.id}
+        units={me.units}
+        timezone={me.timezone}
+        className="mt-8 border-t-4 border-plate pt-3"
+        icon={<CheckCircleIcon className={SECTION_ICON} />}
+        description={t("calendar.today.about.decisions")}
+      />
 
       {(readOnly || dayNotes(day.data.notes).length > 0) && (
-        <Section id="today-notes" title={t("notes.dayTitle")}>
+        <Section id="today-notes" description={t(`calendar.today.about.notes.${who}`)} title={t("notes.dayTitle")} icon={<NoteIcon className={SECTION_ICON} />}>
           <NoteThread
             athleteId={me.id}
             notes={dayNotes(day.data.notes)}

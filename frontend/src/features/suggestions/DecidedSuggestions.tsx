@@ -18,12 +18,18 @@ export function DecidedSuggestions({
   athleteId,
   timezone,
   className = "",
+  icon,
+  description,
 }: {
   athleteId: string;
   units?: UnitSystem;
   /** The athlete's time zone for the decision dates; the browser's zone when omitted. */
   timezone?: string;
   className?: string;
+  /** Decorative icon shown before the heading. */
+  icon?: React.ReactNode;
+  /** One or two sentences under the heading: what the section is and what to do with it. */
+  description?: string;
 }) {
   const { t, i18n } = useTranslation();
   const dateOf = (iso: string) => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeZone: timezone }).format(new Date(iso));
@@ -32,9 +38,15 @@ export function DecidedSuggestions({
   if (!decided.data || decided.data.length === 0) return null;
   return (
     <section aria-labelledby={headingId} className={className}>
-      <h2 id={headingId} className="font-display text-step-2 font-bold">
+      <h2 id={headingId} className="flex items-center gap-2 font-display text-step-2 font-bold">
+        {icon}
         {t("suggestions.decided.title")}
       </h2>
+      {description && (
+        <p className="mt-1 text-step--1 text-slate" data-testid="section-description">
+          {description}
+        </p>
+      )}
       <ul className="mt-1">
         {decided.data.map((s) => {
           const by = s.decided_by?.role === "coach" ? s.decided_by.display_name : null;

@@ -1,6 +1,8 @@
+import type { ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { DayView } from "../../api/calendar";
+import { FlameIcon, ScaleIcon, TargetIcon, UtensilsIcon } from "../../components/icons";
 
 type Energy = DayView["energy"];
 
@@ -36,21 +38,25 @@ function MacroBar({ label, eaten, target }: { label: string; eaten: number; targ
 /**
  * Estimated energy balance of one day (spec F13.3): eaten, burned, balance, the goal's target balance
  * and macro progress bars. Used by Today (`compact={false}`) and the Week day cards (`compact`).
+ * On Today each calorie figure carries an icon next to its label (D99).
  */
 export function EnergySummary({ energy, compact }: { energy: Energy; compact: boolean }) {
   const { t } = useTranslation();
-  const figures: [string, number][] = [
-    [compact ? t("calendar.energy.eaten") : t("calendar.today.eaten"), energy.eaten.kcal],
-    [compact ? t("calendar.energy.burned") : t("calendar.today.burned"), energy.burned.total_kcal],
-    [compact ? t("calendar.energy.balance") : t("calendar.today.balance"), energy.balance_kcal],
-    [compact ? t("calendar.energy.targetBalance") : t("calendar.today.targetBalance"), energy.target_balance_kcal],
+  const figures: [string, number, ComponentType<{ className?: string }>][] = [
+    [compact ? t("calendar.energy.eaten") : t("calendar.today.eaten"), energy.eaten.kcal, UtensilsIcon],
+    [compact ? t("calendar.energy.burned") : t("calendar.today.burned"), energy.burned.total_kcal, FlameIcon],
+    [compact ? t("calendar.energy.balance") : t("calendar.today.balance"), energy.balance_kcal, ScaleIcon],
+    [compact ? t("calendar.energy.targetBalance") : t("calendar.today.targetBalance"), energy.target_balance_kcal, TargetIcon],
   ];
   return (
     <div>
       <dl className="mt-2 grid grid-cols-2 gap-3 text-center min-[420px]:grid-cols-4">
-        {figures.map(([label, value]) => (
+        {figures.map(([label, value, FigureIcon]) => (
           <div key={label}>
-            <dt className="text-step--1 text-slate">{label}</dt>
+            <dt className="text-step--1 text-slate">
+              {!compact && <FigureIcon className="mx-auto mb-1 size-6 text-spruce" />}
+              {label}
+            </dt>
             <dd className={`font-display font-bold ${compact ? "text-step-1" : "text-step-2"}`}>{value}</dd>
           </div>
         ))}

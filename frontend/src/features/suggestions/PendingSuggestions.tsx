@@ -10,11 +10,17 @@ export function PendingSuggestions({
   athleteId,
   units,
   className = "",
+  icon,
+  description,
   emptyMessage,
 }: {
   athleteId: string;
   units: UnitSystem;
   className?: string;
+  /** Decorative icon shown before the heading. */
+  icon?: React.ReactNode;
+  /** One or two sentences under the heading: what the section is and what to do with it. */
+  description?: string;
   /** Shown under the heading when nothing is pending; without it the section is hidden. */
   emptyMessage?: string;
 }) {
@@ -31,9 +37,15 @@ export function PendingSuggestions({
   if (!pending.data || (pending.data.length === 0 && !emptyMessage)) return null;
   return (
     <section aria-labelledby={headingId} className={className}>
-      <h2 id={headingId} className="font-display text-step-2 font-bold">
+      <h2 id={headingId} className="flex items-center gap-2 font-display text-step-2 font-bold">
+        {icon}
         {t("suggestions.title")}
       </h2>
+      {description && (
+        <p className="mt-1 text-step--1 text-slate" data-testid="section-description">
+          {description}
+        </p>
+      )}
       {pending.data.length === 0 && <p className="mt-1 text-slate">{emptyMessage}</p>}
       <ul className="mt-1">
         {pending.data.map((suggestion) => (
