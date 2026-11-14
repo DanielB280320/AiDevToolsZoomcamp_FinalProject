@@ -187,7 +187,8 @@ def test_food_filters_and_pagination(seeded: Api) -> None:
     assert not any(f["name"] == "Egg, whole" for f in vegan)
     nut_free = _all(seeded.client, FOODS, exclude_allergens="nuts,gluten")
     assert nut_free and all(not {"nuts", "gluten"} & set(f["allergen_tags"]) for f in nut_free)
-    assert [f["name"] for f in _all(seeded.client, FOODS, q="SALMON")] == ["Salmon, cooked"]
+    salmon = sorted(f["name"] for f in _all(seeded.client, FOODS, q="SALMON"))
+    assert salmon == ["Salmon, cooked", "Smoked salmon"]
     assert len(_all(seeded.client, FOODS, diet="omnivore")) == len(SEED_FOODS)
     page = seeded.client.get(FOODS, params={"limit": 5}).json()
     assert len(page["items"]) == 5 and page["next_cursor"]
