@@ -4,6 +4,8 @@ import { useAthleteProfile } from "../../api/athlete";
 import type { DayView } from "../../api/calendar";
 import { usePendingSuggestions } from "../../api/suggestions";
 import { ChecklistIcon, TargetIcon } from "../../components/icons";
+import type { UnitSystem } from "../../lib/units";
+import { ProgressKpis } from "./ProgressKpis";
 
 export const MEALS_SECTION_ID = "today-meals";
 export const TRAINING_SECTION_ID = "today-training";
@@ -24,9 +26,23 @@ type Item = {
  * What is done and what is still open on a day (D100): planned meals logged, the workout
  * finished, pending suggestions answered. The day is complete when nothing is open.
  * An item is listed only when it applies (no meals item on a day without planned meals).
- * Above the list it names the goal the athlete is working towards (from the profile).
+ * Above the list it names the goal the athlete is working towards (from the profile) and
+ * shows the progress figures.
  */
-export function DayChecklist({ day, athleteId, who }: { day: DayView; athleteId: string; who: "athlete" | "coach" }) {
+export function DayChecklist({
+  day,
+  athleteId,
+  who,
+  units,
+  progressLink,
+}: {
+  day: DayView;
+  athleteId: string;
+  who: "athlete" | "coach";
+  units: UnitSystem;
+  /** Link under the progress figures to the full charts. */
+  progressLink?: string;
+}) {
   const { t } = useTranslation();
   const pending = usePendingSuggestions(athleteId);
   const goal = useAthleteProfile(athleteId).data?.goal;
@@ -82,10 +98,12 @@ export function DayChecklist({ day, athleteId, who }: { day: DayView; athleteId:
           </span>
         </p>
       )}
+      <ProgressKpis day={day} athleteId={athleteId} units={units} progressLink={progressLink} />
+      <h3 className="mt-4 font-display text-step-1 font-bold">{t("calendar.today.checklist.pendingTitle")}</h3>
       <p
         data-testid="day-summary"
         data-complete={complete}
-        className={`mt-3 border-l-4 px-3 py-2 font-semibold ${complete ? "border-spruce bg-spruce text-chalk" : "border-plate bg-white"}`}
+        className={`mt-2 border-l-4 px-3 py-2 font-semibold ${complete ? "border-spruce bg-spruce text-chalk" : "border-plate bg-white"}`}
       >
         <span aria-hidden="true">{complete ? GLYPH.done : GLYPH.pending}</span>{" "}
         {complete ? t("calendar.today.checklist.complete") : t("calendar.today.checklist.open", { count: open, total: items.length })}

@@ -29,6 +29,25 @@ export function athleteProfileFixture(overrides: Partial<Schemas["AthleteProfile
   };
 }
 
+export function weeklySummaryFixture(overrides: Partial<Schemas["WeeklySummary"]> = {}): Schemas["WeeklySummary"] {
+  return {
+    week_start: "2026-10-26",
+    week_end: "2026-11-01",
+    estimated: true,
+    sessions_planned: 0,
+    sessions_done: 0,
+    sessions_missed: 0,
+    avg_completion: null,
+    avg_daily_balance_kcal: null,
+    target_daily_balance_kcal: null,
+    weight_avg_start_kg: null,
+    weight_avg_end_kg: null,
+    weight_change_kg: null,
+    sparklines: { daily_balance_kcal: [], training_completion: [], weight_avg_kg: [] },
+    ...overrides,
+  };
+}
+
 /** Default handlers: the happy path for every endpoint the shell calls. Responses follow openapi.yaml. */
 export const handlers = [
   http.get(apiUrl("/healthz"), () => HttpResponse.json({ status: "ok", version: "test" } satisfies Schemas["Health"])),
@@ -54,6 +73,14 @@ export const handlers = [
       training_days: [],
       meal_days: [],
     } satisfies Schemas["Plan"]),
+  ),
+  http.get(apiUrl("/athletes/:athleteId/charts/weekly-summary"), () => HttpResponse.json(weeklySummaryFixture())),
+  http.get(apiUrl("/athletes/:athleteId/charts/adherence"), ({ request }) => {
+    const query = new URL(request.url).searchParams;
+    return HttpResponse.json({ from: query.get("from") ?? "", to: query.get("to") ?? "", days: [], weeks: [] } satisfies Schemas["AdherenceChart"]);
+  }),
+  http.get(apiUrl("/athletes/:athleteId/charts/body"), () =>
+    HttpResponse.json({ weeks: 52, estimated: true, points: [] } satisfies Schemas["BodyChart"]),
   ),
   http.get(apiUrl("/athletes/:athleteId/profile"), () => HttpResponse.json(athleteProfileFixture())),
   http.get(apiUrl("/athletes/:athleteId/suggestions"), () =>

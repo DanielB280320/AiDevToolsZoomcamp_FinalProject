@@ -293,10 +293,10 @@
       "viewWorkout": "View workout",
       "notLogged": "Not logged",
       "checklist": {
-        "title": "Day checklist",
+        "title": "Overview",
         "about": {
-          "athlete": "The goal you are working towards, and what today asks of you. Log every planned meal, finish the workout and answer the suggestions: when nothing is pending, the day is complete.",
-          "coach": "The goal your client is working towards, and what this day asks of them: planned meals logged, the workout finished and the suggestions answered."
+          "athlete": "The goal you are working towards, your progress so far and what today asks of you. Log every planned meal, finish the workout and answer the suggestions: when nothing is pending, the day is complete.",
+          "coach": "The goal your client is working towards, their progress so far and what this day asks of them: planned meals logged, the workout finished and the suggestions answered."
         },
         "complete": "Day complete: nothing is pending.",
         "open_one": "{{count}} of {{total}} still pending",
@@ -325,7 +325,25 @@
             "maintenance": "Hold the current weight and keep training.",
             "wellness": "Stay active and healthy."
           }
-        }
+        },
+        "pendingTitle": "Day checklist"
+      },
+      "kpis": {
+        "title": "Progress so far",
+        "week": "Workouts this week",
+        "weekValue": "{{done}} of {{planned}}",
+        "completion": "Average completion this week",
+        "workouts": "Workouts completed",
+        "lookback": "Last 12 months",
+        "weight": "Weight change",
+        "weightUp": "+{{value}} {{unit}}",
+        "weightDown": "−{{value}} {{unit}}",
+        "weightSame": "{{value}} {{unit}}",
+        "since": "Since {{date}}",
+        "weightNone": "Needs two weigh-ins",
+        "records": "Personal records",
+        "recordsHint": "In this day's workout",
+        "more": "See all progress"
       }
     }
   },

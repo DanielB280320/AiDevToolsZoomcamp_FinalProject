@@ -1,11 +1,11 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
 import type { components } from "../src/api/schema";
 import { dayViewFixture, sessionFixture } from "./mocks/calendar";
 import { meFixture, meOk } from "./mocks/fixtures";
-import { apiUrl, athleteProfileFixture } from "./mocks/handlers";
+import { apiUrl, athleteProfileFixture, weeklySummaryFixture } from "./mocks/handlers";
 import { server } from "./mocks/server";
 import { renderApp } from "./renderApp";
 
@@ -90,7 +90,8 @@ describe("Today: day checklist (F9.5, D100)", () => {
     for (const id of ["today-meals", "today-training", "today-suggestions"]) expect(document.getElementById(id)).not.toBeNull();
     // The checklist is the first section and says what it is for.
     const checklist = screen.getByTestId("day-checklist");
-    expect(screen.getAllByRole("heading", { level: 2 })[0]).toHaveTextContent("Day checklist");
+    expect(screen.getAllByRole("heading", { level: 2 })[0]).toHaveTextContent("Overview");
+    expect(within(checklist).getByRole("heading", { level: 3, name: "Day checklist" })).toBeInTheDocument();
     expect(within(checklist).getByTestId("section-description")).toHaveTextContent(/when nothing is pending, the day is complete/);
   });
 
@@ -157,6 +158,82 @@ describe("Today: day checklist (F9.5, D100)", () => {
     expect(training).toHaveTextContent("Workout in progress");
     await item("suggestions");
     expect(screen.getByTestId("day-summary")).toHaveTextContent("1 of 2 still pending");
+  });
+});
+
+describe("Today: progress figures in the overview (F9.5, D100)", () => {
+  const exercise = (order: number, isPr: boolean) =>
+    ({
+      planned_exercise_id: `pe-${order}`,
+      exercise: { id: `ex-${order}`, name: `Lift ${order}`, type: "strength", equipment: "barbell", muscle_group: "chest" },
+      order,
+      is_extra: false,
+      rule: null,
+      sets: [],
+      reps_min: 8,
+      reps_max: 8,
+      rest_seconds: 90,
+      calibration_hint: null,
+      completion: 1,
+      pending_suggestion_id: null,
+      is_pr: isPr,
+    }) satisfies Schemas["SessionExercise"];
+  const week = (start: string, done: number): Schemas["AdherenceWeek"] => ({
+    week_start: start,
+    sessions_planned: 4,
+    sessions_done: done,
+    training_completion: null,
+    nutrition_completion: null,
+  });
+  const point = (date: string, avg: number | null): Schemas["BodyChartPoint"] => ({ date, weight_kg: avg, weight_avg_7d_kg: avg, body_fat_pct: null });
+  /** The tile once its figure has loaded. */
+  const kpi = async (id: string, text: string | RegExp) => {
+    await waitFor(() => expect(screen.getByTestId(`kpi-${id}`)).toHaveTextContent(text));
+    return screen.getByTestId(`kpi-${id}`);
+  };
+
+  it("shows this week, the last 12 months, the weight change and the day's records", async () => {
+    serve({
+      training_status: "done",
+      session: sessionFixture(DATE, { id: "s-1", athlete_id: "a-1", status: "done", completion: 1, exercises: [exercise(1, true), exercise(2, false), exercise(3, true)] }),
+    });
+    const asked: Record<string, string> = {};
+    server.use(
+      http.get(apiUrl("/athletes/:athleteId/charts/weekly-summary"), ({ request }) => {
+        asked.week = new URL(request.url).searchParams.get("week_start") ?? "";
+        return HttpResponse.json(weeklySummaryFixture({ sessions_planned: 4, sessions_done: 2, avg_completion: 0.854 }));
+      }),
+      http.get(apiUrl("/athletes/:athleteId/charts/adherence"), ({ request }) => {
+        const query = new URL(request.url).searchParams;
+        asked.from = query.get("from") ?? "";
+        asked.to = query.get("to") ?? "";
+        return HttpResponse.json({ from: asked.from, to: asked.to, days: [], weeks: [week("2026-10-12", 3), week("2026-10-19", 4), week("2026-10-26", 2)] });
+      }),
+      http.get(apiUrl("/athletes/:athleteId/charts/body"), () =>
+        HttpResponse.json({ weeks: 52, estimated: true, points: [point("2026-09-01", null), point("2026-09-12", 82.4), point("2026-10-01", 81), point("2026-10-26", 80.1)] }),
+      ),
+    );
+    renderApp("/today");
+
+    await kpi("week", "Workouts this week2 of 4");
+    await kpi("completion", "85%");
+    expect(await kpi("workouts", "9")).toHaveTextContent("Last 12 months");
+    expect(await kpi("weight", "−2.3 kg")).toHaveTextContent("Since Sep 12");
+    await kpi("records", "Personal records2");
+    // The week of the day shown, and a range the adherence endpoint accepts (up to 371 days).
+    expect(asked).toEqual({ week: "2026-10-26", from: "2025-10-28", to: DATE });
+    expect(within(screen.getByTestId("day-checklist")).getByRole("link", { name: "See all progress" })).toHaveAttribute("href", "/progress");
+  });
+
+  it("shows a dash where there is no data yet and no records tile on a rest day", async () => {
+    serve({});
+    renderApp("/today");
+    await kpi("week", "0 of 0");
+    await kpi("workouts", "Workouts completed0");
+    expect(screen.getByTestId("kpi-completion")).toHaveTextContent("—");
+    expect(screen.getByTestId("kpi-weight")).toHaveTextContent("—");
+    expect(screen.getByTestId("kpi-weight")).toHaveTextContent("Needs two weigh-ins");
+    expect(screen.queryByTestId("kpi-records")).not.toBeInTheDocument();
   });
 });
 

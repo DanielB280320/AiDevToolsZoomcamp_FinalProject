@@ -255,7 +255,7 @@ export function TodayView({
   const trainingState = !session ? "rest" : session.status === "done" ? "done" : session.status === "planned" ? "planned" : "inProgress";
   return (
     <>
-      <DayChecklist day={day.data} athleteId={me.id} who={who} />
+      <DayChecklist day={day.data} athleteId={me.id} who={who} units={me.units} progressLink={readOnly ? undefined : paths.progress} />
       {!readOnly && <TodayBanners />}
 
       <Section id="today-energy" description={t("calendar.today.about.energy")} title={t("calendar.today.energy")} icon={<FlameIcon className={SECTION_ICON} />}>
