@@ -120,6 +120,15 @@ describe("buildWeighIn", () => {
 });
 
 describe("Body page: weigh-in form", () => {
+  it("says what the Body tab is for and what the athlete is expected to do (D104)", async () => {
+    fakeBody();
+    renderApp("/body");
+    const about = await screen.findByTestId("body-description");
+    expect(about).toHaveTextContent("Your weight, body fat and measurements over time");
+    expect(about).toHaveTextContent("Weigh in at least 4 days a week");
+    expect(about).toHaveTextContent("accept or reject");
+  });
+
   it("sends metric values when the user works in kg/cm and lists the entry", async () => {
     const { posts } = fakeBody();
     const user = await openBody();

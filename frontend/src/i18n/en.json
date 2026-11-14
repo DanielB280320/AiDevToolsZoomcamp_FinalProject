@@ -807,6 +807,10 @@
   },
   "body": {
     "title": "Body",
+    "about": {
+      "athlete": "Your weight, body fat and measurements over time. FitWise uses them to keep your calorie and macro targets in line with your body. Weigh in at least 4 days a week, ideally at the same time of day: with fewer weigh-ins FitWise can't suggest a weekly calorie adjustment. Body fat and measurements are optional. When your weight changes by 2 % or more, FitWise asks you here whether to recalculate your targets: accept or reject.",
+      "coach": "Your client's weigh-ins, body fat and measurements, newest first. Review them to check that the weight is moving towards the goal. Nothing to do here."
+    },
     "formTitle": "Log a weigh-in",
     "date": "Date",
     "weight": "Weight",

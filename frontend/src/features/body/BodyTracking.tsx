@@ -10,8 +10,8 @@ import { RecalcPrompt } from "./RecalcPrompt";
 import { WeighInForm } from "./WeighInForm";
 
 /**
- * Weigh-ins for one athlete: the log form (owner only), the recalculation prompt and the recent
- * entries. A coach reads the list but never sees the form or the prompt (the API refuses them).
+ * Weigh-ins for one athlete: a description of what the tab is for and what is expected (D104),
+ * the log form (owner only), the recalculation prompt and the recent entries. A coach reads the list but never sees the form or the prompt (the API refuses them).
  */
 export function BodyTracking({
   athleteId,
@@ -41,6 +41,9 @@ export function BodyTracking({
 
   return (
     <>
+      <p className="mt-2 text-step--1 text-slate" data-testid="body-description">
+        {t(`body.about.${canLog ? "athlete" : "coach"}`)}
+      </p>
       {canLog ? (
         <section aria-labelledby="weigh-in-heading" className="mt-6">
           <h2 id="weigh-in-heading" className="font-display text-step-2 font-bold">
