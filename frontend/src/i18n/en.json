@@ -551,7 +551,7 @@
     "noTarget": "No target",
     "weightNotDefined": "Weight not defined",
     "plannedValues": "Planned: {{values}}",
-    "progress": "{{logged}} of {{total}} sets logged",
+    "setsLogged": "{{logged}} of {{total}} sets logged",
     "skipped": "Skipped",
     "glyph": {
       "skipped": "– "

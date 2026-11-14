@@ -286,6 +286,7 @@ describe("set cards (F10.6, F10.7, D96)", () => {
     expect(cards[1]).toHaveTextContent("5 reps");
     expect(cards[1]).toHaveTextContent("50 kg");
     expect(cards[1]).toHaveTextContent("Planned: 8 × 60 kg");
+    expect(cards[3]).toHaveTextContent("Planned: 8 reps");
     expect(cards[2]).toHaveTextContent("8 reps");
     expect(cards[2]).toHaveTextContent("Weight not defined");
     expect(cards[3]).toHaveTextContent("35 kg");
@@ -454,6 +455,8 @@ describe("collapsible exercises (F10.6, D96)", () => {
     for (const h of headers) expect(h).toHaveAttribute("aria-expanded", "false");
     expect(headers[0]).toHaveTextContent("Back squat");
     expect(headers[0]).toHaveTextContent("1 of 3 sets logged");
+    // The page's own completion line keeps its text (no i18n key clash with the section progress).
+    expect(screen.getByText(/^Completion so far: /)).toBeInTheDocument();
     expect(headers[0]).toHaveTextContent(/PR/);
     expect(headers[0]!.getAttribute("aria-controls")).toBeTruthy();
     expect(screen.queryAllByRole("listitem")).toHaveLength(0); // the sets are hidden

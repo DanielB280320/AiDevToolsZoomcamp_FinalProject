@@ -76,6 +76,9 @@ function SetCard({
   // The logged values once the set was logged (or changed with edit), otherwise the plan's target.
   const shown = log && !log.skipped ? log : planned;
   const lines = cardLines(t, shown, units, type);
+  const plannedLines = cardLines(t, planned, units, type);
+  const plannedText =
+    planned.weight_kg != null ? describeCompact(t, planned, units) : plannedLines.main;
   const edited = log != null && !log.skipped && !asPlanned;
   const main = lines.main || (set.is_extra ? t("workout.extra") : t("workout.noTarget"));
 
@@ -102,7 +105,7 @@ function SetCard({
       )}
       {edited && hasTarget && (
         <span className="text-step--1 text-slate">
-          {t("workout.plannedValues", { values: describeCompact(t, planned, units) })}
+          {t("workout.plannedValues", { values: plannedText })}
         </span>
       )}
       {!locked && (
@@ -194,7 +197,7 @@ export function ExerciseCard(props: Props & { defaultOpen?: boolean }) {
             {exercise.exercise.name} {exercise.is_pr && <PrBadge />}
           </span>
           <span className="shrink-0 text-step--1 font-normal text-slate">
-            {t("workout.progress", { logged, total: exercise.sets.length })}
+            {t("workout.setsLogged", { logged, total: exercise.sets.length })}
           </span>
         </button>
       </h2>
