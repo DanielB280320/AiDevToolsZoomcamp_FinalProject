@@ -702,6 +702,9 @@ export interface paths {
          *     F10.3); later returns `409 edit_window_closed`. Coaches get `403` (F16.4).
          *     Values must fit the exercise type (strength: `reps` + `weight_kg`; bodyweight: `reps`; timed:
          *     `seconds`), else `422 invalid_set`; `as_planned`/`skipped` are sent without values.
+         *     `as_planned` on a strength set whose planned weight is `null` (week-1 calibration plans) is
+         *     refused with `422 invalid_set` ("The planned set has no target to copy"): the athlete enters
+         *     reps and weight (D96).
          */
         post: operations["logSet"];
         delete?: never;
@@ -725,7 +728,8 @@ export interface paths {
          * Complete all remaining planned sets as planned
          * @description Logs every unlogged planned set that has a target as done as planned (F10.9, D95), in one
          *     transaction (all or nothing). Sets already logged, edited or skipped, extra sets and sets
-         *     without a target are unchanged, so calling it again changes nothing. Each new set log
+         *     without a target (a strength set without a planned weight counts as having none, D96) are
+         *     unchanged, so calling it again changes nothing. Each new set log
          *     stores a snapshot of the targets like `logSet` (rule 7). It does not finish the session;
          *     completion is recomputed and a `planned` session moves to `in_progress`. On a finished
          *     session inside the edit window the pending suggestions are replaced like any other edit
@@ -2047,7 +2051,8 @@ export interface components {
         SessionStatus: "planned" | "in_progress" | "done" | "missed";
         /**
          * @description Strength: `reps` + `weight_kg`. Bodyweight: `reps` (+ optional added `weight_kg`).
-         *     Timed: `seconds` (+ optional `distance_m`). Or `as_planned: true` / `skipped: true` alone.
+         *     Timed: `seconds` (+ optional `distance_m`). Or `as_planned: true` / `skipped: true` alone (`as_planned` needs a planned weight on a
+         *     strength exercise, D96).
          */
         SetLogInput: {
             exercise_id: components["schemas"]["Id"];

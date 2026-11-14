@@ -57,3 +57,41 @@ export function describeCompact(t: TFunction, values: Partial<SetValues>, units:
   }
   return weight ?? "";
 }
+
+/**
+ * The two lines of a set card: reps (or duration) and weight. A strength set without a weight
+ * says "Weight not defined"; bodyweight and timed sets show a weight only when there is one (D96).
+ */
+export function cardLines(
+  t: TFunction,
+  values: Partial<SetValues>,
+  units: UnitSystem,
+  type: ExerciseSummary["type"],
+): { main: string; weight: string | null } {
+  const distance = values.distance_m != null ? t("workout.meters", { count: values.distance_m }) : null;
+  const main =
+    values.seconds != null
+      ? [t("workout.seconds", { count: values.seconds }), distance].filter(Boolean).join(" · ")
+      : values.reps != null
+        ? t("workout.reps", { count: values.reps })
+        : "";
+  const weight =
+    values.weight_kg != null
+      ? formatWeight(values.weight_kg, units)
+      : type === "strength"
+        ? t("workout.weightNotDefined")
+        : null;
+  return { main, weight };
+}
+
+type Targets = { target_reps: number | null; target_weight_kg: number | null; target_seconds: number | null };
+
+/**
+ * Whether "done as planned" can copy this set's targets (mirrors the server, F10.7, D96): a timed
+ * set needs a duration, other sets need reps, and a strength set also needs a planned weight.
+ */
+export function canLogAsPlanned(set: Targets, type: ExerciseSummary["type"]): boolean {
+  if (type === "timed") return set.target_seconds != null;
+  if (set.target_reps == null) return false;
+  return type !== "strength" || set.target_weight_kg != null;
+}

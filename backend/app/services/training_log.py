@@ -224,6 +224,9 @@ def _resolve_values(
             return None, None, planned.target_seconds, None
         if planned.reps_min is None:
             raise _invalid("The planned set has no target to copy.")
+        if exercise.type == "strength" and planned.target_weight_kg is None:
+            # A strength set needs a weight; without a planned one the athlete enters it (D96).
+            raise _invalid("The planned set has no target to copy.")
         return planned.reps_min, planned.target_weight_kg, None, None
     allowed = {"seconds", "distance_m"} if timed else {"reps", "weight_kg"}
     if not given <= allowed:

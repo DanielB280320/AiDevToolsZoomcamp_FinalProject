@@ -123,7 +123,8 @@ describe("notes: athlete view", () => {
     );
     renderApp("/workout/s-1");
     expect(await screen.findByText("Good pace on this workout")).toBeInTheDocument();
-    const card = screen.getByRole("heading", { name: "Back squat" }).closest("section") as HTMLElement;
+    const card = screen.getByRole("heading", { name: /Back squat/ }).closest("section") as HTMLElement;
+    await userEvent.setup().click(within(card).getByRole("button", { name: /sets logged/ })); // collapsed on load (D96)
     expect(within(card).getByText("Slow the negative")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });

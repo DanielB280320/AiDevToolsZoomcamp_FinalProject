@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router";
@@ -20,6 +20,7 @@ type Schemas = components["schemas"];
 const SESSION_ID = "5a1c0a52-0d2e-4f43-8d3b-2f0e8d5a9a01";
 const SQUAT = { id: "ex-squat", name: "Back squat", type: "strength", equipment: "barbell", muscle_group: "quads" } as const;
 const PLANK = { id: "ex-plank", name: "Plank", type: "timed", equipment: "bodyweight", muscle_group: "core" } as const;
+const PUSHUP = { id: "ex-push", name: "Push-up", type: "bodyweight", equipment: "bodyweight", muscle_group: "chest" } as const;
 const PLANNED_SQUAT = "pe-squat";
 
 const sets = (n: number, log: (setNo: number) => Schemas["SetLog"] | null = () => null): Schemas["SessionSet"][] =>
@@ -115,6 +116,13 @@ function manualClock(start: number) {
 
 const NOW = Date.parse("2026-10-26T17:00:00Z");
 
+/** Every exercise starts collapsed (D96): opens them all so a test can reach the sets. */
+async function expandAll() {
+  for (const header of await screen.findAllByRole("button", { name: /sets logged$/ })) {
+    if (header.getAttribute("aria-expanded") === "false") fireEvent.click(header);
+  }
+}
+
 function renderScreen(clock: Clock, me = meFixture()) {
   const queryClient = createQueryClient();
   queryClient.setDefaultOptions({ queries: { retry: false } });
@@ -135,7 +143,7 @@ afterEach(() => {
 });
 
 describe("Today to first logged set", () => {
-  it("logs set 1 as planned in 2 taps from Today", async () => {
+  it("logs set 1 as planned in 3 taps from Today: workout, open the exercise, check", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-26T11:00:00Z") });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const bodies = captureSets();
@@ -153,7 +161,8 @@ describe("Today to first logged set", () => {
     renderApp("/today");
 
     await user.click(await screen.findByRole("link", { name: "Start workout" }, { timeout: 20_000 })); // tap 1
-    await user.click((await screen.findAllByRole("button", { name: /Done as planned/ }))[0]!); // tap 2
+    await user.click(await screen.findByRole("button", { name: /Back squat.*sets logged/ })); // tap 2
+    await user.click((await screen.findAllByRole("button", { name: /Done as planned/ }))[0]!); // tap 3
 
     expect(bodies).toEqual([
       { exercise_id: SQUAT.id, planned_exercise_id: PLANNED_SQUAT, set_no: 1, as_planned: true, skipped: false },
@@ -168,6 +177,7 @@ describe("rest timer", () => {
     captureSets();
     server.use(sessionOk({ exercises: [squatExercise({ rest_seconds: 120 })] }));
     renderScreen(clock);
+    await expandAll();
 
     expect(screen.queryByRole("timer")).not.toBeInTheDocument();
     await user.click((await screen.findAllByRole("button", { name: /Done as planned/ }))[0]!);
@@ -189,6 +199,7 @@ describe("rest timer", () => {
     captureSets();
     server.use(sessionOk());
     renderScreen(clock);
+    await expandAll();
 
     const buttons = await screen.findAllByRole("button", { name: /Done as planned/ });
     await user.click(buttons[0]!);
@@ -207,6 +218,7 @@ describe("rest timer", () => {
     const bodies = captureSets();
     server.use(sessionOk());
     renderScreen(clock);
+    await expandAll();
 
     await screen.findAllByRole("button", { name: /^Edit/ });
     expect(screen.queryByRole("button", { name: /^Skip/ })).not.toBeInTheDocument();
@@ -218,24 +230,87 @@ describe("rest timer", () => {
   });
 });
 
-describe("set rows (F10.6, F10.7)", () => {
-  it("renders each set as one row: number, target in the user's units, check and edit", async () => {
+const noWeightSet = (n: number, log: Schemas["SetLog"] | null = null): Schemas["SessionSet"] => ({
+  set_no: n,
+  is_extra: false,
+  target_reps: 8,
+  target_weight_kg: null,
+  target_seconds: null,
+  log,
+});
+
+describe("set cards (F10.6, F10.7, D96)", () => {
+  it("lays the sets out as cards: number, reps, weight in the user's units, check and edit", async () => {
     const { clock } = manualClock(NOW);
     server.use(sessionOk());
     renderScreen(clock, meFixture({ units: "imperial" }));
+    await expandAll();
 
-    const rows = await screen.findAllByRole("listitem");
-    expect(rows).toHaveLength(3);
-    const row = rows[0]!;
-    expect(row).toHaveTextContent("Set 1");
-    expect(row).toHaveTextContent("8 × 132.3 lb");
-    expect(within(row).getAllByRole("button")).toHaveLength(2);
-    expect(within(row).getByRole("button", { name: "Done as planned, Back squat, set 1" })).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "Edit Back squat, set 1" })).toBeInTheDocument();
-    // Nothing wraps: the row is a no-wrap flex line.
-    const line = row.firstElementChild!;
-    expect(line).toHaveClass("flex-nowrap");
-    expect(line.querySelector(".truncate")).toHaveClass("whitespace-nowrap");
+    const cards = await screen.findAllByTestId("set-card");
+    expect(cards).toHaveLength(3);
+    const card = cards[0]!;
+    expect(card).toHaveTextContent("Set 1");
+    expect(card).toHaveTextContent("8 reps");
+    expect(card).toHaveTextContent("132.3 lb");
+    expect(within(card).getAllByRole("button")).toHaveLength(2);
+    expect(within(card).getByRole("button", { name: "Done as planned, Back squat, set 1" })).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Edit Back squat, set 1" })).toBeInTheDocument();
+    // Side by side, wrapping onto further lines instead of scrolling sideways; 44 px touch targets.
+    const strip = card.parentElement!;
+    expect(strip).toHaveClass("flex", "flex-wrap");
+    expect(within(card).getByRole("button", { name: /^Edit/ })).toHaveClass("size-11");
+    expect(within(card).getByRole("button", { name: /^Done as planned/ })).toHaveClass("size-11");
+  });
+
+  it("shows the plan's weight, the logged weight once logged, and Weight not defined with neither", async () => {
+    const { clock } = manualClock(NOW);
+    server.use(
+      sessionOk({
+        exercises: [
+          squatExercise({
+            sets: [
+              { ...sets(1)[0]!, set_no: 1 }, // plan weight 60
+              { ...sets(1)[0]!, set_no: 2, log: setLog(2, { reps: 5, weight_kg: 50 }) }, // changed with edit
+              noWeightSet(3), // nothing anywhere
+              noWeightSet(4, setLog(4, { reps: 6, weight_kg: 35, target_weight_kg: null })), // logged weight
+            ],
+          }),
+        ],
+      }),
+    );
+    renderScreen(clock);
+    await expandAll();
+
+    const cards = await screen.findAllByTestId("set-card");
+    expect(cards[0]).toHaveTextContent("60 kg");
+    expect(cards[1]).toHaveTextContent("5 reps");
+    expect(cards[1]).toHaveTextContent("50 kg");
+    expect(cards[1]).toHaveTextContent("Planned: 8 × 60 kg");
+    expect(cards[3]).toHaveTextContent("Planned: 8 reps");
+    expect(cards[2]).toHaveTextContent("8 reps");
+    expect(cards[2]).toHaveTextContent("Weight not defined");
+    expect(cards[3]).toHaveTextContent("35 kg");
+    expect(cards[3]).not.toHaveTextContent("Weight not defined");
+  });
+
+  it("shows bodyweight reps with an added weight only when there is one, and a timed set as a duration", async () => {
+    const { clock } = manualClock(NOW);
+    const plain: Schemas["SessionSet"] = { set_no: 1, is_extra: false, target_reps: 12, target_weight_kg: null, target_seconds: null, log: null };
+    server.use(
+      sessionOk({
+        exercises: [
+          squatExercise({ exercise: PUSHUP, planned_exercise_id: "pe-push", sets: [plain, { ...plain, set_no: 2, target_weight_kg: 10 }] }),
+        ],
+      }),
+    );
+    renderScreen(clock);
+    await expandAll();
+
+    const cards = await screen.findAllByTestId("set-card");
+    expect(cards[0]).toHaveTextContent("12 reps");
+    expect(cards[0]).not.toHaveTextContent("Weight not defined");
+    expect(cards[0]).not.toHaveTextContent("kg");
+    expect(cards[1]).toHaveTextContent("10 kg");
   });
 
   it("shows a timed target as a duration", async () => {
@@ -251,8 +326,11 @@ describe("set rows (F10.6, F10.7)", () => {
       }),
     );
     renderScreen(clock);
+    await expandAll();
 
-    expect(await screen.findByRole("listitem")).toHaveTextContent("45 s");
+    const card = await screen.findByTestId("set-card");
+    expect(card).toHaveTextContent("45 s");
+    expect(card).not.toHaveTextContent("Weight not defined");
   });
 
   it("marks a set done as planned with a pressed, named check and one POST", async () => {
@@ -261,6 +339,7 @@ describe("set rows (F10.6, F10.7)", () => {
     const bodies = captureSets();
     server.use(sessionOk());
     renderScreen(clock);
+    await expandAll();
 
     const check = (await screen.findAllByRole("button", { name: /Done as planned/ }))[0]!;
     expect(check).toHaveAttribute("aria-pressed", "false");
@@ -275,6 +354,7 @@ describe("set rows (F10.6, F10.7)", () => {
     const { clock } = manualClock(NOW);
     server.use(sessionOk({ exercises: [squatExercise({ sets: sets(2, (n) => (n === 1 ? setLog(1) : null)) })] }));
     renderScreen(clock);
+    await expandAll();
 
     const checks = await screen.findAllByRole("button", { name: /Done as planned/ });
     expect(checks[0]).toHaveAttribute("aria-pressed", "true");
@@ -287,10 +367,12 @@ describe("set rows (F10.6, F10.7)", () => {
       sessionOk({ exercises: [squatExercise({ sets: sets(1, (n) => setLog(n, { reps: 5, weight_kg: 50 })) })] }),
     );
     renderScreen(clock);
+    await expandAll();
 
-    const row = await screen.findByRole("listitem");
-    expect(row).toHaveTextContent("8 × 60 kg");
-    expect(row).toHaveTextContent(/Logged: 5 × 50 kg/);
+    const row = await screen.findByTestId("set-card");
+    expect(row).toHaveTextContent("Planned: 8 × 60 kg");
+    expect(row).toHaveTextContent(/Logged: 5 reps/);
+    expect(row).toHaveTextContent("50 kg");
     expect(within(row).getByRole("button", { name: /Done as planned/ })).toHaveAttribute("aria-pressed", "false");
   });
 
@@ -302,8 +384,9 @@ describe("set rows (F10.6, F10.7)", () => {
       }),
     );
     renderScreen(clock);
+    await expandAll();
 
-    const row = await screen.findByRole("listitem");
+    const row = await screen.findByTestId("set-card");
     expect(row).toHaveTextContent("Skipped");
     expect(within(row).getByRole("button", { name: /Done as planned/ })).toHaveAttribute("aria-pressed", "false");
   });
@@ -316,17 +399,95 @@ describe("set rows (F10.6, F10.7)", () => {
       sessionOk({
         exercises: [
           squatExercise({
+            exercise: PUSHUP,
             sets: [{ set_no: 1, is_extra: false, target_reps: null, target_weight_kg: null, target_seconds: null, log: null }],
           }),
         ],
       }),
     );
     renderScreen(clock);
+    await expandAll();
 
     const check = await screen.findByRole("button", { name: /Done as planned/ });
     expect(check).toHaveAttribute("aria-disabled", "true");
     await user.click(check);
     expect(bodies).toHaveLength(0);
+  });
+});
+
+describe("check on a strength set without a weight (D96)", () => {
+  it("opens the editor instead of logging; saving sends the entered reps and weight", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    const bodies = captureSets();
+    server.use(sessionOk({ exercises: [squatExercise({ sets: [noWeightSet(1)] })] }));
+    renderScreen(clock);
+    await expandAll();
+
+    await user.click(await screen.findByRole("button", { name: /Done as planned/ }));
+    expect(bodies).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Save set" })).toBeInTheDocument();
+    expect(screen.getByTestId("set-card")).toHaveTextContent("Weight not defined");
+    await user.type(screen.getByLabelText(/^Weight/), "30");
+    await user.click(screen.getByRole("button", { name: "Save set" }));
+    expect(bodies[0]).toMatchObject({ set_no: 1, reps: 8, weight_kg: 30 });
+    expect(bodies[0]).not.toHaveProperty("as_planned", true);
+  });
+});
+
+describe("collapsible exercises (F10.6, D96)", () => {
+  const two = () => [
+    squatExercise(),
+    squatExercise({
+      exercise: PLANK,
+      planned_exercise_id: "pe-plank",
+      sets: [{ set_no: 1, is_extra: false, target_reps: null, target_weight_kg: null, target_seconds: 45, log: null }],
+    }),
+  ];
+
+  it("starts with every exercise collapsed; the header shows name, progress and aria state", async () => {
+    const { clock } = manualClock(NOW);
+    server.use(sessionOk({ exercises: [squatExercise({ is_pr: true, sets: sets(3, (n) => (n === 1 ? setLog(1) : null)) }), two()[1]!] }));
+    renderScreen(clock);
+
+    const headers = await screen.findAllByRole("button", { name: /sets logged$/ });
+    expect(headers).toHaveLength(2);
+    for (const h of headers) expect(h).toHaveAttribute("aria-expanded", "false");
+    expect(headers[0]).toHaveTextContent("Back squat");
+    expect(headers[0]).toHaveTextContent("1 of 3 sets logged");
+    // The page's own completion line keeps its text (no i18n key clash with the section progress).
+    expect(screen.getByText(/^Completion so far: /)).toBeInTheDocument();
+    expect(headers[0]).toHaveTextContent(/PR/);
+    expect(headers[0]!.getAttribute("aria-controls")).toBeTruthy();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0); // the sets are hidden
+    expect(screen.queryByRole("button", { name: /Add set/ })).not.toBeInTheDocument();
+  });
+
+  it("opens several at once and keeps the choice while the screen is open", async () => {
+    const { clock } = manualClock(NOW);
+    const user = userEvent.setup();
+    captureSets();
+    server.use(sessionOk({ exercises: two() }));
+    renderScreen(clock);
+
+    const [squat, plank] = await screen.findAllByRole("button", { name: /sets logged$/ });
+    await user.click(squat!);
+    await user.click(plank!);
+    expect(squat).toHaveAttribute("aria-expanded", "true");
+    expect(plank).toHaveAttribute("aria-expanded", "true");
+    expect(squat!.getAttribute("aria-controls")).not.toBe(plank!.getAttribute("aria-controls"));
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: /Add set/ })).toHaveLength(2);
+
+    // Logging a set (the data reloads) keeps both open.
+    await user.click(screen.getAllByRole("button", { name: /Done as planned, Back squat/ })[0]!);
+    expect(await screen.findByRole("timer")).toBeInTheDocument();
+    expect(squat).toHaveAttribute("aria-expanded", "true");
+    expect(plank).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(squat!);
+    expect(squat).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
   });
 });
 
@@ -355,6 +516,7 @@ describe("complete all as planned (F10.9)", () => {
       }),
     );
     renderScreen(clock);
+    await expandAll();
 
     await user.click(await screen.findByRole("button", { name: "Complete all as planned" }));
     expect(calls).toHaveLength(0); // not before the confirmation
@@ -373,6 +535,7 @@ describe("complete all as planned (F10.9)", () => {
     const calls = captureComplete();
     server.use(sessionOk());
     renderScreen(clock);
+    await expandAll();
 
     await user.click(await screen.findByRole("button", { name: "Complete all as planned" }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
@@ -385,8 +548,17 @@ describe("complete all as planned (F10.9)", () => {
     const { clock } = manualClock(NOW);
     server.use(sessionOk({ exercises: [squatExercise({ sets: sets(2, (n) => setLog(n)) })] }));
     renderScreen(clock);
+    await expandAll();
 
-    await screen.findByRole("heading", { name: "Back squat" });
+    await screen.findByRole("heading", { name: /Back squat/ });
+    expect(screen.queryByRole("button", { name: "Complete all as planned" })).not.toBeInTheDocument();
+  });
+
+  it("is hidden when the only unlogged sets are strength sets without a weight", async () => {
+    const { clock } = manualClock(NOW);
+    server.use(sessionOk({ exercises: [squatExercise({ sets: [noWeightSet(1), noWeightSet(2)] })] }));
+    renderScreen(clock);
+    await screen.findAllByRole("button", { name: /sets logged$/ });
     expect(screen.queryByRole("button", { name: "Complete all as planned" })).not.toBeInTheDocument();
   });
 
@@ -394,8 +566,9 @@ describe("complete all as planned (F10.9)", () => {
     const { clock } = manualClock(Date.parse("2026-10-28T10:00:00Z"));
     server.use(sessionOk({ status: "done" }));
     renderScreen(clock);
+    await expandAll();
 
-    await screen.findByRole("heading", { name: "Back squat" });
+    await screen.findByRole("heading", { name: /Back squat/ });
     expect(screen.queryByRole("button", { name: "Complete all as planned" })).not.toBeInTheDocument();
   });
 
@@ -407,6 +580,7 @@ describe("complete all as planned (F10.9)", () => {
       http.post(apiUrl("/sessions/:id/sets/complete-planned"), () => problem(409, "edit_window_closed")),
     );
     renderScreen(clock);
+    await expandAll();
 
     await user.click(await screen.findByRole("button", { name: "Complete all as planned" }));
     await user.click(screen.getByRole("button", { name: "Yes, complete them" }));
@@ -422,6 +596,7 @@ describe("editing sets", () => {
     const bodies = captureSets();
     server.use(sessionOk());
     renderScreen(clock);
+    await expandAll();
 
     await user.click((await screen.findAllByRole("button", { name: /^Edit/ }))[1]!); // set 2
     const reps = screen.getByLabelText("Reps");
@@ -443,6 +618,7 @@ describe("editing sets", () => {
     const bodies = captureSets();
     server.use(sessionOk());
     renderScreen(clock, meFixture({ units: "imperial" }));
+    await expandAll();
 
     await user.click((await screen.findAllByRole("button", { name: /^Edit/ }))[0]!);
     const weight = screen.getByLabelText("Weight (lb)");
@@ -460,6 +636,7 @@ describe("editing sets", () => {
     const bodies = captureSets();
     server.use(sessionOk());
     renderScreen(clock);
+    await expandAll();
 
     await user.click((await screen.findAllByRole("button", { name: /^Edit/ }))[0]!);
     await user.clear(screen.getByLabelText("Reps"));
@@ -486,6 +663,7 @@ describe("editing sets", () => {
       }),
     );
     renderScreen(clock);
+    await expandAll();
 
     await user.click(await screen.findByRole("button", { name: /^Edit/ }));
     expect(screen.queryByLabelText("Reps")).not.toBeInTheDocument();
@@ -503,6 +681,7 @@ describe("editing sets", () => {
     const bodies = captureSets();
     server.use(sessionOk());
     renderScreen(clock);
+    await expandAll();
 
     await user.click(await screen.findByRole("button", { name: /^Add set/ }));
     await user.type(screen.getByLabelText("Reps"), "5");
@@ -521,6 +700,7 @@ describe("editing sets", () => {
       http.get(apiUrl("/exercises"), () => HttpResponse.json({ items: [PLANK], next_cursor: null })),
     );
     renderScreen(clock);
+    await expandAll();
 
     await user.click(await screen.findByRole("button", { name: "Add exercise" }));
     await user.type(screen.getByLabelText("Search exercises by name"), "pla");
@@ -540,6 +720,7 @@ describe("editing sets", () => {
       http.get(apiUrl("/exercises"), () => HttpResponse.json({ items: [PLANK], next_cursor: null })),
     );
     renderScreen(clock);
+    await expandAll();
 
     await user.click(await screen.findByRole("button", { name: "Add exercise" }));
     await user.type(screen.getByLabelText("Search exercises by name"), "pla");
@@ -547,7 +728,7 @@ describe("editing sets", () => {
     expect(await screen.findByLabelText("Duration (s)")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.queryByRole("heading", { name: "Plank" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Plank/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Duration (s)")).not.toBeInTheDocument();
     expect(bodies).toHaveLength(0);
   });
@@ -558,11 +739,12 @@ describe("editing sets", () => {
     const bodies = captureSets();
     server.use(sessionOk());
     renderScreen(clock);
+    await expandAll();
 
     await user.click(await screen.findByRole("button", { name: /^Add set/ }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.getByRole("heading", { name: "Back squat" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Back squat/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Add set/ })).toBeInTheDocument();
     expect(bodies).toHaveLength(0);
   });
@@ -588,12 +770,13 @@ describe("editing sets", () => {
     });
     server.use(sessionOk({ exercises: [squatExercise(), extraPlank] }));
     renderScreen(clock);
+    await expandAll();
 
-    const card = (await screen.findByRole("heading", { name: "Plank" })).closest("section")!;
+    const card = (await screen.findByRole("heading", { name: /Plank/ })).closest("section")!;
     await user.click(within(card).getByRole("button", { name: /^Add set/ }));
     await user.click(within(card).getByRole("button", { name: "Cancel" }));
 
-    expect(screen.getByRole("heading", { name: "Plank" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Plank/ })).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: /^Add set/ })).toBeInTheDocument();
     expect(bodies).toHaveLength(0);
   });
@@ -606,6 +789,7 @@ describe("editing sets", () => {
       http.get(apiUrl("/exercises"), () => HttpResponse.json({ items: [PLANK], next_cursor: null })),
     );
     renderScreen(clock);
+    await expandAll();
 
     for (let round = 0; round < 2; round++) {
       await user.click(await screen.findByRole("button", { name: "Add exercise" }));
@@ -613,9 +797,9 @@ describe("editing sets", () => {
       await user.type(screen.getByLabelText("Search exercises by name"), "pla");
       await user.click(await screen.findByRole("button", { name: "Plank" }));
       expect(await screen.findByLabelText("Duration (s)")).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: "Plank" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Plank/ })).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Cancel" }));
-      expect(screen.queryByRole("heading", { name: "Plank" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /Plank/ })).not.toBeInTheDocument();
     }
   });
 
@@ -627,6 +811,7 @@ describe("editing sets", () => {
       http.post(apiUrl("/sessions/:id/sets"), () => problem(409, "edit_window_closed")),
     );
     renderScreen(clock);
+    await expandAll();
 
     await user.click((await screen.findAllByRole("button", { name: /Done as planned/ }))[0]!);
 
@@ -643,8 +828,9 @@ describe("editing sets", () => {
       }),
     );
     renderScreen(clock);
+    await expandAll();
 
-    expect(await screen.findByRole("listitem")).toHaveTextContent("8 × 60 kg");
+    expect(await screen.findByTestId("set-card")).toHaveTextContent("60 kg");
     expect(screen.getAllByText("This workout can no longer be edited.").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /^Edit/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Finish workout/ })).not.toBeInTheDocument();
@@ -699,6 +885,7 @@ describe("finish", () => {
       http.get(apiUrl("/athletes/:id/suggestions"), () => HttpResponse.json({ items: [suggestion], weigh_in_hint: null })),
     );
     renderScreen(clock);
+    await expandAll();
 
     await user.click((await screen.findAllByRole("button", { name: /Done as planned/ }))[0]!);
     expect(await screen.findByRole("timer")).toBeInTheDocument();
@@ -719,12 +906,13 @@ describe("finish", () => {
     const user = userEvent.setup();
     server.use(sessionOk(), finishOk([]));
     renderScreen(clock);
+    await expandAll();
 
     await user.click(await screen.findByRole("button", { name: "Finish workout" }));
     expect(await screen.findByText("No new suggestions.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Review sets" }));
-    expect(screen.getByRole("heading", { name: "Back squat" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Back squat/ })).toBeInTheDocument();
   });
 
   it("shows an error and stays on the sets when finishing fails", async () => {
@@ -732,11 +920,12 @@ describe("finish", () => {
     const user = userEvent.setup();
     server.use(sessionOk(), http.post(apiUrl("/sessions/:id/finish"), () => problem(500, "internal_error")));
     renderScreen(clock);
+    await expandAll();
 
     await user.click(await screen.findByRole("button", { name: "Finish workout" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("That didn't save. Try again.");
-    expect(screen.getByRole("heading", { name: "Back squat" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Back squat/ })).toBeInTheDocument();
   });
 });
 

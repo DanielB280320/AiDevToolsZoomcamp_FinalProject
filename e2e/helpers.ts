@@ -210,3 +210,54 @@ export async function completeWizardInUi(page: Page): Promise<number> {
   await expect(calories).toBeVisible();
   return Number(((await calories.textContent()) ?? "").replace(/\D/g, ""));
 }
+
+/**
+ * Body of a set-logging call for a planned set. "As planned" copies the plan's targets; a strength
+ * set without a planned weight cannot be logged that way (#223, D96), so the reps and a light
+ * weight are sent explicitly, like an athlete entering them in the editor.
+ */
+export function plannedOrEntered(
+  type: string,
+  set: { target_reps: number | null; target_weight_kg?: number | null },
+): { as_planned: true } | { reps: number; weight_kg: number } {
+  if (type === "strength" && set.target_weight_kg == null) return { reps: set.target_reps ?? 8, weight_kg: 20 };
+  return { as_planned: true };
+}
+
+/**
+ * Gives the first strength exercise of every training day a planned weight (through the plan-edit
+ * API, before any session exists), so a workout has both sets "as planned" can log and week-1
+ * strength sets without a weight (#223, D96). Later strength exercises keep the calibration `null`.
+ */
+export async function giveFirstStrengthExerciseAWeight(request: APIRequestContext, weightKg = 40) {
+  const got = await request.get("/api/v1/athletes/me/plan");
+  expect(got.status(), await got.text()).toBe(200);
+  const plan = await got.json();
+  const training_days = plan.training_days.map(
+    (day: { id: string; weekday: string; name: string; exercises: Record<string, any>[] }) => {
+      let given = false;
+      return {
+        id: day.id,
+        weekday: day.weekday,
+        name: day.name,
+        exercises: day.exercises.map((e) => {
+          const gives = !given && e.exercise.type === "strength";
+          given ||= gives;
+          return {
+            id: e.id,
+            exercise_id: e.exercise.id,
+            sets: e.sets,
+            reps_min: e.reps_min,
+            reps_max: e.reps_max,
+            target_weight_kg: gives ? weightKg : e.target_weight_kg,
+            target_seconds: e.target_seconds,
+            rest_seconds: e.rest_seconds,
+            rule: e.rule,
+          };
+        }),
+      };
+    },
+  );
+  const put = await request.put("/api/v1/athletes/me/plan/training", { data: { revision: plan.revision, training_days } });
+  expect(put.status(), await put.text()).toBe(200);
+}

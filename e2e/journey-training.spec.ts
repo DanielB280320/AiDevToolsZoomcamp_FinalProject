@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { addDays, onboard, run, signIn, signUp, todayIso } from "./helpers";
+import { addDays, onboard, plannedOrEntered, run, signIn, signUp, todayIso } from "./helpers";
 
 /**
  * Journey 2 (#52, spec §10): an onboarded athlete opens today's workout, logs every set of one
@@ -40,7 +40,7 @@ test("journey 2: log a workout above target, finish, accept the suggestion, see 
   for (const other of exercises.filter((e) => e !== subject)) {
     for (const set of other.sets) {
       const response = await api.post(`/api/v1/sessions/${session.id}/sets`, {
-        data: { exercise_id: other.exercise.id, planned_exercise_id: other.planned_exercise_id, set_no: set.set_no, as_planned: true },
+        data: { exercise_id: other.exercise.id, planned_exercise_id: other.planned_exercise_id, set_no: set.set_no, ...plannedOrEntered(other.exercise.type, set) },
       });
       expect(response.status(), await response.text()).toBe(201);
     }
@@ -58,12 +58,17 @@ test("journey 2: log a workout above target, finish, accept the suggestion, see 
   const aboveTarget = repsTarget + 2;
   await test.step("log every set of one exercise above its rep target", async () => {
     const card = page.getByRole("region", { name: subject!.exercise.name });
+    // Every exercise starts collapsed (D96): open the one being logged.
+    const header = card.getByRole("button", { name: /sets logged/ });
+    await expect(header).toHaveAttribute("aria-expanded", "false");
+    await header.click();
+    await expect(header).toHaveAttribute("aria-expanded", "true");
     for (const set of subject!.sets) {
       await card.getByRole("button", { name: new RegExp(`^Edit .*, set ${set.set_no}$`) }).click();
       await card.getByLabel("Reps", { exact: true }).fill(String(aboveTarget));
       await card.getByLabel(/^Weight/).fill("20");
       await card.getByRole("button", { name: "Save set", exact: true }).click();
-      await expect(card.getByText(`Logged: ${aboveTarget} × 20 kg`)).toHaveCount(set.set_no);
+      await expect(card.getByTestId("set-card").filter({ hasText: new RegExp(`${aboveTarget} reps`) })).toHaveCount(set.set_no);
     }
   });
 

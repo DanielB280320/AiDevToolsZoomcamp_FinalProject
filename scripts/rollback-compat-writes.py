@@ -104,10 +104,16 @@ if session is None:
     failures.append("no training session found to log a set into")
     raise SystemExit(finish())
 planned = session["exercises"][0]
+first = planned["sets"][0]
+# A strength set without a planned weight cannot be logged as planned (D96): enter the values.
+if planned["exercise"]["type"] == "strength" and first.get("target_weight_kg") is None:
+    values = {"reps": first.get("target_reps") or 8, "weight_kg": 20}
+else:
+    values = {"as_planned": True}
 step("log a set", "POST", f"/sessions/{session['id']}/sets", {
     "exercise_id": planned["exercise"]["id"],
     "planned_exercise_id": planned["planned_exercise_id"],
-    "set_no": 1, "as_planned": True,
+    "set_no": 1, **values,
 }, {200, 201})
 
 view = step("day view (meals)", "GET", f"/athletes/{aid}/days/{today.isoformat()}", None, {200})

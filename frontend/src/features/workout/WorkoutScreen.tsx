@@ -21,6 +21,7 @@ import { dayNotes, exerciseNotes, NoteThread, sessionNotes } from "../notes/Note
 import { type Clock, systemClock } from "./clock";
 import { ExerciseAdder } from "./ExerciseAdder";
 import { ExerciseCard, type SetSaver } from "./ExerciseCard";
+import { canLogAsPlanned } from "./values";
 import { FinishSummary, percent } from "./FinishSummary";
 import { RestTimer } from "./RestTimer";
 import { useRestTimer } from "./useRestTimer";
@@ -96,7 +97,7 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
     .filter((e) => !e.is_extra)
     .reduce(
       (count, e) =>
-        count + e.sets.filter((x) => !x.log && (x.target_reps != null || x.target_seconds != null)).length,
+        count + e.sets.filter((x) => !x.log && canLogAsPlanned(x, e.exercise.type)).length,
       0,
     );
 
@@ -190,6 +191,7 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
           )}
           {exercises.map((exercise) => (
             <ExerciseCard
+              defaultOpen={exercise.is_extra && exercise.sets.length === 0}
               key={exercise.planned_exercise_id ?? exercise.exercise.id}
               exercise={exercise}
               notes={day.data ? exerciseNotes(day.data.notes, exercise.exercise.id) : []}
