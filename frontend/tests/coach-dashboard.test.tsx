@@ -275,6 +275,8 @@ describe("'edited by' labels", () => {
     source: "custom",
     active: true,
     revision: 2,
+    name: null,
+    start_date: null,
     created_by: { id: "c-1", display_name: "Cleo", role: "coach" },
     created_at: "2026-10-20T08:00:00Z",
     updated_at: "2026-10-20T08:00:00Z",
@@ -308,7 +310,7 @@ describe("'edited by' labels", () => {
   it("shows no label once the athlete edited the day by hand", async () => {
     servePlan({ id: meFixture().id, display_name: "Ana", role: "athlete" });
     renderApp("/plan");
-    await screen.findByRole("heading", { name: "Mon: Push" });
+    await screen.findByRole("heading", { name: /^Mon: Push/ });
     expect(screen.queryByText(/Edited by/)).not.toBeInTheDocument();
   });
 

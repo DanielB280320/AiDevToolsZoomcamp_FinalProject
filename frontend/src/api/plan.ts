@@ -16,6 +16,7 @@ export type Weekday = Schemas["Weekday"];
 export type Meal = Schemas["Meal"];
 export type MealInput = Schemas["MealInput"];
 export type RegeneratePlanRequest = Schemas["RegeneratePlanRequest"];
+export type CreatePlanRequest = Schemas["CreatePlanRequest"];
 export type ProgressionRule = Schemas["ProgressionRule"];
 
 export const WEEKDAYS: readonly Weekday[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -126,6 +127,22 @@ export function useRegeneratePlan(athleteId: string) {
   return useMutation({
     mutationFn: async (body: RegeneratePlanRequest = { scope: "all" }) => {
       const { data, error, response } = await api.POST("/athletes/{athlete_id}/plan/regenerate", {
+        params: { path: { athlete_id: athleteId } },
+        body,
+      });
+      if (data) return data;
+      throw apiError(response, error);
+    },
+    onSuccess: after,
+  });
+}
+
+/** A new named plan, empty or generated; it replaces the active one at once (D105). */
+export function useCreatePlan(athleteId: string) {
+  const after = useAfterPlanChange(athleteId);
+  return useMutation({
+    mutationFn: async (body: CreatePlanRequest) => {
+      const { data, error, response } = await api.POST("/athletes/{athlete_id}/plan", {
         params: { path: { athlete_id: athleteId } },
         body,
       });

@@ -4,7 +4,7 @@ import datetime as dt
 import uuid
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.schemas.base import RequestModel, ResponseModel
 from app.schemas.exercises import ExerciseEquipment, ExerciseType, MuscleGroup
@@ -98,6 +98,8 @@ class Plan(ResponseModel):
     source: PlanSource
     active: bool
     revision: int
+    name: str | None
+    start_date: dt.date | None
     created_by: UserRef | None
     created_at: dt.datetime
     updated_at: dt.datetime
@@ -111,6 +113,8 @@ class PlanVersionSummary(ResponseModel):
     version: int
     source: PlanSource
     active: bool
+    name: str | None
+    start_date: dt.date | None
     created_by: UserRef | None
     created_at: dt.datetime
 
@@ -168,3 +172,21 @@ class MealPlanUpdate(RequestModel):
 
 class RegeneratePlanRequest(RequestModel):
     scope: Literal["all", "training", "meals"] = "all"
+
+
+class CreatePlanRequest(RequestModel):
+    """D105: a named plan. `start_date` is a label (today or earlier, checked in the service
+    against the athlete's time zone); `scope` applies to `start_from = generated` only."""
+
+    name: str
+    start_date: dt.date | None = None
+    start_from: Literal["empty", "generated"] = "empty"
+    scope: Literal["all", "training", "meals"] = "all"
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        value = value.strip()
+        if not 1 <= len(value) <= 60:
+            raise ValueError("Use 1 to 60 characters.")
+        return value

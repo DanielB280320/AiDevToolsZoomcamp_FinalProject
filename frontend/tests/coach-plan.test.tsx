@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
@@ -44,6 +44,8 @@ describe("plan editor in the coach context", () => {
       source: "generated",
       active: true,
       revision: 3,
+      name: null,
+      start_date: null,
       created_by: { id: ANA, display_name: "Alice", role: "athlete" },
       created_at: "2026-10-20T08:00:00Z",
       updated_at: "2026-10-20T08:00:00Z",
@@ -75,6 +77,10 @@ describe("plan editor in the coach context", () => {
     );
     const user = userEvent.setup();
     renderApp(`/coach/clients/${ANA}/plan`);
+    expect(await screen.findByTestId("plan-description")).toHaveTextContent("The client's training and meal plan");
+    expect(screen.getByText(/Add or edit the client's training days/)).toBeInTheDocument();
+    // Days are collapsed by default (D105): open the first one.
+    await user.click(within(await screen.findByRole("heading", { level: 3, name: /exercise/ })).getByRole("button"));
     const sets = (await screen.findAllByLabelText("Sets"))[0]!;
     await user.clear(sets);
     await user.type(sets, "4");
