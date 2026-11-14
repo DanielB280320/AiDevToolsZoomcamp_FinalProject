@@ -33,7 +33,46 @@ KNOWN_ALLERGEN_FOODS = {
     "Salmon, cooked": "fish",
     "Tuna, canned in water": "fish",
     "Cod, cooked": "fish",
+    # added with D97
+    "White bread": "gluten",
+    "Sourdough bread": "gluten",
+    "Bagel": "gluten",
+    "White pasta, cooked": "gluten",
+    "Couscous, cooked": "gluten",
+    "Bulgur, cooked": "gluten",
+    "Seitan": "gluten",
+    "Oat milk": "gluten",
+    "Muesli, unsweetened": "gluten",
+    "Granola": "gluten",
+    "Cashews": "nuts",
+    "Peanuts": "nuts",
+    "Almond milk, unsweetened": "nuts",
+    "Edamame": "soy",
+    "Soy yogurt, plain": "soy",
+    "Egg white": "eggs",
+    "Milk, whole": "lactose",
+    "Milk, skimmed": "lactose",
+    "Greek yogurt, full fat": "lactose",
+    "Plain yogurt, low fat": "lactose",
+    "Skyr": "lactose",
+    "Parmesan": "lactose",
+    "Ricotta": "lactose",
+    "Halloumi": "lactose",
+    "Cream cheese": "lactose",
+    "Butter": "lactose",
+    "Tuna steak, cooked": "fish",
+    "Sardines, canned in oil": "fish",
+    "Mackerel, cooked": "fish",
+    "Trout, cooked": "fish",
+    "Tilapia, cooked": "fish",
+    "Smoked salmon": "fish",
+    "Mussels, cooked": "shellfish",
 }
+
+
+def test_the_food_library_has_enough_variety() -> None:
+    """D97: the library is wide enough to build meals by hand (was about 55 foods)."""
+    assert len(SEED_FOODS) >= 120
 
 
 def _meal_tags(name: str) -> tuple[str, ...]:
@@ -79,6 +118,13 @@ def test_diet_tags_are_non_empty_unless_the_food_is_meat_or_poultry() -> None:
         "Beef mince 10% fat, cooked",
         "Beef sirloin steak, cooked",
         "Lean ham",
+        "Chicken thigh, cooked",
+        "Turkey mince, cooked",
+        "Beef mince 5% fat, cooked",
+        "Pork tenderloin, cooked",
+        "Lamb leg, cooked",
+        "Bacon, cooked",
+        "Serrano ham",
     }
     for food in SEED_FOODS:
         if "vegan" in food.diet_tags:

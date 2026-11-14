@@ -32,6 +32,7 @@ function ExerciseRow({
   notes,
   sessionId,
   canNote,
+  finished,
 }: {
   exercise: SessionExercise;
   units: Me["units"];
@@ -39,6 +40,8 @@ function ExerciseRow({
   notes: DayView["notes"];
   sessionId: string;
   canNote: boolean;
+  /** The session is finished: show how much of the exercise was completed (F10.2 per exercise, D97). */
+  finished: boolean;
 }) {
   const { t } = useTranslation();
   const first = exercise.sets[0];
@@ -58,6 +61,11 @@ function ExerciseRow({
         <span className="text-right text-step--1 text-slate">
           {t("calendar.today.sets", { count: exercise.sets.length })}
           {target && ` · ${target}`}
+          {finished && exercise.completion != null && (
+            <span className="block font-semibold text-iron" data-testid="exercise-completion">
+              {t("calendar.today.exerciseCompletion", { value: Math.round(exercise.completion * 100) })}
+            </span>
+          )}
         </span>
       </div>
       <NoteThread
@@ -149,6 +157,11 @@ export function TodayView({
           <StatusBadge kind={kind} />
           <span className="font-semibold">{session?.training_day_name ?? t("calendar.restDay")}</span>
         </p>
+        {session?.status === "done" && session.completion != null && (
+          <p className="mt-1 font-semibold" data-testid="session-completion">
+            {t("calendar.today.sessionCompletion", { value: Math.round(session.completion * 100) })}
+          </p>
+        )}
         <EditedBy name={coachEditor(plan.data?.training_days.find((d) => d.weekday === day.data.weekday)?.edited_by)} />
         {session && readOnly && sessionLink && (
           <Link to={sessionLink(session.id)} className="mt-3 inline-flex min-h-11 items-center font-semibold text-spruce underline underline-offset-4">
@@ -182,6 +195,7 @@ export function TodayView({
                 notes={day.data.notes}
                 sessionId={session.id}
                 canNote={readOnly}
+                finished={session.status === "done"}
               />
             ))}
           </ul>
