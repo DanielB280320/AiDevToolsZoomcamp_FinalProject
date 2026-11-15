@@ -44,12 +44,12 @@ The **QA and PM write scopes below are guarded**, not just documented (a guardra
 
 ### Engineer — [`engineer.md`](../.claude/agents/engineer.md)
 - **Owns:** implementation of `role:engineer` issues (backend, frontend, engines).
-- **Does:** works one issue per branch/worktree; contract first (`openapi.yaml`), tests with every change; updates the spec when behaviour changes; opens the PR with a self-check against every AC; moves the issue to In QA.
+- **Does:** works one issue per branch/worktree; contract first (`openapi.yaml`), tests with every change; updates the spec when behaviour changes; for UI work follows the project skill [`fitwise-design-system`](../.claude/skills/fitwise-design-system/SKILL.md) (FitWise's tokens and shipped component patterns; it wins over the generic `frontend-design` skill) and documents anything it adds to the design system there; opens the PR with a self-check against every AC; moves the issue to In QA.
 - **Writes:** application code, tests, migrations, `openapi.yaml`, related docs.
 
 ### QA — [`qa.md`](../.claude/agents/qa.md)
 - **Owns:** independent verification. Nothing is merged without a QA PASS.
-- **Does:** starts from the issue and the spec, not the PR description; runs lint and tests; reproduces each AC with evidence; checks the project rules (privacy, migrations, spec updated); posts PASS/FAIL on the issue in the standard format.
+- **Does:** starts from the issue and the spec, not the PR description; runs lint and tests; reproduces each AC with evidence; checks the project rules (privacy, migrations, spec updated); on UI PRs runs the `fitwise-design-system` checklist (a miss is a note unless it also breaks an AC or spec §6.1); posts PASS/FAIL on the issue in the standard format.
 - **Writes:** tests only (`backend/tests/`, `frontend/tests/`, `e2e/`; commits prefixed `test:`) and issue/PR comments. Never changes production code — it reports defects. *Guarded by the scope-guard hook.*
 
 ### DevOps / SRE — [`devops.md`](../.claude/agents/devops.md)
