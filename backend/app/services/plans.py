@@ -62,7 +62,8 @@ def plan_numbers(session: Session, athlete_id: uuid.UUID) -> dict[int, int]:
 
     A stored `plan_no` wins. A null (a row the previous release wrote) belongs to the plan of the
     preceding version, unless its change is `created_new`, which starts the next plan; the first
-    version is plan 1. Numbers never decrease with the version.
+    version is plan 1. Stored numbers need not increase with the version (a plan made current
+    again keeps writing its own, D108); only null rows are resolved by position.
     """
     rows = session.execute(
         select(Plan.id, Plan.version, Plan.plan_no)
@@ -164,7 +165,9 @@ def create_plan_version(
     `name` and `start_date` (D105) are carried forward from the previous active version unless
     given (`createPlan` gives them; `None` clears). `plan_no` (D106) is the previous version's plan
     number, or the next one when `starts_plan` (onboarding is plan 1, `createPlan` starts the next).
-    `training_goal` (D107) is carried forward like `name` unless given.
+    `training_goal` (D107) is carried forward like `name` unless given. The version is the athlete's
+    highest + 1 (deleted ones included) and the previous active version need not be the highest
+    (D108).
     """
     session.execute(select(User.id).where(User.id == athlete_id).with_for_update()).one()
     previous = session.scalar(
@@ -193,8 +196,11 @@ def create_plan_version(
                 for d in sorted(previous.meal_days, key=lambda d: d.position)
             ]
         )
-    last_no = max(plan_numbers(session, athlete_id).values(), default=0)
-    plan_no = last_no + 1 if starts_plan or last_no == 0 else last_no
+    # D108: the active version is not necessarily the highest one, so a plan keeps the number of
+    # the version it continues, and a new plan takes max + 1 over every plan, deleted ones included.
+    numbers = plan_numbers(session, athlete_id)
+    last_no = max(numbers.values(), default=0)
+    plan_no = last_no + 1 if starts_plan or previous is None else numbers[previous.version]
     latest = session.scalar(select(func.max(Plan.version)).where(Plan.athlete_id == athlete_id))
     session.execute(
         update(Plan)

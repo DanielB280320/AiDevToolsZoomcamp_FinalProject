@@ -174,6 +174,15 @@ function Editor({
               units={me.units}
               timezone={me.timezone}
               viewer={viewer}
+              unsaved={dirty.training || dirty.meals}
+              onActivated={(next) => {
+                setSaved(false);
+                setCreated(null);
+                setCreatedRevision(next.revision);
+                setBase(next.revision);
+                setConflict(false);
+                setEpoch((n) => n + 1);
+              }}
             />
           </>
         )}

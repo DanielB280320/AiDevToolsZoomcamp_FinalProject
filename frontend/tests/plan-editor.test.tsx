@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { QueryClient } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../src/api/schema";
 import { buildTrainingUpdate, draftFromPlan } from "../src/features/plan/trainingDraft";
@@ -1058,6 +1059,106 @@ describe("Plan editor: history of plans (D106)", () => {
     expect(within(view).queryByRole("button", { name: /save|remove|add/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back to changes" }));
     expect(await screen.findByTestId("plan-timeline")).toBeInTheDocument();
+  });
+});
+
+describe("Plan editor: make current and delete a plan (D108)", () => {
+  const listed: Schemas["PlanSummary"][] = [
+    {
+      ...PLAN_ONE,
+      plan_no: 2,
+      name: "Summer cut",
+      changes: 1,
+      source: "custom",
+      first_version: 4,
+      latest_version: 5,
+    },
+    { ...PLAN_ONE, active: false, changes: 2, latest_version: 3 },
+  ];
+
+  async function openHistory() {
+    fakePlan({ plans: listed });
+    const user = await openPlan();
+    await user.click(screen.getByRole("tab", { name: "History" }));
+    const region = await screen.findByRole("region", { name: "History" });
+    const [current, previous] = await within(region).findAllByRole("listitem");
+    const rows = [current!, previous!] as const;
+    return { user, region, rows };
+  }
+
+  it("offers Make current and Delete on every plan except the current one", async () => {
+    const { rows } = await openHistory();
+    expect(within(rows[0]).queryByRole("button", { name: /Make current|Delete/ })).not.toBeInTheDocument();
+    expect(within(rows[1]).getByRole("button", { name: "Make Plan 1 the current plan" })).toBeInTheDocument();
+    expect(within(rows[1]).getByRole("button", { name: "Delete Plan 1" })).toBeInTheDocument();
+  });
+
+  it("asks first, then makes the plan current and says the other one stays in History", async () => {
+    let called = "";
+    server.use(
+      http.post(apiUrl("/athletes/:athleteId/plans/:planNo/activate"), ({ params }) => {
+        called = String(params.planNo);
+        return HttpResponse.json(planFixture({ plan_no: 1, name: null, revision: 9 }));
+      }),
+    );
+    const { user, rows } = await openHistory();
+    await user.click(within(rows[1]).getByRole("button", { name: "Make Plan 1 the current plan" }));
+    const dialog = within(rows[1]).getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("The plan that is current now stays in History");
+    expect(called).toBe("");
+    await user.click(within(dialog).getByRole("button", { name: "Make current" }));
+    expect(await screen.findByText("Plan 1 is now the current plan.")).toBeInTheDocument();
+    expect(called).toBe("1");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("refetches the suggestions list after making a plan current", async () => {
+    server.use(
+      http.post(apiUrl("/athletes/:athleteId/plans/:planNo/activate"), () =>
+        HttpResponse.json(planFixture({ plan_no: 1, name: null, revision: 9 })),
+      ),
+    );
+    const { user, rows } = await openHistory();
+    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    await user.click(within(rows[1]).getByRole("button", { name: "Make Plan 1 the current plan" }));
+    await user.click(within(within(rows[1]).getByRole("alertdialog")).getByRole("button", { name: "Make current" }));
+    await screen.findByText("Plan 1 is now the current plan.");
+    expect(spy.mock.calls.map(([filters]) => filters?.queryKey)).toContainEqual(["suggestions"]);
+    spy.mockRestore();
+  });
+
+  it("deletes only after a confirmation that says it cannot be undone", async () => {
+    let called = "";
+    server.use(
+      http.delete(apiUrl("/athletes/:athleteId/plans/:planNo"), ({ params }) => {
+        called = String(params.planNo);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { user, rows } = await openHistory();
+    await user.click(within(rows[1]).getByRole("button", { name: "Delete Plan 1" }));
+    const dialog = within(rows[1]).getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("This cannot be undone");
+    expect(dialog).toHaveTextContent("Logged workouts and meals are not affected");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(called).toBe("");
+    await user.click(within(rows[1]).getByRole("button", { name: "Delete Plan 1" }));
+    await user.click(within(within(rows[1]).getByRole("alertdialog")).getByRole("button", { name: "Delete plan" }));
+    expect(await screen.findByText("Plan 1 was deleted.")).toBeInTheDocument();
+    expect(called).toBe("1");
+  });
+
+  it("shows an error and keeps the confirmation when the server refuses", async () => {
+    server.use(
+      http.delete(apiUrl("/athletes/:athleteId/plans/:planNo"), () =>
+        problem(409, "plan_is_current"),
+      ),
+    );
+    const { user, rows } = await openHistory();
+    await user.click(within(rows[1]).getByRole("button", { name: "Delete Plan 1" }));
+    await user.click(within(within(rows[1]).getByRole("alertdialog")).getByRole("button", { name: "Delete plan" }));
+    expect(await screen.findByText("FitWise couldn't delete the plan. Try again.")).toBeInTheDocument();
+    expect(within(rows[1]).getByRole("alertdialog")).toBeInTheDocument();
   });
 });
 

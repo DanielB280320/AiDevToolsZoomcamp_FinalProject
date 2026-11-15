@@ -1127,6 +1127,23 @@
       "openButton": "Open",
       "planFallback": "Plan {{number}}",
       "current": "Current",
+      "makeCurrent": "Make current",
+      "makeCurrentFor": "Make {{name}} the current plan",
+      "delete": "Delete",
+      "deleteFor": "Delete {{name}}",
+      "madeCurrentDone": "{{name}} is now the current plan.",
+      "deletedDone": "{{name}} was deleted.",
+      "confirm": {
+        "activateTitle": "Make {{name}} the current plan?",
+        "activateBody": "It is not copied: the plan itself becomes the one followed from today. The plan that is current now stays in History with all its changes. Past workouts and meal logs are not changed.",
+        "activateYes": "Make current",
+        "activateFailed": "FitWise couldn't change the current plan. Try again.",
+        "deleteTitle": "Delete {{name}}?",
+        "deleteBody": "This cannot be undone. The plan and its changes disappear from History. Logged workouts and meals are not affected.",
+        "deleteYes": "Delete plan",
+        "deleteFailed": "FitWise couldn't delete the plan. Try again.",
+        "cancel": "Cancel"
+      },
       "started": "Started",
       "created": "Created",
       "changes": "Changes",
@@ -1205,8 +1222,8 @@
         "coach": "For each day add or replace the client's meals, choose the slot, adjust the portion or the grams, or swap a meal for a similar one, then press Save changes. Open a day to edit it."
       },
       "history": {
-        "athlete": "Every plan you create is listed here. Open one to see its changes over time and open a change to see the plan as it was; earlier states are read-only, and the current plan is the one you follow.",
-        "coach": "Every plan created for the client is listed here. Open one to see its changes over time and open a change to see the plan as it was; earlier states are read-only, and the current plan is the one the client follows."
+        "athlete": "Every plan you create is listed here. Open one to see its changes over time and open a change to see the plan as it was; earlier states are read-only. Make any earlier plan the current one, or delete a plan you no longer need; the current plan is the one you follow and cannot be deleted.",
+        "coach": "Every plan created for the client is listed here. Open one to see its changes over time and open a change to see the plan as it was; earlier states are read-only. Make any earlier plan the current one for the client, or delete a plan that is no longer needed; the current plan is the one the client follows and cannot be deleted."
       }
     },
     "days": {

@@ -12,6 +12,7 @@ from app.models.notification import Notification
 from app.models.plan import (
     MealDay,
     Plan,
+    PlanActivation,
     PlanChange,
     PlannedExercise,
     PlannedMeal,
@@ -40,6 +41,7 @@ __all__ = [
     "MealLogItem",
     "Notification",
     "Plan",
+    "PlanActivation",
     "PlanChange",
     "PlannedExercise",
     "PlannedMeal",

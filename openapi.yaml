@@ -1085,6 +1085,73 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /athletes/{athlete_id}/plans/{plan_no}/activate:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+      - name: plan_no
+        in: path
+        required: true
+        schema: {type: integer, minimum: 1}
+    post:
+      tags: [Plan]
+      operationId: activatePlan
+      summary: Make a previous plan the current one
+      description: |
+        Moves the active flag to the plan's latest version (D108). No version is written and
+        neither plan's change timeline gets an entry; the plan that was current stays in the
+        history with all its versions. Untouched future sessions follow the plan, and pending
+        suggestions of the previous current plan are rejected (as when a plan replaces another).
+        Idempotent: activating the current plan returns it unchanged. The returned plan has a
+        higher `revision` than any the athlete had, so an editor holding the old one gets
+        `409 plan_revision_conflict`. `404 plan_not_found` for an unknown or deleted plan.
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: The now current plan (its latest version).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /athletes/{athlete_id}/plans/{plan_no}:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+      - name: plan_no
+        in: path
+        required: true
+        schema: {type: integer, minimum: 1}
+    delete:
+      tags: [Plan]
+      operationId: deletePlan
+      summary: Delete a plan that is not the current one
+      description: |
+        Soft delete of every version of the plan (D108): it disappears from `listPlans`,
+        `listPlanVersions` and `getPlanVersion` (404). Past sessions, set logs and meal logs are
+        not affected. The plan number is never reused. `409 plan_is_current` for the current
+        plan; `404 plan_not_found` for an unknown or already deleted plan.
+      x-fitwise-access: owner-or-coach
+      responses:
+        '204':
+          description: Deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
   /athletes/{athlete_id}/plan/versions:
     parameters:
       - $ref: '#/components/parameters/AthleteId'
