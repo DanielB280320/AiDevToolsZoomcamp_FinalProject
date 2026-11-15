@@ -60,7 +60,7 @@ e2e/             Playwright tests
 observability/   collector, prometheus, loki, tempo, grafana provisioning, alert rules
 oncall/          alert responder, prompts, allow-listed ops scripts
 deploy/          EC2 bootstrap, compose overrides, deploy/rollback scripts
-.claude/         agent definitions and project skills
+.claude/         agent definitions and project skills (UI work: skills/fitwise-design-system)
 docs/            spec, process, team, architecture, adr/, runbooks/
 ```
 
