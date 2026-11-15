@@ -455,7 +455,7 @@ def test_migration_downgrades_and_upgrades_with_meal_log_data(migrated_database_
         with engine.begin() as conn:
             assert (
                 conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "e2a7c9d1b346"
+                == "f4b1d8e3a527"
             )
             _meal_log(conn, athlete, food, planned=True)
     finally:

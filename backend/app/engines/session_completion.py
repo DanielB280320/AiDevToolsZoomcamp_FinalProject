@@ -1,9 +1,12 @@
-"""F10.2 Session completion: Σ min(actual, target) ÷ Σ target over the planned working sets.
+"""F10.2 Session completion: the average, over the planned working sets, of each set's
+min(actual ÷ target, 1) (D110).
 
-Reps are compared as reps (weight-agnostic); timed sets compare seconds. A planned set that was
-skipped or never logged contributes an `actual` of 0. Extra sets and extra exercises are not
-planned working sets and never enter the sums. Planned sets without a positive target (for
-example an open-ended set) are left out, because they have nothing to complete.
+Every planned set weighs the same, so reps and seconds are never added together: a 600 s timed
+set is one set, not 600 units next to 6-rep sets. Reps are compared as reps (weight-agnostic);
+timed sets compare seconds. A planned set that was skipped or never logged scores 0. Extra sets
+and extra exercises are not planned working sets and never enter the average. Planned sets
+without a positive target (for example an open-ended set) are left out, because they have
+nothing to complete.
 
 Pure (ADR 0004): plain inputs in, a ratio with an `explanation` out.
 """
@@ -13,6 +16,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 
 COMPLETION_DECIMALS = 4  # matches Numeric(5, 4) in the database
 
@@ -28,8 +32,8 @@ class PlannedSetResult:
 @dataclass(frozen=True, slots=True)
 class Completion:
     ratio: float | None  # None when there is no positive target at all
-    achieved: float
-    target: float
+    achieved: float  # sum of the per-set shares, each between 0 and 1
+    target: float  # number of planned working sets that have a positive target
     explanation: str
 
 
@@ -38,22 +42,33 @@ def _fmt(value: float) -> str:
 
 
 def completion(sets: Sequence[PlannedSetResult]) -> Completion:
-    """Completion of the given planned sets, rounded to 4 decimals and capped at 1."""
+    """Completion of the given planned sets, rounded half up to 4 decimals and capped at 1."""
     counted = [s for s in sets if s.target is not None and s.target > 0]
     for s in counted:
         if s.actual is not None and (math.isnan(s.actual) or s.actual < 0):
             raise ValueError("actual must be a non-negative number")
-    target = math.fsum(s.target for s in counted if s.target is not None)
-    achieved = math.fsum(min(s.actual or 0.0, s.target or 0.0) for s in counted)
-    if not counted or target <= 0:
+    if not counted:
         return Completion(
             None, 0.0, 0.0, "No planned working set has a target, so completion is undefined."
         )
-    ratio = min(1.0, round(achieved / target, COMPLETION_DECIMALS))
+    # Per-set share of its own target, capped at 1: extra reps never make up for another set.
+    # Exact fractions, so a tie at the fifth decimal rounds half up, as the D110 migration's
+    # SQL `round(numeric, 4)` does; float `round()` would round such a tie to even.
+    exact = sum(
+        (
+            Fraction(min(s.actual or 0.0, s.target or 0.0)) / Fraction(s.target or 1.0)
+            for s in counted
+        ),
+        Fraction(0),
+    )
+    scale = 10**COMPLETION_DECIMALS
+    ratio = min(1.0, math.floor(exact / len(counted) * scale + Fraction(1, 2)) / scale)
+    achieved = float(exact)
+    target = float(len(counted))
     return Completion(
         ratio,
         achieved,
         target,
-        f"Completion = Σ min(actual, target) ÷ Σ target over {len(counted)} planned working "
-        f"sets = {_fmt(achieved)} ÷ {_fmt(target)} = {ratio:.4f}",
+        f"Completion = Σ min(actual ÷ target, 1) ÷ {len(counted)} planned working sets "
+        f"= {_fmt(round(achieved, COMPLETION_DECIMALS))} ÷ {_fmt(target)} = {ratio:.4f}",
     )
