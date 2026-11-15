@@ -172,6 +172,36 @@ export function useCreatePlan(athleteId: string) {
   });
 }
 
+/** Make a previous plan the current one; no version is written (D108). */
+export function useActivatePlan(athleteId: string) {
+  const after = useAfterPlanChange(athleteId);
+  return useMutation({
+    mutationFn: async (planNo: number) => {
+      const { data, error, response } = await api.POST("/athletes/{athlete_id}/plans/{plan_no}/activate", {
+        params: { path: { athlete_id: athleteId, plan_no: planNo } },
+      });
+      if (data) return data;
+      throw apiError(response, error);
+    },
+    onSuccess: after,
+  });
+}
+
+/** Delete a plan that is not the current one (D108). */
+export function useDeletePlan(athleteId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (planNo: number) => {
+      const { error, response } = await api.DELETE("/athletes/{athlete_id}/plans/{plan_no}", {
+        params: { path: { athlete_id: athleteId, plan_no: planNo } },
+      });
+      if (response.ok) return;
+      throw apiError(response, error);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["plan-versions", athleteId] }),
+  });
+}
+
 /** Meal library search for the meal picker, optionally for one slot. */
 export function useMealSearch(text: string, slot: Schemas["MealSlot"] | undefined) {
   const q = text.trim();

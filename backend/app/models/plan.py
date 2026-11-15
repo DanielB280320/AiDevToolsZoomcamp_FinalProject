@@ -24,6 +24,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    func,
     true,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -76,6 +77,14 @@ class Plan(Base):
     # every later version of the plan. Null for plans created before D107: read it through
     # `app.services.plans.plan_training_goal`, which falls back to the profile-goal default.
     training_goal: Mapped[str | None] = mapped_column(String(16))
+    # D108: soft delete of a whole plan (set on every version of it): hidden from History and the
+    # version reads, kept for past days, set logs and rollback. Null for rows the previous release
+    # writes.
+    deleted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    # D108: when "make current" last made this version the active one. Together with `created_at`
+    # it says since when the version applies (`effective_at`), so a past day still resolves to the
+    # meal plan that applied then. Null for versions that never were re-activated.
+    activated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     training_days: Mapped[list["TrainingDay"]] = relationship(
         back_populates="plan", cascade="all, delete-orphan", order_by="TrainingDay.position"
@@ -83,6 +92,11 @@ class Plan(Base):
     meal_days: Mapped[list["MealDay"]] = relationship(
         back_populates="plan", cascade="all, delete-orphan", order_by="MealDay.position"
     )
+
+
+def effective_at() -> Any:
+    """SQL expression: since when a plan version applies (D108)."""
+    return func.coalesce(Plan.activated_at, Plan.created_at)
 
 
 # At most one active version per athlete, enforced by the database.

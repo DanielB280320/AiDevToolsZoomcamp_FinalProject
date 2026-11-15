@@ -2,14 +2,17 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  type Plan,
   type PlanChangeSummary,
   type PlanSummary,
+  useActivatePlan,
+  useDeletePlan,
   usePlans,
   usePlanVersion,
   usePlanVersions,
 } from "../../api/plan";
 import type { UnitSystem } from "../../lib/units";
-import { BUTTON } from "./fields";
+import { BUTTON, PRIMARY } from "./fields";
 import { PlanView } from "./PlanView";
 import type { Viewer } from "./PlanSummary";
 
@@ -18,14 +21,24 @@ type Props = {
   units: UnitSystem;
   timezone: string;
   viewer?: Viewer;
+  /** Unsaved edits in the Training or Meals tab: making another plan current discards them. */
+  unsaved?: boolean;
+  /** A previous plan was made current: the editor rebuilds its drafts from it. */
+  onActivated?: (plan: Plan) => void;
 };
+
+type Pending = { kind: "activate" | "delete"; plan: PlanSummary };
 
 /**
  * History of the athlete's plans (F8.2, F8.3, D106): one row per plan, newest first. Opening a
  * plan shows its changes over time; opening a change shows the plan as it was after it (read-only).
  */
-export function VersionHistory({ athleteId, units, timezone, viewer = "athlete" }: Props) {
+export function VersionHistory({ athleteId, units, timezone, viewer = "athlete", unsaved = false, onActivated }: Props) {
   const { t, i18n } = useTranslation();
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const activate = useActivatePlan(athleteId);
+  const remove = useDeletePlan(athleteId);
   const [planNo, setPlanNo] = useState<number | null>(null);
   const [version, setVersion] = useState<number | null>(null);
   const plans = usePlans(athleteId);
@@ -53,6 +66,37 @@ export function VersionHistory({ athleteId, units, timezone, viewer = "athlete" 
   };
 
   const plan = plans.data?.find((p) => p.plan_no === planNo) ?? null;
+
+  const ask = (kind: Pending["kind"], target: PlanSummary) => {
+    activate.reset();
+    remove.reset();
+    setNotice(null);
+    setPending({ kind, plan: target });
+  };
+  const confirm = () => {
+    if (!pending) return;
+    const { kind, plan: target } = pending;
+    const name = planName(target);
+    setNotice(null);
+    if (kind === "activate") {
+      activate.mutate(target.plan_no, {
+        onSuccess: (next) => {
+          setPending(null);
+          setNotice(t("plan.history.madeCurrentDone", { name }));
+          onActivated?.(next);
+        },
+      });
+    } else {
+      remove.mutate(target.plan_no, {
+        onSuccess: () => {
+          setPending(null);
+          setNotice(t("plan.history.deletedDone", { name }));
+        },
+      });
+    }
+  };
+  const busy = activate.isPending || remove.isPending;
+  const failed = pending?.kind === "activate" ? activate.isError : remove.isError;
 
   if (planNo !== null && version !== null) {
     const entry = timeline.data?.find((v) => v.version === version);
@@ -117,6 +161,9 @@ export function VersionHistory({ athleteId, units, timezone, viewer = "athlete" 
 
   return (
     <section aria-label={t("plan.tabs.history")}>
+      <div role="status" aria-live="polite">
+        {notice && <p className="mb-3 font-semibold text-spruce-dark">{notice}</p>}
+      </div>
       {plans.isPending && <p role="status">{t("plan.loading")}</p>}
       {plans.isError && <p role="alert" className="font-semibold text-alert">{t("plan.history.failed")}</p>}
       {plans.data?.length === 0 && <p className="text-slate">{t("plan.history.empty")}</p>}
@@ -145,14 +192,52 @@ export function VersionHistory({ athleteId, units, timezone, viewer = "athlete" 
                 </>
               )}
             </dl>
-            <button
-              type="button"
-              className={`${BUTTON} mt-2`}
-              onClick={() => setPlanNo(p.plan_no)}
-              aria-label={t("plan.history.openPlan", { name: planName(p) })}
-            >
-              {t("plan.history.openButton")}
-            </button>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={BUTTON}
+                onClick={() => setPlanNo(p.plan_no)}
+                aria-label={t("plan.history.openPlan", { name: planName(p) })}
+              >
+                {t("plan.history.openButton")}
+              </button>
+              {!p.active && (
+                <>
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    onClick={() => ask("activate", p)}
+                    aria-label={t("plan.history.makeCurrentFor", { name: planName(p) })}
+                  >
+                    {t("plan.history.makeCurrent")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${BUTTON} border-alert text-alert`}
+                    onClick={() => ask("delete", p)}
+                    aria-label={t("plan.history.deleteFor", { name: planName(p) })}
+                  >
+                    {t("plan.history.delete")}
+                  </button>
+                </>
+              )}
+            </div>
+            {pending?.plan.plan_no === p.plan_no && (
+              <div role="alertdialog" aria-label={t(`plan.history.confirm.${pending.kind}Title`, { name: planName(p) })} className="mt-3 border-l-4 border-iron pl-3">
+                <p className="font-semibold">{t(`plan.history.confirm.${pending.kind}Title`, { name: planName(p) })}</p>
+                <p className="mt-1">{t(`plan.history.confirm.${pending.kind}Body`)}</p>
+                {pending.kind === "activate" && unsaved && <p className="mt-1">{t("plan.newPlan.unsaved")}</p>}
+                {failed && <p role="alert" className="mt-1 font-semibold text-alert">{t(`plan.history.confirm.${pending.kind}Failed`)}</p>}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" className={PRIMARY} disabled={busy} onClick={confirm}>
+                    {t(`plan.history.confirm.${pending.kind}Yes`)}
+                  </button>
+                  <button type="button" className={BUTTON} disabled={busy} onClick={() => setPending(null)}>
+                    {t("plan.history.confirm.cancel")}
+                  </button>
+                </div>
+              </div>
+            )}
           </li>
         ))}
       </ul>

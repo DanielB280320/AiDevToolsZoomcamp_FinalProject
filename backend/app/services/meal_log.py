@@ -23,7 +23,7 @@ from app.engines.meal_macros import Per100g, meal_macros
 from app.engines.nutrition_completion import nutrition_completion
 from app.errors import ProblemError
 from app.models import Food, MealDay, MealLog, MealLogItem, Plan, User
-from app.models.plan import WEEKDAYS
+from app.models.plan import WEEKDAYS, effective_at
 from app.schemas import calendar as cal
 from app.schemas import plans as plan_out
 from app.schemas.foods import FoodSummary, Macros, MealItem
@@ -48,20 +48,20 @@ def _per_100g(food: Food) -> Per100g:
 def planned_meals(
     db: Session, user: User, day: dt.date
 ) -> tuple[MealDay | None, list[plan_out.PlannedMeal]]:
-    """The meal day and planned meals that apply on `day`: the latest plan version created on or
-    before the end of that day that has a meal day for its weekday. A newer version never
-    rewrites an earlier day (rule 7), and a version without meal days (a plan edit that did not
-    carry them over) does not hide the meal plan."""
+    """The meal day and planned meals that apply on `day`: the latest plan version in effect
+    (created or made current, D108) before the end of that day that has a meal day for its
+    weekday. A newer version never rewrites an earlier day (rule 7), and a version without meal
+    days (a plan edit that did not carry them over) does not hide the meal plan."""
     end = utc_midnight_after(day, user.timezone)
     meal_day = db.scalar(
         select(MealDay)
         .join(Plan, Plan.id == MealDay.plan_id)
         .where(
             Plan.athlete_id == user.id,
-            Plan.created_at < end,
+            effective_at() < end,
             MealDay.weekday == WEEKDAYS[day.weekday()],
         )
-        .order_by(Plan.version.desc())
+        .order_by(effective_at().desc(), Plan.version.desc())
         .limit(1)
         .options(selectinload(MealDay.meals))
     )
@@ -206,10 +206,10 @@ def range_totals(
         if log_view.status != "skipped":
             eaten_parts.setdefault(log_view.date, []).append(log_view.totals)
     candidates = db.execute(
-        select(MealDay.id, MealDay.weekday, Plan.version, Plan.created_at)
+        select(MealDay.id, MealDay.weekday, Plan.version, effective_at())
         .join(Plan, Plan.id == MealDay.plan_id)
         .where(Plan.athlete_id == user.id)
-        .order_by(Plan.version.desc())
+        .order_by(effective_at().desc(), Plan.version.desc())
     ).all()
     chosen: dict[dt.date, uuid.UUID] = {}
     for offset in range((end - start).days + 1):

@@ -356,6 +356,28 @@ def _import_workouts(w: World) -> Request:
     return Request(files={"file": ("workouts.csv", csv.encode(), "text/csv")})
 
 
+def _new_plan(w: World) -> None:
+    r = w.ana.client.post(
+        f"{API}/athletes/me/plan", json={"name": "Next", "start_from": "generated"}
+    )
+    assert r.status_code == 201, r.text
+
+
+def _previous_plan(w: World) -> Request:
+    """A plan that is not the current one: the current plan is replaced by a new one first."""
+    before = w.ana.client.get(f"{API}/athletes/me/plan").json()["plan_no"]
+    _new_plan(w)
+    return Request({"plan_no": str(before)})
+
+
+def _disposable_plan(w: World) -> Request:
+    """A fresh plan that is not current (plan 1 and the versions other rows use stay intact)."""
+    _new_plan(w)
+    number = w.ana.client.get(f"{API}/athletes/me/plan").json()["plan_no"]
+    _new_plan(w)
+    return Request({"plan_no": str(number)})
+
+
 BUILDERS: dict[str, Builder] = {
     "POST /athletes/{athlete_id}/onboarding": lambda w: Request(json=onboarding()),
     "GET /athletes/{athlete_id}/profile": lambda w: Request(),
@@ -376,6 +398,8 @@ BUILDERS: dict[str, Builder] = {
     ),
     "POST /athletes/{athlete_id}/plan/regenerate": lambda w: Request(json={"scope": "training"}),
     "GET /athletes/{athlete_id}/plans": lambda w: Request(),
+    "POST /athletes/{athlete_id}/plans/{plan_no}/activate": _previous_plan,
+    "DELETE /athletes/{athlete_id}/plans/{plan_no}": _disposable_plan,
     "GET /athletes/{athlete_id}/plan/versions": lambda w: Request(),
     "GET /athletes/{athlete_id}/plan/versions/{version}": lambda w: Request({"version": "1"}),
     "GET /athletes/{athlete_id}/days/{date}": lambda w: Request({"date": "2026-10-22"}),
@@ -603,7 +627,9 @@ def filled(op: Operation) -> str:
             "suggestion_id", "exercise_id", "link_id", "notification_id", "note_id", "meal_key",
         )
     }  # fmt: skip
-    return API + op.path.format_map(random_ids | {"version": "1", "date": "2026-10-22"})
+    return API + op.path.format_map(
+        random_ids | {"version": "1", "plan_no": "1", "date": "2026-10-22"}
+    )
 
 
 @pytest.mark.parametrize(

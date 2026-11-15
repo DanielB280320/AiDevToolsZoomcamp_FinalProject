@@ -568,6 +568,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/athletes/{athlete_id}/plans/{plan_no}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+                plan_no: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a previous plan the current one
+         * @description Moves the active flag to the plan's latest version (D108). No version is written and
+         *     neither plan's change timeline gets an entry; the plan that was current stays in the
+         *     history with all its versions. Untouched future sessions follow the plan, and pending
+         *     suggestions of the previous current plan are rejected (as when a plan replaces another).
+         *     Idempotent: activating the current plan returns it unchanged. The returned plan has a
+         *     higher `revision` than any the athlete had, so an editor holding the old one gets
+         *     `409 plan_revision_conflict`. `404 plan_not_found` for an unknown or deleted plan.
+         */
+        post: operations["activatePlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/athletes/{athlete_id}/plans/{plan_no}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+                plan_no: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a plan that is not the current one
+         * @description Soft delete of every version of the plan (D108): it disappears from `listPlans`,
+         *     `listPlanVersions` and `getPlanVersion` (404). Past sessions, set logs and meal logs are
+         *     not affected. The plan number is never reused. `409 plan_is_current` for the current
+         *     plan; `404 plan_not_found` for an unknown or already deleted plan.
+         */
+        delete: operations["deletePlan"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/athletes/{athlete_id}/plan/versions": {
         parameters: {
             query?: never;
@@ -3891,6 +3948,61 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    activatePlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+                plan_no: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The now current plan (its latest version). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plan"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deletePlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+                plan_no: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listPlanVersions: {

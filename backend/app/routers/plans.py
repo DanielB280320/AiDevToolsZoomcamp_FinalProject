@@ -4,7 +4,7 @@ import datetime as dt
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path, Query, Response
 
 from app.dependencies import OwnerOrCoachAccess, SessionDep
 from app.schemas.plans import (
@@ -163,3 +163,37 @@ def get_plan_version(
 def list_plans(access: OwnerOrCoachAccess, session: SessionDep) -> PlanList:
     """One item per plan, newest first (D106)."""
     return plan_edit.list_plans(session, access.athlete.id)
+
+
+@plans_router.post(
+    "/{plan_no}/activate",
+    operation_id="activatePlan",
+    response_model=Plan,
+    responses={**_COMMON, 404: _PROBLEM},
+)
+def activate_plan(
+    access: OwnerOrCoachAccess,
+    plan_no: Annotated[int, Path(ge=1)],
+    session: SessionDep,
+    clock: ClockDep,
+) -> Plan:
+    """Make a previous plan the current one without writing a version (D108); idempotent."""
+    return plan_edit.activate_plan(session, access.actor, access.athlete.id, plan_no, clock.now())
+
+
+@plans_router.delete(
+    "/{plan_no}",
+    operation_id="deletePlan",
+    status_code=204,
+    response_class=Response,
+    responses={**_COMMON, 404: _PROBLEM, 409: _PROBLEM},
+)
+def delete_plan(
+    access: OwnerOrCoachAccess,
+    plan_no: Annotated[int, Path(ge=1)],
+    session: SessionDep,
+    clock: ClockDep,
+) -> Response:
+    """Delete a plan that is not the current one (D108); logged workouts are not affected."""
+    plan_edit.delete_plan(session, access.athlete.id, plan_no, clock.now())
+    return Response(status_code=204)

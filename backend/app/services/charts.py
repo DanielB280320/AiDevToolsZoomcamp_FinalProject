@@ -32,7 +32,7 @@ from app.models import (
     TrainingSession,
     User,
 )
-from app.models.plan import WEEKDAYS
+from app.models.plan import WEEKDAYS, effective_at
 from app.schemas import charts as out
 from app.schemas.plans import ExerciseSummary
 from app.services import athlete, calendar, training_log
@@ -238,10 +238,10 @@ def _nutrition_completion(
     if last < start:
         return result
     versions = db.execute(
-        select(MealDay.id, MealDay.weekday, Plan.created_at)
+        select(MealDay.id, MealDay.weekday, effective_at())
         .join(Plan, Plan.id == MealDay.plan_id)
         .where(Plan.athlete_id == user.id)
-        .order_by(Plan.version.desc())
+        .order_by(effective_at().desc(), Plan.version.desc())
     ).all()
     by_weekday: dict[str, list[tuple[uuid.UUID, dt.datetime]]] = defaultdict(list)
     for meal_day_id, weekday, created_at in versions:

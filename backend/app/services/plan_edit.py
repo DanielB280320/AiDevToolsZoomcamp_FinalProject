@@ -22,7 +22,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.engines.progression_goal import default_training_goal
@@ -149,10 +149,12 @@ def _finish(
     new: Plan,
     now: dt.datetime,
     planned_map: dict[uuid.UUID, uuid.UUID],
+    touch: bool = True,
 ) -> None:
     """Move untouched future sessions to `new` and settle pending suggestions of exercises
     that did not make it to the new version."""
-    new.updated_at = now
+    if touch:
+        new.updated_at = now
     _rebase_sessions(db, athlete, new, now)
     old_ids = {e.id for d in old.training_days for e in d.exercises}
     for pending in db.scalars(
@@ -802,7 +804,9 @@ def list_versions(
     rows = [
         p
         for p in db.scalars(
-            select(Plan).where(Plan.athlete_id == athlete).order_by(Plan.version.desc())
+            select(Plan)
+            .where(Plan.athlete_id == athlete, Plan.deleted_at.is_(None))
+            .order_by(Plan.version.desc())
         )
         if plan_no is None or numbers[p.version] == plan_no
     ]
@@ -820,7 +824,11 @@ def list_plans(db: Session, athlete: uuid.UUID) -> schemas.PlanList:
     """One item per plan, newest first (D106). The name and source are the latest version's."""
     numbers = plans.plan_numbers(db, athlete)
     versions = list(
-        db.scalars(select(Plan).where(Plan.athlete_id == athlete).order_by(Plan.version))
+        db.scalars(
+            select(Plan)
+            .where(Plan.athlete_id == athlete, Plan.deleted_at.is_(None))
+            .order_by(Plan.version)
+        )
     )
     changes = _changes(db, [p.id for p in versions])
     groups: dict[int, list[Plan]] = {}
@@ -852,7 +860,7 @@ def list_plans(db: Session, athlete: uuid.UUID) -> schemas.PlanList:
 def get_version(db: Session, athlete: uuid.UUID, version: int) -> schemas.Plan:
     plan = db.scalar(
         select(Plan)
-        .where(Plan.athlete_id == athlete, Plan.version == version)
+        .where(Plan.athlete_id == athlete, Plan.version == version, Plan.deleted_at.is_(None))
         .options(
             selectinload(Plan.training_days).selectinload(TrainingDay.exercises),
             selectinload(Plan.meal_days).selectinload(MealDay.meals),
@@ -863,8 +871,88 @@ def get_version(db: Session, athlete: uuid.UUID, version: int) -> schemas.Plan:
     return plan_view(db, plan)
 
 
+# ───────────── make current / delete (D108) ─────────────
+
+
+def _plan_versions(db: Session, athlete: uuid.UUID, plan_no: int) -> list[Plan]:
+    """The live (not deleted) versions of plan `plan_no`, oldest first; 404 when there are none."""
+    numbers = plans.plan_numbers(db, athlete)
+    rows = [
+        p
+        for p in db.scalars(
+            select(Plan)
+            .where(Plan.athlete_id == athlete, Plan.deleted_at.is_(None))
+            .order_by(Plan.version)
+        )
+        if numbers[p.version] == plan_no
+    ]
+    if not rows:
+        raise ProblemError(404, "plan_not_found", "That plan does not exist.")
+    return rows
+
+
+def activate_plan(
+    db: Session, user: User, athlete_uuid: uuid.UUID, plan_no: int, now: dt.datetime
+) -> schemas.Plan:
+    """Make plan `plan_no` the current one (D108): no version is written; `active` moves to the
+    plan's latest version. The plan that was current keeps all its versions. Untouched future
+    sessions follow the new plan and pending suggestions of the old one are rejected, as when a
+    plan replaces another (F8.1). The revision is raised above every revision the athlete has, so
+    an editor still holding the old plan's revision gets `409 plan_revision_conflict`. Making the
+    current plan current again changes nothing (idempotent)."""
+    db.execute(select(User.id).where(User.id == athlete_uuid).with_for_update()).one()
+    athlete = db.get(User, athlete_uuid)
+    assert athlete is not None  # noqa: S101
+    versions = _plan_versions(db, athlete_uuid, plan_no)
+    target = versions[-1]
+    if not any(v.active for v in versions):
+        old = _lock_active(db, athlete_uuid, None)
+        top = db.scalar(select(func.max(Plan.revision)).where(Plan.athlete_id == athlete_uuid))
+        db.execute(
+            update(Plan)
+            .where(Plan.athlete_id == athlete_uuid, Plan.active.is_(True))
+            .values(active=False)
+        )
+        db.flush()
+        target.active = True
+        target.activated_at = now
+        target.revision = (top or 0) + 1
+        db.flush()
+        _finish(
+            db,
+            athlete=athlete,
+            author=user,
+            old=old,
+            new=target,
+            now=now,
+            planned_map={},
+            touch=False,
+        )
+        db.commit()
+    active = next(v for v in versions if v.active) if any(v.active for v in versions) else target
+    return plan_view(db, active)
+
+
+def delete_plan(db: Session, athlete_uuid: uuid.UUID, plan_no: int, now: dt.datetime) -> None:
+    """Soft-delete every version of plan `plan_no` (D108). The current plan cannot be deleted
+    (`409 plan_is_current`). Past sessions and logs keep pointing at the rows."""
+    db.execute(select(User.id).where(User.id == athlete_uuid).with_for_update()).one()
+    versions = _plan_versions(db, athlete_uuid, plan_no)
+    if any(v.active for v in versions):
+        raise ProblemError(
+            409,
+            "plan_is_current",
+            "The current plan cannot be deleted. Make another plan current first.",
+        )
+    for version in versions:
+        version.deleted_at = now
+    db.commit()
+
+
 __all__ = [
+    "activate_plan",
     "create_plan",
+    "delete_plan",
     "get_version",
     "list_plans",
     "list_versions",
