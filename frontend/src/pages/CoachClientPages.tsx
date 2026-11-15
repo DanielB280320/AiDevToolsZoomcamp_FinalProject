@@ -108,7 +108,7 @@ export function CoachClientProgressPage() {
   return (
     <article className="min-w-0">
       <Heading>{t("charts.title")}</Heading>
-      <ProgressView athleteId={scope.athleteId} units={scope.units} today={today} />
+      <ProgressView athleteId={scope.athleteId} units={scope.units} today={today} audience="coach" />
     </article>
   );
 }

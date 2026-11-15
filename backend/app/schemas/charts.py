@@ -124,6 +124,71 @@ class BodyChart(ResponseModel):
     points: list[BodyChartPoint]
 
 
+class PeriodKpis(ResponseModel):
+    sessions_planned: int
+    sessions_done: int
+    sessions_missed: int
+    avg_training_completion: Ratio | None
+    avg_nutrition_completion: Ratio | None
+    active_days: int
+    volume_kg: float
+    personal_records: int
+    avg_daily_eaten_kcal: int | None
+    avg_daily_burned_exercise_kcal: int | None
+    avg_daily_balance_kcal: int | None
+    target_daily_balance_kcal: int | None
+    weight_avg_start_kg: float | None
+    weight_avg_end_kg: float | None
+    weight_change_kg: float | None
+    weight_change_per_week_kg: float | None
+
+
+class PeriodDeltas(ResponseModel):
+    sessions_planned: float | None
+    sessions_done: float | None
+    sessions_missed: float | None
+    avg_training_completion: float | None
+    avg_nutrition_completion: float | None
+    active_days: float | None
+    volume_kg: float | None
+    personal_records: float | None
+    avg_daily_eaten_kcal: float | None
+    avg_daily_burned_exercise_kcal: float | None
+    avg_daily_balance_kcal: float | None
+    target_daily_balance_kcal: float | None
+    weight_avg_start_kg: float | None
+    weight_avg_end_kg: float | None
+    weight_change_kg: float | None
+    weight_change_per_week_kg: float | None
+
+
+class PeriodSeriesPoint(ResponseModel):
+    start: dt.date
+    sessions_done: int
+    sessions_planned: int
+    volume_kg: float
+    training_completion: Ratio | None
+    nutrition_completion: Ratio | None
+    balance_kcal: int | None
+    weight_avg_kg: float | None
+
+
+class PeriodSummary(ResponseModel):
+    # `from` is a Python keyword.
+    from_: dt.date = Field(serialization_alias="from")
+    to: dt.date
+    days: int
+    previous_from: dt.date
+    previous_to: dt.date
+    bucket: Literal["day", "week"]
+    estimated: Literal[True] = True
+    current: PeriodKpis
+    previous: PeriodKpis
+    deltas: PeriodDeltas
+    longest_streak_days: int
+    series: list[PeriodSeriesPoint]
+
+
 class ProgressTotals(ResponseModel):
     sessions_done: int
     personal_records: int

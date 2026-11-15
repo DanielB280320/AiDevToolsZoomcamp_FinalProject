@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import bisect
 import datetime as dt
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -183,3 +183,89 @@ def mean_ratio(values: Iterable[float | None]) -> float | None:
 def week_start(day: dt.date) -> dt.date:
     """Monday of the ISO week of `day`."""
     return day - dt.timedelta(days=day.weekday())
+
+
+# ───────────── period overview (D109) ─────────────
+
+Bucket = Literal["day", "week"]
+
+
+def previous_period(start: dt.date, end: dt.date) -> tuple[dt.date, dt.date]:
+    """The same number of days ending the day before `start`."""
+    days = (end - start).days + 1
+    prev_end = start - dt.timedelta(days=1)
+    return prev_end - dt.timedelta(days=days - 1), prev_end
+
+
+def bucket_kind(days: int) -> Bucket:
+    """`day` for up to `PERIOD_DAILY_BUCKET_MAX_DAYS` days, else Monday-based `week`."""
+    return "day" if days <= c.PERIOD_DAILY_BUCKET_MAX_DAYS else "week"
+
+
+def bucket_start(day: dt.date, kind: Bucket) -> dt.date:
+    """The label of the bucket `day` falls in: the day itself, or the Monday of its week."""
+    return day if kind == "day" else week_start(day)
+
+
+def bucket_starts(start: dt.date, end: dt.date, kind: Bucket) -> list[dt.date]:
+    """Labels of the buckets covering `start..end`, oldest first, without repeats."""
+    starts: list[dt.date] = []
+    for offset in range((end - start).days + 1):
+        label = bucket_start(start + dt.timedelta(days=offset), kind)
+        if not starts or starts[-1] != label:
+            starts.append(label)
+    return starts
+
+
+@dataclass(frozen=True, slots=True)
+class DeltaResult:
+    values: dict[str, float | None]
+    reason: str
+
+
+def period_deltas(
+    current: Mapping[str, float | None], previous: Mapping[str, float | None]
+) -> DeltaResult:
+    """Current minus previous for each key of `current`; `None` when either side is `None`
+    (no data is not zero). Rounded to `PERIOD_DELTA_DECIMALS` to hide float noise."""
+    values: dict[str, float | None] = {}
+    for key, now in current.items():
+        before = previous.get(key)
+        values[key] = (
+            None if now is None or before is None else round(now - before, c.PERIOD_DELTA_DECIMALS)
+        )
+    return DeltaResult(
+        values, "Each delta is the current value minus the previous period's, empty without both."
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class StreakResult:
+    days: int
+    reason: str
+
+
+def longest_streak(days: Iterable[tuple[dt.date, str]]) -> StreakResult:
+    """Longest run of consecutive planned training days that were done.
+
+    `days` are (date, status) with the calendar statuses. `done` extends the run, `rest` neither
+    extends nor breaks it, any other status (missed, planned, in progress) ends it.
+    """
+    best = run = 0
+    for _, status in sorted(days, key=lambda d: d[0]):
+        if status == "done":
+            run += 1
+            best = max(best, run)
+        elif status != "rest":
+            run = 0
+    return StreakResult(
+        best, f"Longest run of planned training days done in a row: {best}; rest days are skipped."
+    )
+
+
+def weekly_rate(change: float | None, span_days: int) -> float | None:
+    """Change per week over the `span_days` between the two averaged dates; `None` without a
+    change or for a span of zero days."""
+    if change is None or span_days <= 0:
+        return None
+    return change / span_days * c.DAYS_PER_WEEK

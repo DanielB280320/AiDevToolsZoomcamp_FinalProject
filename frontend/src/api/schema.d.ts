@@ -1142,6 +1142,10 @@ export interface paths {
          * Exercise over time
          * @description One point per finished session containing the exercise: the target at the time of that
          *     session (snapshot, F15.2), the actual top set, total volume and personal-record markers.
+         *     The range is either `weeks` ending today (default 12) or, with `from` and `to` (both or
+         *     neither, D109), those days; `weeks` is then ignored. `400` for only one of the two,
+         *     `from` after `to` (`invalid_range`) or more than 371 days (`range_too_large`). The
+         *     response `weeks` is the covered days divided by 7, rounded up.
          */
         get: operations["getExerciseChart"];
         put?: never;
@@ -1195,6 +1199,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/athletes/{athlete_id}/charts/period-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * KPIs of a period compared with the period before it
+         * @description Progress overview (F15.6-F15.10, D109) for `from`..`to` (athlete's time zone, at most 371
+         *     days) and for the same number of days ending the day before `from`: sessions, completion,
+         *     volume, personal records, energy and weight figures, their differences (`deltas`, computed
+         *     on the server), the longest streak and one series point per bucket (day up to 31 days,
+         *     else Monday-based week). Days after the athlete's today contribute nothing. `400` when one
+         *     bound is missing, `from` is after `to` (`invalid_range`) or the range is over 371 days
+         *     (`range_too_large`).
+         */
+        get: operations["getPeriodSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/athletes/{athlete_id}/charts/body": {
         parameters: {
             query?: never;
@@ -1207,7 +1240,9 @@ export interface paths {
         };
         /**
          * Weight, 7-day average and body fat
-         * @description The 7-day average uses only existing weigh-ins in each window (F14.1).
+         * @description The 7-day average uses only existing weigh-ins in each window (F14.1). Range as for the
+         *     exercise chart: `weeks` ending today, or `from` and `to` (both or neither, D109; `weeks`
+         *     ignored; same `400` cases).
          */
         get: operations["getBodyChart"];
         put?: never;
@@ -2682,8 +2717,8 @@ export interface components {
         };
         ExerciseChart: {
             exercise: components["schemas"]["ExerciseSummary"];
-            /** @enum {integer} */
-            weeks: 4 | 12 | 26 | 52;
+            /** @description The requested `weeks`, or the covered days divided by 7 rounded up when `from`/`to` were given (D109). */
+            weeks: number;
             points: components["schemas"]["ExerciseChartPoint"][];
         };
         AdherenceDay: {
@@ -2737,6 +2772,80 @@ export interface components {
                 weight_avg_kg: components["schemas"]["DatedValue"][];
             };
         };
+        /**
+         * @description KPIs of one period (D109). Only days up to the athlete's today count. The kcal averages
+         *     and the balance average only the days with food logged (D77); burned exercise kcal is
+         *     finished sessions plus extra activities (baseline excluded). Estimates (F13).
+         */
+        PeriodKpis: {
+            sessions_planned: number;
+            sessions_done: number;
+            sessions_missed: number;
+            avg_training_completion: components["schemas"]["Ratio"] | null;
+            avg_nutrition_completion: components["schemas"]["Ratio"] | null;
+            active_days: number;
+            volume_kg: number;
+            personal_records: number;
+            avg_daily_eaten_kcal: number | null;
+            avg_daily_burned_exercise_kcal: number | null;
+            avg_daily_balance_kcal: number | null;
+            target_daily_balance_kcal: number | null;
+            weight_avg_start_kg: number | null;
+            weight_avg_end_kg: number | null;
+            weight_change_kg: number | null;
+            weight_change_per_week_kg: number | null;
+        };
+        /** @description Current minus previous for every numeric KPI; null when either side is null. Completion deltas are ratio differences (-1..1). */
+        PeriodDeltas: {
+            sessions_planned: number | null;
+            sessions_done: number | null;
+            sessions_missed: number | null;
+            avg_training_completion: number | null;
+            avg_nutrition_completion: number | null;
+            active_days: number | null;
+            volume_kg: number | null;
+            personal_records: number | null;
+            avg_daily_eaten_kcal: number | null;
+            avg_daily_burned_exercise_kcal: number | null;
+            avg_daily_balance_kcal: number | null;
+            target_daily_balance_kcal: number | null;
+            weight_avg_start_kg: number | null;
+            weight_avg_end_kg: number | null;
+            weight_change_kg: number | null;
+            weight_change_per_week_kg: number | null;
+        };
+        PeriodSeriesPoint: {
+            start: components["schemas"]["LocalDate"];
+            sessions_done: number;
+            sessions_planned: number;
+            volume_kg: number;
+            training_completion: components["schemas"]["Ratio"] | null;
+            nutrition_completion: components["schemas"]["Ratio"] | null;
+            /** @description Average of the days with food logged in the bucket. */
+            balance_kcal: number | null;
+            /** @description Last 7-day average on or before the bucket's last elapsed day. */
+            weight_avg_kg: number | null;
+        };
+        PeriodSummary: {
+            from: components["schemas"]["LocalDate"];
+            to: components["schemas"]["LocalDate"];
+            days: number;
+            previous_from: components["schemas"]["LocalDate"];
+            previous_to: components["schemas"]["LocalDate"];
+            /**
+             * @description `day` up to 31 days, else a Monday-based `week` (a bucket is labelled by its Monday, which may be before `from`).
+             * @enum {string}
+             */
+            bucket: "day" | "week";
+            /** @constant */
+            estimated: true;
+            current: components["schemas"]["PeriodKpis"];
+            previous: components["schemas"]["PeriodKpis"];
+            deltas: components["schemas"]["PeriodDeltas"];
+            /** @description Longest run of consecutive planned training days done in the current period; rest days do not break it. */
+            longest_streak_days: number;
+            series: components["schemas"]["PeriodSeriesPoint"][];
+        };
         BodyChartPoint: {
             date: components["schemas"]["LocalDate"];
             weight_kg: number | null;
@@ -2745,8 +2854,8 @@ export interface components {
             body_fat_pct: number | null;
         };
         BodyChart: {
-            /** @enum {integer} */
-            weeks: 4 | 12 | 26 | 52;
+            /** @description The requested `weeks`, or the covered days divided by 7 rounded up when `from`/`to` were given (D109). */
+            weeks: number;
             /**
              * @description Body fat values are estimates.
              * @constant
@@ -4635,6 +4744,10 @@ export interface operations {
             query?: {
                 /** @description Range ending today. */
                 weeks?: components["parameters"]["ChartWeeks"];
+                /** @description First calendar day (inclusive), athlete's time zone. */
+                from?: components["parameters"]["FromOptional"];
+                /** @description Last calendar day (inclusive), athlete's time zone. */
+                to?: components["parameters"]["ToOptional"];
             };
             header?: never;
             path: {
@@ -4721,11 +4834,46 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    getPeriodSummary: {
+        parameters: {
+            query: {
+                /** @description First calendar day (inclusive), athlete's time zone. */
+                from: components["parameters"]["From"];
+                /** @description Last calendar day (inclusive), athlete's time zone. */
+                to: components["parameters"]["To"];
+            };
+            header?: never;
+            path: {
+                /** @description Athlete user id, or `me` for the signed-in athlete. */
+                athlete_id: components["parameters"]["AthleteId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Period summary. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeriodSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     getBodyChart: {
         parameters: {
             query?: {
                 /** @description Range ending today. */
                 weeks?: components["parameters"]["ChartWeeks"];
+                /** @description First calendar day (inclusive), athlete's time zone. */
+                from?: components["parameters"]["FromOptional"];
+                /** @description Last calendar day (inclusive), athlete's time zone. */
+                to?: components["parameters"]["ToOptional"];
             };
             header?: never;
             path: {

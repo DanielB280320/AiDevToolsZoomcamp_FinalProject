@@ -12,6 +12,7 @@ every deploy ([spec §13](../docs/spec.md#13-cicd-github-actions)).
 | `journey-meals.spec.ts` | Journey 3: check off a planned meal, eaten kcal and balance change by exactly the meal's kcal, undo restores both | < 60 s | no |
 | `journey-coach.spec.ts` | Journey 4: athlete requests a coach by email, coach approves, opens the athlete's Progress page and a session chart with data, leaves a note; athlete sees the `coach_note` notification and the note | < 60 s | no |
 | `coach-dashboard.spec.ts` | A coach signs in, sees the client list, opens a linked athlete (Today, Month, Progress), accepts one suggestion and rejects another, edits the plan; the athlete sees both decisions as made by the coach and "Edited by <coach>". A second test checks the coach context at 360 px (no horizontal scroll, 44 px targets) | < 60 s each | no |
+| `progress-period.spec.ts` | F15.6-F15.10, D109: finish today's session through the API, open Progress (30 days by default, one active day), step to the previous period (KPIs change, range in the URL and kept on reload), step forward to the preset again; no horizontal scroll at 360 px | < 60 s | no |
 
 Shared setup (API sign-up, onboarding with a training day today, coach link, the UI sign-up and
 wizard steps) is in `helpers.ts`.

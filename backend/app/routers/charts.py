@@ -14,6 +14,7 @@ from app.schemas.charts import (
     AdherenceChart,
     BodyChart,
     ExerciseChart,
+    PeriodSummary,
     ProgressTotals,
     SessionChart,
     WeeklySummary,
@@ -27,6 +28,8 @@ router = APIRouter(tags=["Charts"])
 _PROBLEM: dict[str, Any] = {"model": Problem}
 _COMMON: dict[int | str, dict[str, Any]] = {400: _PROBLEM, 401: _PROBLEM, 403: _PROBLEM}
 Weeks = Annotated[int, Query(description="4, 12, 26 or 52 (default 12).")]
+FromOpt = Annotated[dt.date | None, Query(alias="from", description="With `to`; ignores `weeks`.")]
+ToOpt = Annotated[dt.date | None, Query(description="With `from`; ignores `weeks`.")]
 
 
 @router.get(
@@ -53,9 +56,17 @@ def get_exercise_chart(
     db: SessionDep,
     clock: ClockDep,
     weeks: Weeks = 12,
+    from_: FromOpt = None,
+    to: ToOpt = None,
 ) -> ExerciseChart:
+    period = charts.optional_range(from_, to)
     return charts.exercise_chart(
-        db, access.athlete, exercise_id, charts.check_weeks(weeks), clock.now()
+        db,
+        access.athlete,
+        exercise_id,
+        weeks if period else charts.check_weeks(weeks),
+        clock.now(),
+        period,
     )
 
 
@@ -91,15 +102,39 @@ def get_weekly_summary(
 
 
 @router.get(
+    "/athletes/{athlete_id}/charts/period-summary",
+    operation_id="getPeriodSummary",
+    response_model=PeriodSummary,
+    responses=_COMMON,
+)
+def get_period_summary(
+    access: OwnerOrCoachAccess,
+    db: SessionDep,
+    clock: ClockDep,
+    from_: Annotated[dt.date, Query(alias="from")],
+    to: Annotated[dt.date, Query()],
+) -> PeriodSummary:
+    return charts.period_summary(db, access.athlete, from_, to, clock.now())
+
+
+@router.get(
     "/athletes/{athlete_id}/charts/body",
     operation_id="getBodyChart",
     response_model=BodyChart,
     responses=_COMMON,
 )
 def get_body_chart(
-    access: OwnerOrCoachAccess, db: SessionDep, clock: ClockDep, weeks: Weeks = 12
+    access: OwnerOrCoachAccess,
+    db: SessionDep,
+    clock: ClockDep,
+    weeks: Weeks = 12,
+    from_: FromOpt = None,
+    to: ToOpt = None,
 ) -> BodyChart:
-    return charts.body_chart(db, access.athlete, charts.check_weeks(weeks), clock.now())
+    period = charts.optional_range(from_, to)
+    return charts.body_chart(
+        db, access.athlete, weeks if period else charts.check_weeks(weeks), clock.now(), period
+    )
 
 
 @router.get(

@@ -1,14 +1,12 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CartesianGrid, Legend, Line, LineChart, XAxis, YAxis } from "recharts";
 
-import { DEFAULT_CHART_WEEKS, type BodyChart, type ChartWeeks, useBodyChart } from "../../api/charts";
+import { type BodyChart, useBodyChartRange } from "../../api/charts";
 import { DAY_FORMAT, formatDay } from "../../lib/calendarDates";
 import { weightUnit, type UnitSystem } from "../../lib/units";
 import { ChartBox } from "./ChartBox";
 import { AUTO_DOMAIN, CHART_COLORS, displayWeight, hasValues } from "./chartData";
 import { ChartState } from "./ChartState";
-import { RangeSelector } from "./RangeSelector";
 
 function BodyBody({ data, units }: { data: BodyChart; units: UnitSystem }) {
   const { t, i18n } = useTranslation();
@@ -54,15 +52,13 @@ function BodyBody({ data, units }: { data: BodyChart; units: UnitSystem }) {
   );
 }
 
-/** Body trend (F15.2): weigh-ins with the 7-day average, and body fat when present. */
-export function BodyChartView({ athleteId, units }: { athleteId: string; units: UnitSystem }) {
+/** Body trend (F15.2, D109): weigh-ins with the 7-day average, and body fat when present, for the selected period. */
+export function BodyChartView({ athleteId, units, from, to }: { athleteId: string; units: UnitSystem; from: string; to: string }) {
   const { t } = useTranslation();
-  const [weeks, setWeeks] = useState<ChartWeeks>(DEFAULT_CHART_WEEKS);
-  const query = useBodyChart(athleteId, weeks);
+  const query = useBodyChartRange(athleteId, from, to);
   return (
     <div className="min-w-0">
-      <RangeSelector value={weeks} onChange={setWeeks} />
-      <div className="mt-3">
+      <div>
         <ChartState query={query} isEmpty={(d) => d.points.length === 0} emptyMessage={t("charts.body.empty")}>
           {(data) => <BodyBody data={data} units={units} />}
         </ChartState>

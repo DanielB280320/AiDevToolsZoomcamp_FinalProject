@@ -77,6 +77,10 @@ def test_every_chart_endpoint_p95_is_under_500_ms_with_a_year_of_data(
         "exercise 52w": (f"{base}/exercise/{ids['ex']}", {"weeks": 52}),
         "adherence 371d": (f"{base}/adherence", {"from": start, "to": TODAY.isoformat()}),
         "weekly-summary": (f"{base}/weekly-summary", {}),
+        "period-summary 371d": (
+            f"{base}/period-summary",
+            {"from": start, "to": TODAY.isoformat()},
+        ),
         "body 52w": (f"{base}/body", {"weeks": 52}),
     }
     for name, (path, params) in requests.items():

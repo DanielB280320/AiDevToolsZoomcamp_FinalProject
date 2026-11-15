@@ -75,7 +75,7 @@ const point = (over: Partial<Schemas["ExerciseChartPoint"]>): Schemas["ExerciseC
   ...over,
 });
 
-const exerciseChart = (weeks: 4 | 12 | 26 | 52 = 12, points = [point({}), point({ date: "2026-10-19", top_set_weight_kg: 102.5, is_pr: true })]): Schemas["ExerciseChart"] => ({
+const exerciseChart = (weeks = 5, points = [point({}), point({ date: "2026-10-19", top_set_weight_kg: 102.5, is_pr: true })]): Schemas["ExerciseChart"] => ({
   exercise: bench,
   weeks,
   points,
@@ -103,26 +103,81 @@ const adherence = (): Schemas["AdherenceChart"] => ({
   ],
 });
 
-const dv = (date: string, value: number | null) => ({ date, value });
-
-const weekly = (over: Partial<Schemas["WeeklySummary"]> = {}): Schemas["WeeklySummary"] => ({
-  week_start: "2026-10-26",
-  week_end: "2026-11-01",
-  estimated: true,
+const kpis = (over: Partial<Schemas["PeriodKpis"]> = {}): Schemas["PeriodKpis"] => ({
   sessions_planned: 4,
   sessions_done: 3,
   sessions_missed: 1,
-  avg_completion: 0.82,
+  avg_training_completion: 0.82,
+  avg_nutrition_completion: 0.6,
+  active_days: 3,
+  volume_kg: 12400,
+  personal_records: 2,
+  avg_daily_eaten_kcal: 2100,
+  avg_daily_burned_exercise_kcal: 350,
   avg_daily_balance_kcal: -350,
   target_daily_balance_kcal: -400,
   weight_avg_start_kg: 80,
   weight_avg_end_kg: 79.5,
   weight_change_kg: -0.5,
-  sparklines: {
-    daily_balance_kcal: [dv("2026-10-26", -300), dv("2026-10-27", -400)],
-    training_completion: [dv("2026-10-26", 1), dv("2026-10-27", null)],
-    weight_avg_kg: [dv("2026-10-26", 80), dv("2026-10-27", 79.5)],
+  weight_change_per_week_kg: -0.12,
+  ...over,
+});
+
+const noDeltas = (): Schemas["PeriodDeltas"] => ({
+  sessions_planned: null,
+  sessions_done: null,
+  sessions_missed: null,
+  avg_training_completion: null,
+  avg_nutrition_completion: null,
+  active_days: null,
+  volume_kg: null,
+  personal_records: null,
+  avg_daily_eaten_kcal: null,
+  avg_daily_burned_exercise_kcal: null,
+  avg_daily_balance_kcal: null,
+  target_daily_balance_kcal: null,
+  weight_avg_start_kg: null,
+  weight_avg_end_kg: null,
+  weight_change_kg: null,
+  weight_change_per_week_kg: null,
+});
+
+const seriesPoint = (start: string, over: Partial<Schemas["PeriodSeriesPoint"]> = {}): Schemas["PeriodSeriesPoint"] => ({
+  start,
+  sessions_done: 1,
+  sessions_planned: 1,
+  volume_kg: 4000,
+  training_completion: 0.9,
+  nutrition_completion: 0.7,
+  balance_kcal: -300,
+  weight_avg_kg: 80,
+  ...over,
+});
+
+const periodSummary = (over: Partial<Schemas["PeriodSummary"]> = {}): Schemas["PeriodSummary"] => ({
+  from: "2026-09-27",
+  to: "2026-10-26",
+  days: 30,
+  previous_from: "2026-08-28",
+  previous_to: "2026-09-26",
+  bucket: "day",
+  estimated: true,
+  current: kpis(),
+  previous: kpis({ sessions_done: 2, volume_kg: 10000, avg_training_completion: 0.74, weight_change_kg: -0.2 }),
+  deltas: {
+    ...noDeltas(),
+    sessions_done: 1,
+    avg_training_completion: 0.08,
+    avg_nutrition_completion: -0.05,
+    active_days: 0,
+    volume_kg: 2400,
+    personal_records: -1,
+    avg_daily_balance_kcal: -50,
+    avg_daily_eaten_kcal: 120,
+    weight_change_kg: -0.3,
   },
+  longest_streak_days: 3,
+  series: [seriesPoint("2026-10-24"), seriesPoint("2026-10-25", { sessions_done: 0, volume_kg: 0, training_completion: null }), seriesPoint("2026-10-26", { balance_kcal: null })],
   ...over,
 });
 
@@ -131,21 +186,22 @@ const body = (points: Schemas["BodyChartPoint"][] = [
   { date: "2026-10-26", weight_kg: 79.5, weight_avg_7d_kg: 79.75, body_fat_pct: null },
 ]): Schemas["BodyChart"] => ({ weeks: 12, estimated: true, points });
 
-/** Records the `weeks` query values of a chart endpoint. */
-function serve(path: string, respond: (weeks: number | null) => Response | Promise<Response>, seen: (string | null)[] = []) {
+/** Records the `from..to` query of a chart endpoint. */
+function serve(path: string, respond: (range: string) => Response | Promise<Response>, seen: string[] = []) {
   server.use(
     http.get(apiUrl(path), ({ request }) => {
-      const w = new URL(request.url).searchParams.get("weeks");
-      seen.push(w);
-      return respond(w === null ? null : Number(w));
+      const q = new URL(request.url).searchParams;
+      const range = `${q.get("from")}..${q.get("to")}`;
+      seen.push(range);
+      return respond(range);
     }),
   );
   return seen;
 }
 
-function serveAll(over: { adherence?: Schemas["AdherenceChart"]; body?: Schemas["BodyChart"]; weekly?: Schemas["WeeklySummary"] } = {}) {
+function serveAll(over: { adherence?: Schemas["AdherenceChart"]; body?: Schemas["BodyChart"]; period?: Schemas["PeriodSummary"] } = {}) {
   server.use(
-    http.get(apiUrl(`${A}/weekly-summary`), () => HttpResponse.json(over.weekly ?? weekly())),
+    http.get(apiUrl(`${A}/period-summary`), () => HttpResponse.json(over.period ?? periodSummary())),
     http.get(apiUrl(`${A}/adherence`), () => HttpResponse.json(over.adherence ?? adherence())),
     http.get(apiUrl(`${A}/body`), () => HttpResponse.json(over.body ?? body())),
   );
@@ -217,18 +273,15 @@ describe("Exercise view", () => {
     return user;
   }
 
-  it("offers exactly 4/12/26/52 weeks and sends the chosen value", async () => {
+  it("sends the page's selected period and no longer has its own week selector", async () => {
     serveAll();
-    const seen = serve(`${A}/exercise/ex-bench`, (w) => HttpResponse.json(exerciseChart((w ?? 12) as 12)));
+    const seen = serve(`${A}/exercise/ex-bench`, () => HttpResponse.json(exerciseChart()));
     const user = await pickBench();
     const section = screen.getByRole("region", { name: "Exercise over time" });
-    await waitFor(() => expect(seen).toEqual(["12"]));
-    const radios = within(section).getAllByRole("radio");
-    expect(radios.map((r) => (r as HTMLInputElement).value)).toEqual(["4", "12", "26", "52"]);
-    await user.click(within(section).getByLabelText("26 weeks"));
-    await waitFor(() => expect(seen).toContain("26"));
-    await user.click(within(section).getByLabelText("4 weeks"));
-    await waitFor(() => expect(seen).toContain("4"));
+    await waitFor(() => expect(seen).toEqual(["2026-09-27..2026-10-26"]));
+    expect(within(section).queryByRole("radio")).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText("90 days"));
+    await waitFor(() => expect(seen).toContain("2026-07-29..2026-10-26"));
   });
 
   it("marks only personal-record points and shows volume", async () => {
@@ -253,7 +306,7 @@ describe("Exercise view", () => {
     serveAll();
     serve(`${A}/exercise/ex-bench`, () => HttpResponse.json(exerciseChart(12, [])));
     await pickBench();
-    expect(await screen.findByText("No finished sessions with this exercise in this range.")).toBeInTheDocument();
+    expect(await screen.findByText("No finished sessions with this exercise in this period.")).toBeInTheDocument();
   });
 
   it("shows the forbidden state on 403 not_linked", async () => {
@@ -294,7 +347,7 @@ describe("Adherence", () => {
   it("shows an empty state without days", async () => {
     serveAll({ adherence: { ...adherence(), days: [], weeks: [] } });
     renderApp("/progress");
-    expect(await screen.findByText("No data for this month yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No data for this period yet.")).toBeInTheDocument();
   });
 
   it("shows the forbidden state on 403 not_linked", async () => {
@@ -305,34 +358,271 @@ describe("Adherence", () => {
   });
 });
 
-describe("Weekly summary", () => {
-  it("shows the tiles with estimated energy and weight start to end", async () => {
+describe("Overview", () => {
+  it("shows three rings with period-over-period lines, the previous period named by its length", async () => {
     serveAll();
     renderApp("/progress");
-    expect(await screen.findByTestId("tile-sessions")).toHaveTextContent("3 of 4");
-    expect(screen.getByTestId("tile-completion")).toHaveTextContent("82%");
-    const balance = screen.getByTestId("tile-balance");
+    const sessions = await screen.findByTestId("ring-sessions");
+    expect(within(sessions).getByRole("progressbar", { name: "Sessions done" })).toHaveAttribute("aria-valuenow", "75");
+    expect(sessions).toHaveTextContent("3 of 4 planned");
+    expect(sessions).toHaveTextContent("+1 vs previous 30 days");
+    const training = screen.getByTestId("ring-training");
+    expect(within(training).getByRole("progressbar", { name: "Training completion" })).toHaveAttribute("aria-valuenow", "82");
+    expect(training).toHaveTextContent("+8 pts vs previous 30 days");
+    const nutrition = screen.getByTestId("ring-nutrition");
+    expect(within(nutrition).getByRole("progressbar", { name: "Nutrition completion" })).toHaveAttribute("aria-valuenow", "60");
+    expect(nutrition).toHaveTextContent("-5 pts vs previous 30 days");
+  });
+
+  it("shows the KPI tiles with estimated energy, units and deltas", async () => {
+    serveAll();
+    renderApp("/progress");
+    const volume = await screen.findByTestId("kpi-volume");
+    expect(volume).toHaveTextContent("12,400 kg");
+    expect(volume).toHaveTextContent("+2,400 kg vs previous 30 days");
+    expect(screen.getByTestId("kpi-active-days")).toHaveTextContent("No change vs previous 30 days");
+    expect(screen.getByTestId("kpi-streak")).toHaveTextContent("3 days");
+    expect(screen.getByTestId("kpi-records")).toHaveTextContent("-1 vs previous 30 days");
+    const balance = screen.getByTestId("kpi-balance");
     expect(balance).toHaveTextContent("estimated");
     expect(balance).toHaveTextContent("-350 kcal");
     expect(balance).toHaveTextContent("Target balance -400 kcal");
-    expect(screen.getByTestId("tile-weight")).toHaveTextContent("80 to 79.5 kg");
-    expect(screen.getByRole("img", { name: "Daily energy balance" })).toBeInTheDocument();
+    expect(balance).toHaveTextContent("-50 kcal vs previous 30 days");
+    expect(screen.getByTestId("kpi-eaten")).toHaveTextContent("estimated");
+    expect(screen.getByTestId("kpi-burned")).toHaveTextContent("estimated");
+    const weight = screen.getByTestId("kpi-weight");
+    expect(weight).toHaveTextContent("-0.5 kg");
+    expect(weight).toHaveTextContent("80 to 79.5 kg");
+    expect(weight).toHaveTextContent("-0.1 kg per week");
   });
 
-  it("shows a dash for null averages and converts weights for imperial users", async () => {
-    server.use(meOk(meFixture({ units: "imperial" })));
-    serveAll({ weekly: weekly({ avg_completion: null, avg_daily_balance_kcal: null, target_daily_balance_kcal: null }) });
+  it("marks direction with an icon and hidden words, and keeps weight and balance neutral", async () => {
+    serveAll();
     renderApp("/progress");
-    expect(await screen.findByTestId("tile-completion")).toHaveTextContent("—");
-    expect(screen.getByTestId("tile-completion")).not.toHaveTextContent("0%");
-    expect(screen.getByTestId("tile-weight")).toHaveTextContent("176.4 to 175.3 lb");
+    await screen.findByTestId("kpi-volume");
+    const records = within(screen.getByTestId("kpi-records")).getByText(/vs previous/).closest("p")!;
+    expect(records).toHaveAttribute("data-direction", "down");
+    expect(records).toHaveTextContent("▼");
+    expect(records).toHaveTextContent("Down:");
+    expect(records).toHaveClass("text-alert");
+    const volume = within(screen.getByTestId("kpi-volume")).getByText(/vs previous/).closest("p")!;
+    expect(volume).toHaveAttribute("data-direction", "up");
+    expect(volume).toHaveClass("text-spruce");
+    for (const id of ["kpi-balance", "kpi-weight", "kpi-eaten"]) {
+      const line = within(screen.getByTestId(id)).getByText(/vs previous/).closest("p")!;
+      expect(line).toHaveClass("text-slate"); // the goal decides, so no good/bad colour
+      expect(line.className).not.toMatch(/spruce|alert/);
+    }
+  });
+
+  it("says there is no data for the previous period and shows dashes without data (empty states)", async () => {
+    serveAll({
+      period: periodSummary({
+        current: kpis({
+          sessions_planned: 0,
+          sessions_done: 0,
+          sessions_missed: 0,
+          avg_training_completion: null,
+          avg_nutrition_completion: null,
+          active_days: 0,
+          volume_kg: 0,
+          personal_records: 0,
+          avg_daily_eaten_kcal: null,
+          avg_daily_burned_exercise_kcal: null,
+          avg_daily_balance_kcal: null,
+          target_daily_balance_kcal: null,
+          weight_avg_start_kg: null,
+          weight_avg_end_kg: null,
+          weight_change_kg: null,
+          weight_change_per_week_kg: null,
+        }),
+        deltas: noDeltas(),
+        longest_streak_days: 0,
+        series: [],
+      }),
+    });
+    renderApp("/progress");
+    const training = await screen.findByTestId("ring-training");
+    expect(within(training).getByRole("progressbar")).not.toHaveAttribute("aria-valuenow"); // not 0 %
+    expect(training).toHaveTextContent("—");
+    expect(training).toHaveTextContent("No data for the previous period");
+    expect(training).not.toHaveTextContent("0%");
+    for (const id of ["kpi-volume", "kpi-balance", "kpi-eaten", "kpi-burned", "kpi-weight"]) {
+      expect(screen.getByTestId(id)).toHaveTextContent("—");
+      expect(screen.getByTestId(id)).toHaveTextContent("No data in this period.");
+    }
+    expect(screen.getByTestId("kpi-streak")).toHaveTextContent("0 days");
+    // timelines: one empty message each
+    expect(screen.getByText("No finished workouts in this period.")).toBeInTheDocument();
+    expect(screen.getByText("No completion figures in this period yet.")).toBeInTheDocument();
+    expect(screen.getByText("No days with food logged in this period.")).toBeInTheDocument();
+  });
+
+  it("converts volume and weight to lb for an imperial user", async () => {
+    server.use(meOk(meFixture({ units: "imperial" })));
+    serveAll();
+    renderApp("/progress");
+    expect(await screen.findByTestId("kpi-volume")).toHaveTextContent("27,337.3 lb");
+    expect(screen.getByTestId("kpi-weight")).toHaveTextContent("-1.1 lb");
+    expect(screen.getByTestId("kpi-weight")).toHaveTextContent("176.4 to 175.3 lb");
+    expect(screen.getByRole("img", { name: /Training volume in lb/ })).toBeInTheDocument();
   });
 
   it("shows the forbidden state on 403 not_linked", async () => {
     serveAll();
-    server.use(http.get(apiUrl(`${A}/weekly-summary`), () => problem(403, "not_linked")));
+    server.use(http.get(apiUrl(`${A}/period-summary`), () => problem(403, "not_linked")));
     renderApp("/progress");
     expect((await screen.findAllByText("You don't have access to this data.")).length).toBeGreaterThan(0);
+  });
+});
+
+describe("Timelines", () => {
+  it("draws the volume, completion and balance charts with a data table each", async () => {
+    serveAll();
+    renderApp("/progress");
+    expect(await screen.findByRole("img", { name: "Training volume in kg and sessions done per day" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Training and nutrition completion in percent per day" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Average daily energy balance in kcal per day against the target" })).toBeInTheDocument();
+    const tables = screen.getAllByRole("table");
+    expect(tables).toHaveLength(3);
+    expect(within(tables[0]!).getByRole("columnheader", { name: "Volume (kg)" })).toBeInTheDocument();
+    expect(within(tables[1]!).getAllByText("90%").length).toBeGreaterThan(0);
+    expect(within(tables[2]!).getAllByText("-300 kcal").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /Energy balance against target/ })).toHaveTextContent("estimated");
+  });
+
+  it("labels weekly buckets by their Monday", async () => {
+    serveAll({ period: periodSummary({ bucket: "week", days: 90, series: [seriesPoint("2026-10-19")] }) });
+    renderApp("/progress?period=90d");
+    expect(await screen.findByRole("img", { name: "Training volume in kg and sessions done per week" })).toBeInTheDocument();
+    expect(screen.getAllByRole("cell", { name: "Week of Oct 19" })).toHaveLength(3);
+  });
+});
+
+describe("Period selector", () => {
+  const rangeText = () => screen.getByTestId("period-range").textContent;
+
+  it("offers the five presets and Custom, defaults to 30 days and reloads every section for the choice", async () => {
+    serveAll();
+    const periods: string[] = [];
+    server.use(
+      http.get(apiUrl(`${A}/period-summary`), ({ request }) => {
+        const q = new URL(request.url).searchParams;
+        periods.push(`${q.get("from")}..${q.get("to")}`);
+        return HttpResponse.json(periodSummary());
+      }),
+    );
+    const adherenceSeen = serve(`${A}/adherence`, () => HttpResponse.json(adherence()));
+    const bodySeen = serve(`${A}/body`, () => HttpResponse.json(body()));
+    const user = userEvent.setup();
+    const { router } = renderApp("/progress");
+    const selector = await screen.findByTestId("period-selector");
+    const names = within(selector).getAllByRole("radio").map((r) => (r as HTMLInputElement).value);
+    expect(names).toEqual(["7d", "30d", "90d", "6m", "1y", "custom"]);
+    expect(within(selector).getByLabelText("30 days")).toBeChecked();
+    await waitFor(() => expect(periods).toEqual(["2026-09-27..2026-10-26"]));
+    await user.click(within(selector).getByLabelText("7 days"));
+    await waitFor(() => expect(periods).toContain("2026-10-20..2026-10-26"));
+    await waitFor(() => expect(adherenceSeen).toContain("2026-10-20..2026-10-26"));
+    await waitFor(() => expect(bodySeen).toContain("2026-10-20..2026-10-26"));
+    expect(router.state.location.search).toBe("?period=7d");
+    await user.click(within(selector).getByLabelText("6 months"));
+    await waitFor(() => expect(periods).toContain("2026-04-28..2026-10-26")); // 182 days
+    await user.click(within(selector).getByLabelText("1 year"));
+    await waitFor(() => expect(periods).toContain("2025-10-28..2026-10-26")); // 364 days
+  });
+
+  it("keeps the selection in the URL, so a reload shows it", async () => {
+    serveAll();
+    renderApp("/progress?period=90d");
+    expect(await screen.findByLabelText("90 days")).toBeChecked();
+    expect(rangeText()).toContain("Jul 29, 2026 to Oct 26, 2026 (90 days)");
+  });
+
+  it("restores a custom range from from/to and falls back to 30 days for an invalid URL", async () => {
+    serveAll();
+    const first = renderApp("/progress?from=2026-10-01&to=2026-10-10");
+    expect(await screen.findByLabelText("Custom")).toBeChecked();
+    expect(screen.getByLabelText("From")).toHaveValue("2026-10-01");
+    expect(screen.getByLabelText("To")).toHaveValue("2026-10-10");
+    first.unmount();
+    renderApp("/progress?from=2026-10-10&to=2026-10-01");
+    expect(await screen.findByLabelText("30 days")).toBeChecked();
+  });
+
+  it("steps back and forward by the range length, and disables next when the range ends today", async () => {
+    serveAll();
+    const user = userEvent.setup();
+    const { router } = renderApp("/progress?period=7d");
+    const next = await screen.findByRole("button", { name: "Next period" });
+    expect(next).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Previous period" }));
+    expect(router.state.location.search).toBe("?from=2026-10-13&to=2026-10-19");
+    expect(rangeText()).toContain("Oct 13, 2026 to Oct 19, 2026 (7 days)");
+    expect(screen.getByLabelText("Custom")).toBeChecked();
+    expect(screen.getByRole("button", { name: "Next period" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Next period" }));
+    expect(router.state.location.search).toBe("?period=7d"); // back at today: the preset again
+    expect(screen.getByRole("button", { name: "Next period" })).toBeDisabled();
+  });
+
+  it("validates the custom range inline and keeps the last valid range", async () => {
+    serveAll();
+    const periods: string[] = [];
+    server.use(
+      http.get(apiUrl(`${A}/period-summary`), ({ request }) => {
+        const q = new URL(request.url).searchParams;
+        periods.push(`${q.get("from")}..${q.get("to")}`);
+        return HttpResponse.json(periodSummary());
+      }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderApp("/progress?from=2026-10-01&to=2026-10-10");
+    const from = await screen.findByLabelText("From");
+    const to = screen.getByLabelText("To");
+    await waitFor(() => expect(periods).toEqual(["2026-10-01..2026-10-10"]));
+
+    await user.clear(to);
+    await user.type(to, "2026-09-01"); // before From
+    expect(await screen.findByRole("alert")).toHaveTextContent("From must not be after To.");
+    await user.clear(to);
+    await user.type(to, "2026-10-27"); // tomorrow
+    expect(screen.getByRole("alert")).toHaveTextContent("To cannot be after today.");
+    await user.clear(from);
+    await user.type(from, "2024-01-01");
+    await user.clear(to);
+    await user.type(to, "2026-10-26");
+    expect(screen.getByRole("alert")).toHaveTextContent("The range can cover at most 371 days.");
+    expect(router.state.location.search).toBe("?from=2026-10-01&to=2026-10-10"); // last valid range kept
+    expect(periods).toEqual(["2026-10-01..2026-10-10"]);
+
+    await user.clear(from);
+    await user.type(from, "2026-10-20");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).toBe("?from=2026-10-20&to=2026-10-26"));
+    await waitFor(() => expect(periods).toContain("2026-10-20..2026-10-26"));
+  });
+
+  it("switches to Custom with the current range", async () => {
+    serveAll();
+    const user = userEvent.setup();
+    const { router } = renderApp("/progress");
+    await user.click(await screen.findByLabelText("Custom"));
+    expect(router.state.location.search).toBe("?from=2026-09-27&to=2026-10-26");
+    expect(screen.getByLabelText("From")).toHaveValue("2026-09-27");
+  });
+});
+
+describe("Descriptions (F15.6)", () => {
+  it("describes the page and every section for the athlete", async () => {
+    serveAll();
+    renderApp("/progress");
+    expect(await screen.findByTestId("progress-description")).toHaveTextContent(/how your training, nutrition, energy balance and body weight moved/);
+    expect(screen.getByTestId("progress-description")).toHaveTextContent(/Log your workouts, meals and weigh-ins/);
+    for (const key of ["overview", "timelines", "adherence", "exercise", "body"]) {
+      expect(screen.getByTestId(`help-${key}`).textContent!.length).toBeGreaterThan(20);
+    }
+    expect(screen.getByTestId("help-overview")).toHaveTextContent("how fully you followed your training");
   });
 });
 
@@ -351,7 +641,7 @@ describe("Body", () => {
     expect(screen.queryByRole("img", { name: "Body fat percent" })).not.toBeInTheDocument();
   });
 
-  it("uses lb for an imperial user and sends the chosen range", async () => {
+  it("uses lb for an imperial user and sends the selected period", async () => {
     server.use(meOk(meFixture({ units: "imperial" })));
     serveAll();
     const seen = serve(`${A}/body`, () => HttpResponse.json(body()));
@@ -359,14 +649,16 @@ describe("Body", () => {
     renderApp("/progress");
     expect(await screen.findByRole("img", { name: "Weight and 7-day average in lb" })).toBeInTheDocument();
     const section = screen.getByRole("region", { name: "Body" });
-    await user.click(within(section).getByLabelText("52 weeks"));
-    await waitFor(() => expect(seen).toContain("52"));
+    expect(within(section).queryByRole("radio")).not.toBeInTheDocument();
+    await waitFor(() => expect(seen).toEqual(["2026-09-27..2026-10-26"]));
+    await user.click(screen.getByLabelText("1 year"));
+    await waitFor(() => expect(seen).toContain("2025-10-28..2026-10-26"));
   });
 
   it("shows an empty state without points", async () => {
     serveAll({ body: body([]) });
     renderApp("/progress");
-    expect(await screen.findByText("No weigh-ins in this range yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No weigh-ins in this period yet.")).toBeInTheDocument();
   });
 
   it("shows the forbidden state on 403 not_linked", async () => {
@@ -402,7 +694,7 @@ describe("Page access and 360 px layout", () => {
       }
     }
     expect(screen.getByRole("article")).toHaveClass("min-w-0");
-    expect(screen.getByLabelText("Daily completion this month")).toHaveClass("grid-cols-7");
+    expect(screen.getByLabelText("Daily completion in the selected period")).toHaveClass("grid-cols-7");
     vi.unstubAllGlobals();
   });
 });

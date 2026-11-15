@@ -124,3 +124,156 @@ def test_mean_ratio_and_week_start() -> None:
     assert e.mean_ratio([1.0, None, 0.5]) == 0.75
     assert e.week_start(dt.date(2026, 10, 25)) == dt.date(2026, 10, 19)  # Sunday
     assert e.week_start(dt.date(2026, 10, 19)) == dt.date(2026, 10, 19)
+
+
+# ───────────── period overview (D109) ─────────────
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "expected"),
+    [
+        (dt.date(2026, 11, 9), dt.date(2026, 11, 15), (dt.date(2026, 11, 2), dt.date(2026, 11, 8))),
+        (dt.date(2026, 11, 15), dt.date(2026, 11, 15), (dt.date(2026, 11, 14),) * 2),
+        (
+            dt.date(2026, 10, 17),
+            dt.date(2026, 11, 15),
+            (dt.date(2026, 9, 17), dt.date(2026, 10, 16)),
+        ),
+        (dt.date(2026, 3, 1), dt.date(2026, 3, 3), (dt.date(2026, 2, 26), dt.date(2026, 2, 28))),
+        (dt.date(2024, 3, 1), dt.date(2024, 3, 2), (dt.date(2024, 2, 28), dt.date(2024, 2, 29))),
+    ],
+)
+def test_previous_period_table(
+    start: dt.date, end: dt.date, expected: tuple[dt.date, dt.date]
+) -> None:
+    assert e.previous_period(start, end) == expected
+
+
+@given(
+    start=st.dates(min_value=dt.date(2000, 1, 1), max_value=dt.date(2100, 1, 1)),
+    days=st.integers(min_value=1, max_value=371),
+)
+def test_previous_period_property(start: dt.date, days: int) -> None:
+    end = start + dt.timedelta(days=days - 1)
+    prev_start, prev_end = e.previous_period(start, end)
+    assert prev_end == start - dt.timedelta(days=1)
+    assert (prev_end - prev_start).days + 1 == days
+
+
+@pytest.mark.parametrize(
+    ("days", "kind"),
+    [(1, "day"), (7, "day"), (30, "day"), (31, "day"), (32, "week"), (182, "week")],
+)
+def test_bucket_kind_table(days: int, kind: str) -> None:
+    assert e.bucket_kind(days) == kind
+
+
+def test_bucket_starts_table() -> None:
+    thursday = dt.date(2026, 11, 12)
+    assert e.bucket_starts(thursday, dt.date(2026, 11, 14), "day") == [
+        dt.date(2026, 11, 12),
+        dt.date(2026, 11, 13),
+        dt.date(2026, 11, 14),
+    ]
+    # weeks are labelled by their Monday, the first one may start before the range
+    assert e.bucket_starts(thursday, dt.date(2026, 11, 24), "week") == [
+        dt.date(2026, 11, 9),
+        dt.date(2026, 11, 16),
+        dt.date(2026, 11, 23),
+    ]
+    assert e.bucket_starts(dt.date(2026, 11, 9), dt.date(2026, 11, 15), "week") == [
+        dt.date(2026, 11, 9)
+    ]
+
+
+@given(
+    start=st.dates(min_value=dt.date(2000, 1, 1), max_value=dt.date(2100, 1, 1)),
+    days=st.integers(min_value=1, max_value=371),
+)
+def test_bucket_starts_property(start: dt.date, days: int) -> None:
+    end = start + dt.timedelta(days=days - 1)
+    kind = e.bucket_kind(days)
+    starts = e.bucket_starts(start, end, kind)
+    assert starts == sorted(set(starts))
+    assert e.bucket_start(start, kind) == starts[0]
+    assert e.bucket_start(end, kind) == starts[-1]
+    if kind == "week":
+        assert all(s.weekday() == 0 for s in starts)
+    else:
+        assert len(starts) == days
+
+
+@pytest.mark.parametrize(
+    ("current", "previous", "expected"),
+    [
+        ({"a": 5, "b": 0.5}, {"a": 3, "b": 0.75}, {"a": 2, "b": -0.25}),
+        ({"a": None}, {"a": 3}, {"a": None}),
+        ({"a": 3}, {"a": None}, {"a": None}),
+        ({"a": 3}, {}, {"a": None}),
+        ({"a": 0.3}, {"a": 0.1}, {"a": 0.2}),  # float noise is rounded away
+        ({"a": 0}, {"a": 0}, {"a": 0}),
+    ],
+)
+def test_period_deltas_table(
+    current: dict[str, float | None],
+    previous: dict[str, float | None],
+    expected: dict[str, float | None],
+) -> None:
+    result = e.period_deltas(current, previous)
+    assert result.values == expected
+    assert result.reason
+
+
+@given(
+    st.dictionaries(st.sampled_from("abc"), st.one_of(st.none(), st.integers(-1000, 1000))),
+    st.dictionaries(st.sampled_from("abc"), st.one_of(st.none(), st.integers(-1000, 1000))),
+)
+def test_period_deltas_property(
+    current: dict[str, int | None], previous: dict[str, int | None]
+) -> None:
+    result = e.period_deltas(current, previous).values
+    assert set(result) == set(current)
+    for key, value in result.items():
+        now, before = current[key], previous.get(key)
+        assert value == (None if now is None or before is None else now - before)
+
+
+@pytest.mark.parametrize(
+    ("statuses", "expected"),
+    [
+        ([], 0),
+        (["rest", "rest"], 0),
+        (["done", "done", "done"], 3),
+        (["done", "rest", "done"], 2),  # a rest day does not break the run
+        (["done", "missed", "done", "done"], 2),
+        (["done", "done", "missed", "done"], 2),
+        (["done", "rest", "rest", "missed", "done"], 1),
+        (["done", "in_progress", "done"], 1),
+        (["done", "done", "planned"], 2),
+        (["missed", "missed"], 0),
+    ],
+)
+def test_longest_streak_table(statuses: list[str], expected: int) -> None:
+    days = [(D + dt.timedelta(days=n), s) for n, s in enumerate(statuses)]
+    result = e.longest_streak(reversed(days))  # the order of the input does not matter
+    assert result.days == expected
+    assert result.reason
+
+
+@given(st.lists(st.sampled_from(["done", "rest", "missed", "planned", "in_progress"]), max_size=60))
+def test_longest_streak_property(statuses: list[str]) -> None:
+    days = [(D + dt.timedelta(days=n), s) for n, s in enumerate(statuses)]
+    streak = e.longest_streak(days).days
+    assert 0 <= streak <= statuses.count("done")
+    # dropping the rest days never changes the answer
+    assert streak == e.longest_streak([d for d in days if d[1] != "rest"]).days
+    if not {"missed", "planned", "in_progress"} & set(statuses):
+        assert streak == statuses.count("done")
+
+
+@pytest.mark.parametrize(
+    ("change", "span", "expected"),
+    [(None, 10, None), (1.0, 0, None), (-0.5, 7, -0.5), (1.0, 14, 0.5), (0.0, 29, 0.0)],
+)
+def test_weekly_rate_table(change: float | None, span: int, expected: float | None) -> None:
+    assert e.weekly_rate(change, span) == expected

@@ -57,6 +57,11 @@ export default tseslint.config(
               "dataKey",
               "strokeDasharray",
               "testId",
+              // Recharts axis ids and a prop that picks a variant, never user-facing text.
+              "yAxisId",
+              "orientation",
+              "tone",
+              "audience",
             ],
           },
         },

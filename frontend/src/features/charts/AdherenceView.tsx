@@ -3,10 +3,13 @@ import { useTranslation } from "react-i18next";
 import { Bar, BarChart, CartesianGrid, Legend, XAxis, YAxis } from "recharts";
 
 import { type AdherenceChart, type AdherenceDay, useAdherenceChart } from "../../api/charts";
-import { addMonths, DAY_FORMAT, formatDay, monthGridRange, monthOf } from "../../lib/calendarDates";
+import { DAY_FORMAT, formatDay } from "../../lib/calendarDates";
 import { ChartBox } from "./ChartBox";
 import { CHART_COLORS, percent } from "./chartData";
 import { ChartState } from "./ChartState";
+
+/** Above this many days the heat map uses smaller cells, so a year stays a short grid. */
+const LONG_PERIOD_DAYS = 93;
 
 type Metric = "training" | "nutrition";
 const METRICS: Metric[] = ["training", "nutrition"];
@@ -54,7 +57,10 @@ function AdherenceBody({ data, metric }: { data: AdherenceChart; metric: Metric 
 
   return (
     <div className="min-w-0">
-      <ol className="mt-3 grid max-w-[28rem] grid-cols-7 gap-1" aria-label={t("charts.adherence.heatLabel")}>
+      <ol
+        className={`mt-3 grid grid-cols-7 gap-1 ${data.days.length > LONG_PERIOD_DAYS ? "max-w-[14rem]" : "max-w-[28rem]"}`}
+        aria-label={t("charts.adherence.heatLabel")}
+      >
         {lead.map((_, i) => (
           <li key={`pad-${i}`} aria-hidden="true" />
         ))}
@@ -77,29 +83,15 @@ function AdherenceBody({ data, metric }: { data: AdherenceChart; metric: Metric 
   );
 }
 
-/** Adherence (F15.2): a month heat map of daily completion plus the weekly bars for the same weeks. */
-export function AdherenceView({ athleteId, today }: { athleteId: string; today: string }) {
-  const { t, i18n } = useTranslation();
-  const [month, setMonth] = useState(monthOf(today));
+/** Adherence (F15.2, D109): a heat map of daily completion for the selected period plus the weekly bars. */
+export function AdherenceView({ athleteId, from, to }: { athleteId: string; from: string; to: string }) {
+  const { t } = useTranslation();
   const [metric, setMetric] = useState<Metric>("training");
-  const { from, to } = monthGridRange(month);
   const query = useAdherenceChart(athleteId, from, to);
-  const monthLabel = formatDay(`${month}-01`, i18n.language, DAY_FORMAT.monthYear);
 
   return (
     <div className="min-w-0">
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setMonth(addMonths(month, -1))} aria-label={t("charts.adherence.prev")} className="min-h-11 min-w-11 rounded-md border-2 border-iron font-bold hover:bg-line">
-          {t("charts.adherence.prevGlyph")}
-        </button>
-        <span className="min-w-[9rem] text-center font-semibold" aria-live="polite">
-          {monthLabel}
-        </span>
-        <button type="button" onClick={() => setMonth(addMonths(month, 1))} aria-label={t("charts.adherence.next")} className="min-h-11 min-w-11 rounded-md border-2 border-iron font-bold hover:bg-line">
-          {t("charts.adherence.nextGlyph")}
-        </button>
-      </div>
-      <fieldset className="mt-3 min-w-0">
+      <fieldset className="min-w-0">
         <legend className="sr-only">{t("charts.adherence.metric")}</legend>
         <div className="flex gap-2">
           {METRICS.map((m) => (
