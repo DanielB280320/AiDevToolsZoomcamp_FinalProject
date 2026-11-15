@@ -2,14 +2,13 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, XAxis, YAxis } from "recharts";
 
-import { DEFAULT_CHART_WEEKS, type ChartWeeks, type ExerciseChart, useExerciseChart } from "../../api/charts";
+import { type ExerciseChart, useExerciseChart } from "../../api/charts";
 import { useExerciseSearch } from "../../api/onboarding";
 import { DAY_FORMAT, formatDay } from "../../lib/calendarDates";
 import { weightUnit, type UnitSystem } from "../../lib/units";
 import { ChartBox } from "./ChartBox";
 import { AUTO_DOMAIN, CHART_COLORS, displayWeight, hasValues } from "./chartData";
 import { ChartState } from "./ChartState";
-import { RangeSelector } from "./RangeSelector";
 
 interface PrDotProps {
   cx?: number;
@@ -80,14 +79,13 @@ function ExerciseBody({ data, units }: { data: ExerciseChart; units: UnitSystem 
   );
 }
 
-/** Exercise over time (F15.2): pick an exercise from the catalog, then a range of 4/12/26/52 weeks. */
-export function ExerciseChartView({ athleteId, units }: { athleteId: string; units: UnitSystem }) {
+/** Exercise over time (F15.2, D109): pick an exercise from the catalog; the range is the page's selected period. */
+export function ExerciseChartView({ athleteId, units, from, to }: { athleteId: string; units: UnitSystem; from: string; to: string }) {
   const { t } = useTranslation();
   const [text, setText] = useState("");
   const [chosen, setChosen] = useState<{ id: string; name: string } | null>(null);
-  const [weeks, setWeeks] = useState<ChartWeeks>(DEFAULT_CHART_WEEKS);
   const search = useExerciseSearch(text);
-  const query = useExerciseChart(athleteId, chosen?.id ?? null, weeks);
+  const query = useExerciseChart(athleteId, chosen?.id ?? null, from, to);
 
   return (
     <div className="min-w-0">
@@ -124,7 +122,6 @@ export function ExerciseChartView({ athleteId, units }: { athleteId: string; uni
       ) : (
         <>
           <h3 className="mt-4 font-display text-step-1 font-bold">{chosen.name}</h3>
-          <RangeSelector value={weeks} onChange={setWeeks} />
           <div className="mt-3">
             <ChartState query={query} isEmpty={(d) => d.points.length === 0} emptyMessage={t("charts.exercise.empty")}>
               {(data) => <ExerciseBody data={data} units={units} />}

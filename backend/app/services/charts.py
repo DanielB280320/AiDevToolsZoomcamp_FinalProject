@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.engines import charts as engine
+from app.engines import constants as consts
 from app.engines.nutrition_completion import nutrition_completion
 from app.errors import ProblemError
 from app.models import (
@@ -40,7 +41,7 @@ from app.services.calendar import TrainingDayInfo, utc_midnight_after
 from app.services.clock import local_today
 
 WEEKS_CHOICES = (4, 12, 26, 52)
-MAX_ADHERENCE_DAYS = 371
+MAX_ADHERENCE_DAYS = consts.CHART_RANGE_MAX_DAYS
 WEIGHT_DECIMALS = 2
 
 
@@ -52,6 +53,30 @@ def check_weeks(weeks: int) -> int:
 
 def _range_start(today: dt.date, weeks: int) -> dt.date:
     return today - dt.timedelta(days=weeks * 7 - 1)
+
+
+def check_range(start: dt.date, end: dt.date) -> None:
+    """The 400s shared by adherence, the period summary and the `from`/`to` of the other charts."""
+    if start > end:
+        raise ProblemError(400, "invalid_range", "`from` must not be after `to`.")
+    if (end - start).days + 1 > MAX_ADHERENCE_DAYS:
+        raise ProblemError(
+            400, "range_too_large", f"The range may cover at most {MAX_ADHERENCE_DAYS} days."
+        )
+
+
+def optional_range(start: dt.date | None, end: dt.date | None) -> tuple[dt.date, dt.date] | None:
+    """`from` and `to` of the exercise and body charts (D109): both or neither."""
+    if start is None and end is None:
+        return None
+    if start is None or end is None:
+        raise ProblemError(400, "bad_request", "`from` and `to` must be given together.")
+    check_range(start, end)
+    return start, end
+
+
+def _weeks_covered(start: dt.date, end: dt.date) -> int:
+    return -(-((end - start).days + 1) // 7)
 
 
 # ───────────── session detail ─────────────
@@ -172,11 +197,20 @@ def personal_records(
 
 
 def exercise_chart(
-    db: Session, user: User, exercise_id: uuid.UUID, weeks: int, now: dt.datetime
+    db: Session,
+    user: User,
+    exercise_id: uuid.UUID,
+    weeks: int,
+    now: dt.datetime,
+    period: tuple[dt.date, dt.date] | None = None,
 ) -> out.ExerciseChart:
     exercise = training_log._visible_exercise(db, user, exercise_id)
     today = local_today(now, user.timezone)
     start = _range_start(today, weeks)
+    end = today
+    if period is not None:  # D109: explicit days, `weeks` ignored
+        start, end = period
+        weeks = _weeks_covered(start, end)
     rows = db.execute(
         select(SetLog, TrainingSession.date)
         .join(TrainingSession, TrainingSession.id == SetLog.session_id)
@@ -207,7 +241,7 @@ def exercise_chart(
             is_pr=p.is_pr,
         )
         for p in history
-        if p.date >= start
+        if start <= p.date <= end
     ]
     return out.ExerciseChart(
         exercise=ExerciseSummary.model_validate(exercise, from_attributes=True),
@@ -285,12 +319,7 @@ def _nutrition_completion(
 def adherence_chart(
     db: Session, user: User, start: dt.date, end: dt.date, now: dt.datetime
 ) -> out.AdherenceChart:
-    if start > end:
-        raise ProblemError(400, "invalid_range", "`from` must not be after `to`.")
-    if (end - start).days + 1 > MAX_ADHERENCE_DAYS:
-        raise ProblemError(
-            400, "range_too_large", f"The range may cover at most {MAX_ADHERENCE_DAYS} days."
-        )
+    check_range(start, end)
     today = local_today(now, user.timezone)
     infos = calendar.training_days(db, user, start, end, today)
     nutrition = _nutrition_completion(db, user, start, end, today)
@@ -396,14 +425,25 @@ def weekly_summary(
 # ───────────── body ─────────────
 
 
-def body_chart(db: Session, user: User, weeks: int, now: dt.datetime) -> out.BodyChart:
+def body_chart(
+    db: Session,
+    user: User,
+    weeks: int,
+    now: dt.datetime,
+    period: tuple[dt.date, dt.date] | None = None,
+) -> out.BodyChart:
     today = local_today(now, user.timezone)
     start = _range_start(today, weeks)
+    end = today
+    if period is not None:  # D109: explicit days, `weeks` ignored
+        start, end = period
+        weeks = _weeks_covered(start, end)
+        end = min(end, today)
     rows = db.execute(
         select(BodyMetric.date, BodyMetric.weight_kg, BodyMetric.body_fat_pct)
         .where(
             BodyMetric.user_id == user.id,
-            BodyMetric.date.between(start - dt.timedelta(days=6), today),
+            BodyMetric.date.between(start - dt.timedelta(days=6), end),
         )
         .order_by(BodyMetric.date)
     ).all()
@@ -427,6 +467,171 @@ def body_chart(db: Session, user: User, weeks: int, now: dt.datetime) -> out.Bod
             )
             for r, avg in zip(in_range, averages, strict=True)
         ],
+    )
+
+
+# ───────────── period overview (D109) ─────────────
+
+
+def _volume_and_records(
+    db: Session, user: User, today: dt.date
+) -> tuple[dict[dt.date, float], dict[dt.date, int]]:
+    """Volume (reps x weight of the non-skipped strength sets) and personal records per day of
+    the finished sessions up to today. One query over the whole history, because a record is
+    measured against every earlier session (D88, as `progress_totals`)."""
+    rows = db.execute(
+        select(SetLog, TrainingSession.date, Exercise.type)
+        .join(TrainingSession, TrainingSession.id == SetLog.session_id)
+        .join(Exercise, Exercise.id == SetLog.exercise_id)
+        .where(
+            TrainingSession.athlete_id == user.id,
+            TrainingSession.status == "done",
+            TrainingSession.date <= today,
+            SetLog.skipped.is_(False),
+        )
+    ).all()
+    by_exercise: dict[uuid.UUID, list[tuple[SetLog, dt.date]]] = defaultdict(list)
+    timed: dict[uuid.UUID, bool] = {}
+    for log, day, kind in rows:
+        by_exercise[log.exercise_id].append((log, day))
+        timed[log.exercise_id] = kind == "timed"
+    volume: dict[dt.date, float] = defaultdict(float)
+    records: dict[dt.date, int] = defaultdict(int)
+    for exercise_id, logs in by_exercise.items():
+        history = engine.exercise_history(
+            ((str(sid), day, sets) for sid, (day, sets) in _group_by_session(logs).items()),
+            timed=timed[exercise_id],
+        )
+        for point in history:
+            if not timed[exercise_id]:
+                volume[point.date] += point.volume_kg
+            if point.is_pr:
+                records[point.date] += 1
+    return volume, records
+
+
+def _mean_int(values: list[int]) -> int | None:
+    return round(sum(values) / len(values)) if values else None
+
+
+def period_summary(
+    db: Session, user: User, start: dt.date, end: dt.date, now: dt.datetime
+) -> out.PeriodSummary:
+    """KPIs of `start..end` and of the same number of days before it, with their differences,
+    the longest streak and one series point per bucket (F15.6-F15.10, D109).
+
+    Everything is read once for `previous_from..to` (a fixed number of queries whatever the
+    length) and sliced per period. Days after the athlete's today contribute nothing.
+    """
+    check_range(start, end)
+    today = local_today(now, user.timezone)
+    prev_start, prev_end = engine.previous_period(start, end)
+    elapsed_end = min(end, today)
+    infos = {i.date: i for i in calendar.training_days(db, user, prev_start, end, today)}
+    nutrition = _nutrition_completion(db, user, prev_start, end, today)
+    energy = (
+        training_log.range_energy(db, user, prev_start, elapsed_end)
+        if elapsed_end >= prev_start
+        else {}
+    )
+    volume, records = _volume_and_records(db, user, today)
+    averages: dict[dt.date, float | None] = {}
+    if elapsed_end >= prev_start:
+        span = [
+            prev_start + dt.timedelta(days=n) for n in range((elapsed_end - prev_start).days + 1)
+        ]
+        averages = dict(
+            zip(
+                span,
+                engine.rolling_weight_average(
+                    _weights(db, user.id, prev_start - dt.timedelta(days=6), elapsed_end), span
+                ),
+                strict=True,
+            )
+        )
+
+    def elapsed(first: dt.date, last: dt.date) -> list[dt.date]:
+        last = min(last, today)
+        return [first + dt.timedelta(days=n) for n in range((last - first).days + 1)]
+
+    def logged(days: list[dt.date]) -> list[dt.date]:
+        # Only days with food logged count for the energy averages (D77).
+        return [d for d in days if d in energy and energy[d].eaten.kcal > 0]
+
+    def kpis(first: dt.date, last: dt.date) -> out.PeriodKpis:
+        days = elapsed(first, last)
+        done = sum(1 for d in days if infos[d].status == "done")
+        food_days = logged(days)
+        last_day = days[-1] if days else None
+        target = athlete.targets_on(db, user.id, last_day) if last_day else None
+        start_avg = averages.get(first) if days else None
+        end_avg = averages.get(last_day) if last_day else None
+        change = None if start_avg is None or end_avg is None else end_avg - start_avg
+        per_week = engine.weekly_rate(change, (last_day - first).days) if last_day else None
+        return out.PeriodKpis(
+            sessions_planned=sum(1 for d in days if infos[d].status != "rest"),
+            sessions_done=done,
+            sessions_missed=sum(1 for d in days if infos[d].status == "missed"),
+            avg_training_completion=engine.mean_ratio(
+                _training_completion(infos[d], today) for d in days
+            ),
+            avg_nutrition_completion=engine.mean_ratio(nutrition.get(d) for d in days),
+            active_days=done,
+            volume_kg=round(sum(volume.get(d, 0.0) for d in days), WEIGHT_DECIMALS),
+            personal_records=sum(records.get(d, 0) for d in days),
+            avg_daily_eaten_kcal=_mean_int([energy[d].eaten.kcal for d in food_days]),
+            avg_daily_burned_exercise_kcal=_mean_int(
+                [
+                    energy[d].burned.training_kcal + energy[d].burned.activities_kcal
+                    for d in food_days
+                ]
+            ),
+            avg_daily_balance_kcal=_mean_int([energy[d].balance_kcal for d in food_days]),
+            target_daily_balance_kcal=target.target_balance_kcal if target else None,
+            weight_avg_start_kg=_round(start_avg),
+            weight_avg_end_kg=_round(end_avg),
+            weight_change_kg=_round(change),
+            weight_change_per_week_kg=_round(per_week),
+        )
+
+    current = kpis(start, end)
+    previous = kpis(prev_start, prev_end)
+    deltas = engine.period_deltas(current.model_dump(), previous.model_dump())
+    streak = engine.longest_streak((d, infos[d].status) for d in elapsed(start, end))
+    kind = engine.bucket_kind((end - start).days + 1)
+    series: list[out.PeriodSeriesPoint] = []
+    for label in engine.bucket_starts(start, end, kind):
+        bucket_end = label if kind == "day" else label + dt.timedelta(days=6)
+        days = elapsed(max(label, start), min(bucket_end, end))
+        if not days:  # a bucket entirely after today
+            continue
+        food_days = logged(days)
+        series.append(
+            out.PeriodSeriesPoint(
+                start=label,
+                sessions_done=sum(1 for d in days if infos[d].status == "done"),
+                sessions_planned=sum(1 for d in days if infos[d].status != "rest"),
+                volume_kg=round(sum(volume.get(d, 0.0) for d in days), WEIGHT_DECIMALS),
+                training_completion=engine.mean_ratio(
+                    _training_completion(infos[d], today) for d in days
+                ),
+                nutrition_completion=engine.mean_ratio(nutrition.get(d) for d in days),
+                balance_kcal=_mean_int([energy[d].balance_kcal for d in food_days]),
+                weight_avg_kg=_round(averages.get(days[-1])),
+            )
+        )
+    return out.PeriodSummary(
+        from_=start,
+        to=end,
+        days=(end - start).days + 1,
+        previous_from=prev_start,
+        previous_to=prev_end,
+        bucket=kind,
+        current=current,
+        previous=previous,
+        deltas=out.PeriodDeltas(**deltas.values),
+        longest_streak_days=streak.days,
+        series=series,
     )
 
 

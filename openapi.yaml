@@ -1873,9 +1873,15 @@ paths:
       description: |
         One point per finished session containing the exercise: the target at the time of that
         session (snapshot, F15.2), the actual top set, total volume and personal-record markers.
+        The range is either `weeks` ending today (default 12) or, with `from` and `to` (both or
+        neither, D109), those days; `weeks` is then ignored. `400` for only one of the two,
+        `from` after `to` (`invalid_range`) or more than 371 days (`range_too_large`). The
+        response `weeks` is the covered days divided by 7, rounded up.
       x-fitwise-access: owner-or-coach
       parameters:
         - $ref: '#/components/parameters/ChartWeeks'
+        - $ref: '#/components/parameters/FromOptional'
+        - $ref: '#/components/parameters/ToOptional'
       responses:
         '200':
           description: Exercise series.
@@ -1948,6 +1954,39 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /athletes/{athlete_id}/charts/period-summary:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Charts]
+      operationId: getPeriodSummary
+      summary: KPIs of a period compared with the period before it
+      description: |
+        Progress overview (F15.6-F15.10, D109) for `from`..`to` (athlete's time zone, at most 371
+        days) and for the same number of days ending the day before `from`: sessions, completion,
+        volume, personal records, energy and weight figures, their differences (`deltas`, computed
+        on the server), the longest streak and one series point per bucket (day up to 31 days,
+        else Monday-based week). Days after the athlete's today contribute nothing. `400` when one
+        bound is missing, `from` is after `to` (`invalid_range`) or the range is over 371 days
+        (`range_too_large`).
+      x-fitwise-access: owner-or-coach
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Period summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeriodSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /athletes/{athlete_id}/charts/body:
     parameters:
       - $ref: '#/components/parameters/AthleteId'
@@ -1955,10 +1994,15 @@ paths:
       tags: [Charts]
       operationId: getBodyChart
       summary: Weight, 7-day average and body fat
-      description: The 7-day average uses only existing weigh-ins in each window (F14.1).
+      description: |
+        The 7-day average uses only existing weigh-ins in each window (F14.1). Range as for the
+        exercise chart: `weeks` ending today, or `from` and `to` (both or neither, D109; `weeks`
+        ignored; same `400` cases).
       x-fitwise-access: owner-or-coach
       parameters:
         - $ref: '#/components/parameters/ChartWeeks'
+        - $ref: '#/components/parameters/FromOptional'
+        - $ref: '#/components/parameters/ToOptional'
       responses:
         '200':
           description: Body series.
@@ -5259,7 +5303,9 @@ components:
           $ref: '#/components/schemas/ExerciseSummary'
         weeks:
           type: integer
-          enum: [4, 12, 26, 52]
+          minimum: 1
+          maximum: 53
+          description: The requested `weeks`, or the covered days divided by 7 rounded up when `from`/`to` were given (D109).
         points:
           type: array
           items:
@@ -5376,6 +5422,147 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/DatedValue'
+    PeriodKpis:
+      type: object
+      description: |
+        KPIs of one period (D109). Only days up to the athlete's today count. The kcal averages
+        and the balance average only the days with food logged (D77); burned exercise kcal is
+        finished sessions plus extra activities (baseline excluded). Estimates (F13).
+      required: [sessions_planned, sessions_done, sessions_missed, avg_training_completion, avg_nutrition_completion, active_days, volume_kg, personal_records, avg_daily_eaten_kcal, avg_daily_burned_exercise_kcal, avg_daily_balance_kcal, target_daily_balance_kcal, weight_avg_start_kg, weight_avg_end_kg, weight_change_kg, weight_change_per_week_kg]
+      properties:
+        sessions_planned:
+          type: integer
+        sessions_done:
+          type: integer
+        sessions_missed:
+          type: integer
+        avg_training_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        avg_nutrition_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        active_days:
+          type: integer
+        volume_kg:
+          type: number
+        personal_records:
+          type: integer
+        avg_daily_eaten_kcal:
+          type: [integer, 'null']
+        avg_daily_burned_exercise_kcal:
+          type: [integer, 'null']
+        avg_daily_balance_kcal:
+          type: [integer, 'null']
+        target_daily_balance_kcal:
+          type: [integer, 'null']
+        weight_avg_start_kg:
+          type: [number, 'null']
+        weight_avg_end_kg:
+          type: [number, 'null']
+        weight_change_kg:
+          type: [number, 'null']
+        weight_change_per_week_kg:
+          type: [number, 'null']
+    PeriodDeltas:
+      type: object
+      description: Current minus previous for every numeric KPI; null when either side is null. Completion deltas are ratio differences (-1..1).
+      required: [sessions_planned, sessions_done, sessions_missed, avg_training_completion, avg_nutrition_completion, active_days, volume_kg, personal_records, avg_daily_eaten_kcal, avg_daily_burned_exercise_kcal, avg_daily_balance_kcal, target_daily_balance_kcal, weight_avg_start_kg, weight_avg_end_kg, weight_change_kg, weight_change_per_week_kg]
+      properties:
+        sessions_planned:
+          type: [number, 'null']
+        sessions_done:
+          type: [number, 'null']
+        sessions_missed:
+          type: [number, 'null']
+        avg_training_completion:
+          type: [number, 'null']
+        avg_nutrition_completion:
+          type: [number, 'null']
+        active_days:
+          type: [number, 'null']
+        volume_kg:
+          type: [number, 'null']
+        personal_records:
+          type: [number, 'null']
+        avg_daily_eaten_kcal:
+          type: [number, 'null']
+        avg_daily_burned_exercise_kcal:
+          type: [number, 'null']
+        avg_daily_balance_kcal:
+          type: [number, 'null']
+        target_daily_balance_kcal:
+          type: [number, 'null']
+        weight_avg_start_kg:
+          type: [number, 'null']
+        weight_avg_end_kg:
+          type: [number, 'null']
+        weight_change_kg:
+          type: [number, 'null']
+        weight_change_per_week_kg:
+          type: [number, 'null']
+    PeriodSeriesPoint:
+      type: object
+      required: [start, sessions_done, sessions_planned, volume_kg, training_completion, nutrition_completion, balance_kcal, weight_avg_kg]
+      properties:
+        start:
+          $ref: '#/components/schemas/LocalDate'
+        sessions_done:
+          type: integer
+        sessions_planned:
+          type: integer
+        volume_kg:
+          type: number
+        training_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        nutrition_completion:
+          oneOf:
+            - $ref: '#/components/schemas/Ratio'
+            - type: 'null'
+        balance_kcal:
+          type: [integer, 'null']
+          description: Average of the days with food logged in the bucket.
+        weight_avg_kg:
+          type: [number, 'null']
+          description: Last 7-day average on or before the bucket's last elapsed day.
+    PeriodSummary:
+      type: object
+      required: [from, to, days, previous_from, previous_to, bucket, estimated, current, previous, deltas, longest_streak_days, series]
+      properties:
+        from:
+          $ref: '#/components/schemas/LocalDate'
+        to:
+          $ref: '#/components/schemas/LocalDate'
+        days:
+          type: integer
+        previous_from:
+          $ref: '#/components/schemas/LocalDate'
+        previous_to:
+          $ref: '#/components/schemas/LocalDate'
+        bucket:
+          type: string
+          enum: [day, week]
+          description: '`day` up to 31 days, else a Monday-based `week` (a bucket is labelled by its Monday, which may be before `from`).'
+        estimated:
+          type: boolean
+          const: true
+        current:
+          $ref: '#/components/schemas/PeriodKpis'
+        previous:
+          $ref: '#/components/schemas/PeriodKpis'
+        deltas:
+          $ref: '#/components/schemas/PeriodDeltas'
+        longest_streak_days:
+          type: integer
+          description: Longest run of consecutive planned training days done in the current period; rest days do not break it.
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeriodSeriesPoint'
     BodyChartPoint:
       type: object
       required: [date, weight_kg, weight_avg_7d_kg, body_fat_pct]
@@ -5395,7 +5582,9 @@ components:
       properties:
         weeks:
           type: integer
-          enum: [4, 12, 26, 52]
+          minimum: 1
+          maximum: 53
+          description: The requested `weeks`, or the covered days divided by 7 rounded up when `from`/`to` were given (D109).
         estimated:
           type: boolean
           const: true

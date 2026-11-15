@@ -357,14 +357,196 @@ def test_totals_ignore_skipped_sets_and_are_zero_without_history(
     assert body == {"sessions_done": 2, "personal_records": 1, "first_session_date": "2026-10-01"}
 
 
+# ───────────── period summary (D109) ─────────────
+
+FRI, MON, THU = dt.date(2026, 10, 16), dt.date(2026, 10, 19), dt.date(2026, 10, 22)
+PERIOD = {"from": "2026-10-16", "to": "2026-10-22"}  # Fri..Thu (today); previous 9..15 Oct
+
+
+def _two_periods(api: Api, seed: Seeded) -> None:
+    with Session(api.app.state.engine) as db:
+        # previous period: Fri 9 + Mon 12 done (records), Thu 15 missed
+        add_session(db, seed, dt.date(2026, 10, 9), sets=[(8, 40, 8, 40)] * 2)
+        add_session(db, seed, dt.date(2026, 10, 12), sets=[(8, 45, 8, 45)] * 2)
+        add_weight(db, seed, dt.date(2026, 10, 15), 79.0)
+        # current period: Fri 16 done (record), Mon 19 missed, Thu 22 (today) in progress
+        add_session(db, seed, FRI, sets=[(8, 50, 8, 50)] * 3)
+        add_session(db, seed, THU, status="in_progress", completion=0.5)
+        add_meals(db, seed, FRI, ("eaten", "eaten", "eaten"))
+        add_activity(db, seed, FRI)
+        add_weight(db, seed, THU, 78.0)
+        db.commit()
+
+
+def test_period_summary_current_previous_deltas_streak_and_series(
+    seeded: tuple[Api, Seeded],
+) -> None:
+    api, seed = seeded
+    _two_periods(api, seed)
+    body = ok(api, "period-summary", "PeriodSummary", **PERIOD)
+    assert (body["from"], body["to"], body["days"]) == ("2026-10-16", "2026-10-22", 7)
+    assert (body["previous_from"], body["previous_to"]) == ("2026-10-09", "2026-10-15")
+    assert body["bucket"] == "day" and body["estimated"] is True
+    cur, prev, deltas = body["current"], body["previous"], body["deltas"]
+    assert (cur["sessions_planned"], cur["sessions_done"], cur["sessions_missed"]) == (3, 1, 1)
+    assert (prev["sessions_planned"], prev["sessions_done"], prev["sessions_missed"]) == (3, 2, 1)
+    assert cur["active_days"] == 1 and prev["active_days"] == 2
+    assert cur["avg_training_completion"] == pytest.approx((0.9 + 0 + 0.5) / 3, abs=1e-4)
+    assert prev["avg_training_completion"] == pytest.approx((0.9 + 0.9 + 0) / 3, abs=1e-4)
+    assert cur["avg_nutrition_completion"] == pytest.approx(1 / 7, abs=1e-4)  # only Friday eaten
+    assert prev["avg_nutrition_completion"] == 0.0
+    assert (cur["volume_kg"], prev["volume_kg"]) == (3 * 8 * 50, 2 * 8 * 40 + 2 * 8 * 45)
+    assert (cur["personal_records"], prev["personal_records"]) == (1, 2)
+    assert body["longest_streak_days"] == 1  # Fri done, Mon missed, Thu in progress
+    # Energy: only Friday has food logged (D77); it matches the day view.
+    day = api.client.get(f"/api/v1/athletes/me/days/{FRI.isoformat()}").json()["energy"]
+    assert cur["avg_daily_eaten_kcal"] == day["eaten"]["kcal"] > 0
+    assert cur["avg_daily_balance_kcal"] == day["balance_kcal"]
+    assert cur["avg_daily_burned_exercise_kcal"] == 300 + 200  # session kcal + extra activity
+    assert cur["target_daily_balance_kcal"] == -300
+    assert prev["avg_daily_eaten_kcal"] is None and prev["avg_daily_balance_kcal"] is None
+    # Weight: 7-day averages on the first and on the last day (Thu 22).
+    assert (cur["weight_avg_start_kg"], cur["weight_avg_end_kg"]) == (79.0, 78.0)
+    assert cur["weight_change_kg"] == -1.0
+    assert cur["weight_change_per_week_kg"] == pytest.approx(-1.0 / 6 * 7, abs=0.01)
+    assert prev["weight_avg_start_kg"] is None and prev["weight_change_kg"] is None
+    assert prev["weight_avg_end_kg"] == 79.0
+    # Deltas are computed on the server; null when a side is null.
+    assert deltas["sessions_done"] == -1 and deltas["volume_kg"] == -160
+    assert deltas["personal_records"] == -1
+    assert deltas["avg_training_completion"] == pytest.approx(0.4667 - 0.6, abs=1e-3)
+    assert deltas["avg_daily_balance_kcal"] is None and deltas["weight_change_kg"] is None
+    # Series: one point per day, nothing after today.
+    series = body["series"]
+    assert [p["start"] for p in series] == [(FRI + D(days=n)).isoformat() for n in range(7)]
+    assert series[0]["sessions_done"] == 1 and series[0]["volume_kg"] == 1200
+    assert series[0]["balance_kcal"] == day["balance_kcal"] and series[1]["balance_kcal"] is None
+    assert series[0]["training_completion"] == 0.9 and series[1]["training_completion"] is None
+    assert series[3]["training_completion"] == 0.0  # Mon 19: missed counts as 0
+    assert series[3]["sessions_planned"] == 1 and series[6]["sessions_planned"] == 1
+    assert series[0]["weight_avg_kg"] == 79.0 and series[6]["weight_avg_kg"] == 78.0
+
+
+def test_period_summary_weeks_bucket_and_days_after_today_count_nothing(
+    seeded: tuple[Api, Seeded],
+) -> None:
+    api, seed = seeded
+    _two_periods(api, seed)
+    # 60 days ending 7 days after today: weeks, the last Monday-based bucket is today's week.
+    body = ok(api, "period-summary", "PeriodSummary", **{"from": "2026-09-03", "to": "2026-10-29"})
+    assert body["bucket"] == "week" and body["days"] == 57
+    starts = [p["start"] for p in body["series"]]
+    assert starts[0] == "2026-08-31" and starts[-1] == "2026-10-19"  # Mondays; 26 Oct not shown
+    assert all(dt.date.fromisoformat(s).weekday() == 0 for s in starts)
+    last = body["series"][-1]  # Mon 19 .. Thu 22 only: planned Mon, Thu; Fri 23 is the future
+    assert last["sessions_planned"] == 2 and last["sessions_done"] == 0
+    assert sum(p["volume_kg"] for p in body["series"]) == body["current"]["volume_kg"] == 2560
+    future = ok(
+        api, "period-summary", "PeriodSummary", **{"from": "2026-10-25", "to": "2026-10-31"}
+    )
+    assert future["series"] == [] and future["longest_streak_days"] == 0
+    assert future["current"]["sessions_planned"] == 0
+    assert future["current"]["avg_training_completion"] is None
+    assert future["current"]["weight_avg_end_kg"] is None
+
+
+def test_period_summary_empty_state(api: Api) -> None:
+    assert api.signup().status_code == 201
+    body = ok(api, "period-summary", "PeriodSummary", **PERIOD)
+    assert body["current"]["sessions_planned"] == 0 and body["current"]["volume_kg"] == 0
+    assert body["current"]["avg_training_completion"] is None
+    assert body["deltas"]["volume_kg"] == 0 and body["deltas"]["avg_daily_balance_kcal"] is None
+    assert len(body["series"]) == 7 and body["longest_streak_days"] == 0
+
+
+def test_period_summary_range_rules(api: Api) -> None:
+    assert api.signup().status_code == 201
+    assert problem(
+        get(api, "period-summary", **{"from": "2026-10-23", "to": "2026-10-22"}),
+        400,
+        "invalid_range",
+    )
+    assert (
+        get(api, "period-summary", **{"from": "2025-10-17", "to": "2026-10-22"}).status_code == 200
+    )
+    r = get(api, "period-summary", **{"from": "2025-10-16", "to": "2026-10-22"})  # 372 days
+    assert problem(r, 400, "range_too_large")
+    assert get(api, "period-summary", **{"from": "2026-10-16"}).status_code == 400
+    assert get(api, "period-summary", to="2026-10-16").status_code == 400
+    assert get(api, "period-summary").status_code == 400
+
+
+def test_period_summary_year_uses_a_fixed_number_of_queries(seeded: tuple[Api, Seeded]) -> None:
+    api, seed = seeded
+    with Session(api.app.state.engine) as db:
+        for n in range(0, 200, 3):
+            day = THU - D(days=n)
+            if day.weekday() in (0, 3, 4):
+                add_session(db, seed, day, sets=[(8, 50, 8, 50)])
+            add_weight(db, seed, day, 80.0)
+        db.commit()
+    counts: list[int] = []
+    from sqlalchemy import event
+
+    engine = api.app.state.engine
+    for days in (7, 371):
+        seen: list[str] = []
+
+        def count(*args: Any, _seen: list[str] = seen) -> None:
+            _seen.append(args[2])
+
+        event.listen(engine, "before_cursor_execute", count)
+        try:
+            start = (THU - D(days=days - 1)).isoformat()
+            assert (
+                get(api, "period-summary", **{"from": start, "to": "2026-10-22"}).status_code == 200
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", count)
+        counts.append(len(seen))
+    assert counts[1] <= counts[0] + 2, counts  # no query per day
+
+
+def test_exercise_and_body_charts_accept_from_and_to(seeded: tuple[Api, Seeded]) -> None:
+    api, seed = seeded
+    _history(api, seed)
+    with Session(api.app.state.engine) as db:
+        add_weight(db, seed, dt.date(2026, 10, 6), 81.0)
+        add_weight(db, seed, dt.date(2026, 10, 9), 80.0)
+        add_weight(db, seed, dt.date(2026, 10, 20), 79.0)
+        db.commit()
+    path = f"exercise/{seed.strength_id}"
+    one = ok(api, path, "ExerciseChart", **{"from": "2026-10-01", "to": "2026-10-08"}, weeks=4)
+    assert [p["date"] for p in one["points"]] == ["2026-10-01", "2026-10-08"]  # weeks ignored
+    assert [p["is_pr"] for p in one["points"]] == [True, False]  # still vs. earlier history
+    assert one["weeks"] == 2  # 8 days, rounded up
+    # `weeks` keeps working when there is no range, and is not validated when there is one
+    assert len(ok(api, path, "ExerciseChart", weeks=4)["points"]) == 3
+    assert get(api, path, **{"from": "2026-10-01", "to": "2026-10-08"}, weeks=5).status_code == 200
+    body = ok(api, "body", "BodyChart", **{"from": "2026-10-07", "to": "2026-10-19"})
+    assert [p["date"] for p in body["points"]] == ["2026-10-09"]  # 6 Oct is out, 20 Oct is out
+    assert body["points"][0]["weight_avg_7d_kg"] == 80.5  # the 6th still feeds the window
+    for route in (path, "body"):
+        assert problem(get(api, route, **{"from": "2026-10-01"}), 400, "bad_request")
+        assert problem(get(api, route, to="2026-10-01"), 400, "bad_request")
+        assert problem(
+            get(api, route, **{"from": "2026-10-09", "to": "2026-10-01"}), 400, "invalid_range"
+        )
+        r = get(api, route, **{"from": "2025-10-16", "to": "2026-10-22"})
+        assert problem(r, 400, "range_too_large")
+
+
 # ───────────── authorization ─────────────
 
 PATHS = [
     "session/{sid}",
     "exercise/{ex}",
+    "exercise/{ex}?from=2026-10-01&to=2026-10-22",
     "adherence?from=2026-10-19&to=2026-10-25",
     "weekly-summary",
+    "period-summary?from=2026-10-16&to=2026-10-22",
     "body",
+    "body?from=2026-10-01&to=2026-10-22",
     "totals",
 ]
 
@@ -401,3 +583,20 @@ def test_owner_ok_stranger_coach_and_anonymous_refused(api: Api, path: str) -> N
     anonymous = api.new_client().get(f"/api/v1/athletes/{seed.uid}/charts/{path}")
     assert anonymous.status_code == 401
     assert api.client.get(f"/api/v1/athletes/not-a-uuid/charts/{path}").status_code == 400
+
+
+def test_period_summary_today_follows_the_athlete_time_zone(seeded: tuple[Api, Seeded]) -> None:
+    """QA #243: the clock is 22 Oct 09:00 UTC, which is still 21 Oct in Honolulu, so the 22nd
+    is a future day there and contributes nothing."""
+    api, _ = seeded
+    assert get(api, "period-summary", **PERIOD).json()["series"][-1]["start"] == "2026-10-22"
+    with Session(api.app.state.engine) as db:
+        from app.models import User
+
+        user = db.query(User).one()
+        user.timezone = "Pacific/Honolulu"
+        db.commit()
+    body = ok(api, "period-summary", "PeriodSummary", **PERIOD)
+    assert [p["start"] for p in body["series"]][-1] == "2026-10-21"
+    assert len(body["series"]) == 6
+    assert body["current"]["sessions_planned"] == 2  # Fri 16 and Mon 19; Thu 22 is not yet

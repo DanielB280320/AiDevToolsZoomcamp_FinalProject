@@ -1,36 +1,64 @@
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router";
 
 import type { UnitSystem } from "../../lib/units";
 import { AdherenceView } from "./AdherenceView";
 import { BodyChartView } from "./BodyChartView";
 import { ExerciseChartView } from "./ExerciseChartView";
-import { WeeklySummaryView } from "./WeeklySummaryView";
+import { paramsFromPeriod, periodFromParams, type Period } from "./period";
+import { PeriodOverview } from "./PeriodOverview";
+import { PeriodSelector } from "./PeriodSelector";
+import { PeriodTimelines } from "./PeriodTimelines";
 
-/** The four progress sections (spec F15): weekly summary, adherence heat map, exercise and body charts. */
+const SECTIONS = ["overview", "timelines", "adherence", "exercise", "body"] as const;
+
+/**
+ * The Progress page body (spec F15.6-F15.10, D109): a description, one period selector kept in the
+ * URL, and sections that all follow it. The linked coach's client view uses the same component
+ * with the descriptions worded for the coach (`audience`).
+ */
 export function ProgressView({
   athleteId,
   units,
   today,
+  audience = "athlete",
 }: {
   athleteId: string;
   units: UnitSystem;
   today: string;
+  audience?: "athlete" | "coach";
 }) {
   const { t } = useTranslation();
-  const sections = [
-    { key: "weekly", body: <WeeklySummaryView athleteId={athleteId} units={units} today={today} /> },
-    { key: "adherence", body: <AdherenceView athleteId={athleteId} today={today} /> },
-    { key: "exercise", body: <ExerciseChartView athleteId={athleteId} units={units} /> },
-    { key: "body", body: <BodyChartView athleteId={athleteId} units={units} /> },
-  ] as const;
+  const [params, setParams] = useSearchParams();
+  const period = periodFromParams(params, today);
+  const { from, to } = period;
+  const help = audience === "coach" ? "charts.helpCoach" : "charts.help";
+
+  const choose = (next: Period) => setParams(paramsFromPeriod(next), { replace: true });
+
+  const bodies = {
+    overview: <PeriodOverview athleteId={athleteId} units={units} from={from} to={to} />,
+    timelines: <PeriodTimelines athleteId={athleteId} units={units} from={from} to={to} />,
+    adherence: <AdherenceView athleteId={athleteId} from={from} to={to} />,
+    exercise: <ExerciseChartView athleteId={athleteId} units={units} from={from} to={to} />,
+    body: <BodyChartView athleteId={athleteId} units={units} from={from} to={to} />,
+  } as const;
+
   return (
     <>
-      {sections.map(({ key, body }) => (
+      <p className="mt-3 max-w-[38rem]" data-testid="progress-description">
+        {t(audience === "coach" ? "charts.descriptionCoach" : "charts.description")}
+      </p>
+      <PeriodSelector period={period} today={today} onChange={choose} />
+      {SECTIONS.map((key) => (
         <section key={key} aria-labelledby={`progress-${key}`} className="mt-8 min-w-0 border-t-4 border-iron pt-3">
           <h2 id={`progress-${key}`} className="font-display text-step-2 font-bold">
             {t(`charts.sections.${key}`)}
           </h2>
-          <div className="mt-3 min-w-0">{body}</div>
+          <p className="mt-1 max-w-[38rem] text-slate" data-testid={`help-${key}`}>
+            {t(`${help}.${key}`)}
+          </p>
+          <div className="mt-3 min-w-0">{bodies[key]}</div>
         </section>
       ))}
     </>

@@ -871,13 +871,9 @@
       "title": "You don't have access to this data.",
       "detail": "Charts are only available to the athlete who owns them."
     },
-    "range": {
-      "label": "Time range",
-      "weeks_one": "{{count}} week",
-      "weeks_other": "{{count}} weeks"
-    },
     "sections": {
-      "weekly": "This week",
+      "overview": "Overview",
+      "timelines": "Timelines",
       "adherence": "Adherence",
       "exercise": "Exercise over time",
       "body": "Body"
@@ -910,7 +906,7 @@
     "exercise": {
       "search": "Search an exercise",
       "pick": "Type at least two letters and choose an exercise to see its trend.",
-      "empty": "No finished sessions with this exercise in this range.",
+      "empty": "No finished sessions with this exercise in this period.",
       "noWeights": "This exercise has no weights to chart.",
       "weightLabel": "Target and top-set weight for {{name}} in {{unit}}",
       "target": "Target",
@@ -921,18 +917,14 @@
       "volumeName": "Volume"
     },
     "adherence": {
-      "prev": "Previous month",
-      "next": "Next month",
-      "prevGlyph": "‹",
-      "nextGlyph": "›",
       "metric": "Metric",
       "training": "Training",
       "nutrition": "Nutrition",
-      "heatLabel": "Daily completion this month",
+      "heatLabel": "Daily completion in the selected period",
       "legend": "Dashed days have no value (rest day, not yet due, or no plan). A missed session counts as 0%.",
       "weekly": "Weekly completion",
       "weeklyLabel": "Weekly completion in percent",
-      "empty": "No data for this month yet.",
+      "empty": "No data for this period yet.",
       "cellValue": "{{date}}: {{value}}%",
       "cellNeutral": "{{date}}: no value ({{status}})",
       "trainingStatus": {
@@ -943,31 +935,116 @@
         "missed": "missed"
       }
     },
-    "weekly": {
-      "prev": "Previous week",
-      "next": "Next week",
-      "range": "{{from}} to {{to}}",
-      "sessions": "Sessions",
-      "sessionsValue": "{{done}} of {{planned}}",
-      "missed_one": "{{count}} missed",
-      "missed_other": "{{count}} missed",
-      "completion": "Average completion",
-      "completionTrend": "Daily training completion",
-      "balance": "Avg daily balance",
-      "targetBalance": "Target balance {{value}}",
-      "balanceTrend": "Daily energy balance",
-      "weight": "Weight (7-day average)",
-      "weightRange": "{{start}} to {{end}} {{unit}}",
-      "weightTrend": "7-day average weight in {{unit}}",
-      "noTrend": "No trend yet."
-    },
     "body": {
       "weightLabel": "Weight and 7-day average in {{unit}}",
       "weight": "Weigh-in",
       "avg": "7-day average",
       "fat": "Body fat (%)",
       "fatLabel": "Body fat percent",
-      "empty": "No weigh-ins in this range yet."
+      "empty": "No weigh-ins in this period yet."
+    },
+    "description": "See how your training, nutrition, energy balance and body weight moved over the period you pick, compared with the period just before it. Log your workouts, meals and weigh-ins so the figures fill in, choose a period below, and use the comparison to see whether you are on track.",
+    "descriptionCoach": "See how your client's training, nutrition, energy balance and body weight moved over the period you pick, compared with the period just before it. The figures fill in as your client logs workouts, meals and weigh-ins. Choose a period below and use the comparison to see whether your client is on track.",
+    "help": {
+      "overview": "Sessions done and how fully you followed your training and meal plans, with the change since the previous period.",
+      "timelines": "How volume, completion and energy balance moved over time inside the period.",
+      "adherence": "Each day's training and nutrition completion in the period, and the weekly averages.",
+      "exercise": "Pick an exercise to see its target and top-set weight and its volume over the period.",
+      "body": "Your weigh-ins and 7-day average weight over the period, and body fat when you log it."
+    },
+    "helpCoach": {
+      "overview": "Sessions done and how fully your client followed their training and meal plans, with the change since the previous period.",
+      "timelines": "How your client's volume, completion and energy balance moved over time inside the period.",
+      "adherence": "Each day's training and nutrition completion in the period, and the weekly averages.",
+      "exercise": "Pick an exercise to see your client's target and top-set weight and volume over the period.",
+      "body": "Your client's weigh-ins and 7-day average weight over the period, and body fat when logged."
+    },
+    "period": {
+      "label": "Period",
+      "preset": {
+        "7d": "7 days",
+        "30d": "30 days",
+        "90d": "90 days",
+        "6m": "6 months",
+        "1y": "1 year",
+        "custom": "Custom"
+      },
+      "from": "From",
+      "to": "To",
+      "prev": "Previous period",
+      "next": "Next period",
+      "prevGlyph": "‹",
+      "nextGlyph": "›",
+      "previousDays_one": "previous {{count}} day",
+      "previousDays_other": "previous {{count}} days",
+      "error": {
+        "missing": "Enter both dates.",
+        "order": "From must not be after To.",
+        "future": "To cannot be after today.",
+        "tooLong": "The range can cover at most 371 days."
+      },
+      "current_one": "Showing {{from}} to {{to}} ({{count}} day)",
+      "current_other": "Showing {{from}} to {{to}} ({{count}} days)"
+    },
+    "delta": {
+      "up": "Up",
+      "down": "Down",
+      "same": "No change",
+      "icon": {
+        "up": "▲",
+        "down": "▼",
+        "same": "■"
+      },
+      "vs": "{{value}} vs {{period}}",
+      "noChange": "No change vs {{period}}",
+      "pts": "{{value}} pts",
+      "none": "No data for the previous period"
+    },
+    "overview": {
+      "sessions": "Sessions done",
+      "sessionsCaption": "{{done}} of {{planned}} planned",
+      "trainingCompletion": "Training completion",
+      "nutritionCompletion": "Nutrition completion",
+      "completionCaption": "average over the period",
+      "noData": "No data in this period.",
+      "volume": "Training volume",
+      "activeDays": "Active days",
+      "activeDaysHint": "days with a finished workout",
+      "streak": "Longest streak",
+      "streakValue_one": "{{count}} day",
+      "streakValue_other": "{{count}} days",
+      "streakHint": "planned training days done in a row; rest days do not break it",
+      "records": "Personal records",
+      "balance": "Avg daily balance",
+      "targetBalance": "Target balance {{value}}",
+      "eaten": "Avg eaten per day",
+      "burned": "Avg burned by exercise per day",
+      "energyHint": "on days with food logged",
+      "weight": "Weight change",
+      "weightRange": "{{start}} to {{end}} {{unit}}",
+      "weightRate": "{{value}} {{unit}} per week"
+    },
+    "timelines": {
+      "bucketDay": "day",
+      "bucketWeek": "week",
+      "weekOf": "Week of {{date}}",
+      "period": "Period",
+      "volume": "Training volume and sessions",
+      "volumeLabel": "Training volume in {{unit}} and sessions done per {{bucket}}",
+      "volumeName": "Volume ({{unit}})",
+      "sessionsName": "Sessions done",
+      "volumeEmpty": "No finished workouts in this period.",
+      "completion": "Training and nutrition completion",
+      "completionLabel": "Training and nutrition completion in percent per {{bucket}}",
+      "trainingName": "Training",
+      "nutritionName": "Nutrition",
+      "completionEmpty": "No completion figures in this period yet.",
+      "balance": "Energy balance against target",
+      "balanceLabel": "Average daily energy balance in kcal per {{bucket}} against the target",
+      "balanceName": "Avg daily balance",
+      "targetName": "Target balance",
+      "balanceEmpty": "No days with food logged in this period.",
+      "tableCaption": "Data for the chart: {{title}}"
     }
   },
   "plan": {

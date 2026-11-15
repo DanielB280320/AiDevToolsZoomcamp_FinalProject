@@ -13,6 +13,10 @@ export type AdherenceChart = Schemas["AdherenceChart"];
 export type AdherenceDay = Schemas["AdherenceDay"];
 export type AdherenceWeek = Schemas["AdherenceWeek"];
 export type WeeklySummary = Schemas["WeeklySummary"];
+export type PeriodSummary = Schemas["PeriodSummary"];
+export type PeriodKpis = Schemas["PeriodKpis"];
+export type PeriodDeltas = Schemas["PeriodDeltas"];
+export type PeriodSeriesPoint = Schemas["PeriodSeriesPoint"];
 export type BodyChart = Schemas["BodyChart"];
 export type BodyChartPoint = Schemas["BodyChartPoint"];
 export type ProgressTotals = Schemas["ProgressTotals"];
@@ -21,7 +25,6 @@ export type DatedValueSeries = WeeklySummary["sparklines"]["weight_avg_kg"];
 /** The only range lengths the chart endpoints accept (D76(4)). */
 export const CHART_WEEKS = [4, 12, 26, 52] as const;
 export type ChartWeeks = (typeof CHART_WEEKS)[number];
-export const DEFAULT_CHART_WEEKS: ChartWeeks = 12;
 
 export const chartsKey = (athleteId: string, ...rest: unknown[]) => ["charts", athleteId, ...rest] as const;
 
@@ -40,14 +43,14 @@ export function useSessionChart(athleteId: string, sessionId: string) {
   });
 }
 
-/** One exercise over the last `weeks` weeks (`getExerciseChart`). */
-export function useExerciseChart(athleteId: string, exerciseId: string | null, weeks: ChartWeeks) {
+/** One exercise over `from`..`to` (`getExerciseChart`, D109). */
+export function useExerciseChart(athleteId: string, exerciseId: string | null, from: string, to: string) {
   return useQuery({
-    queryKey: chartsKey(athleteId, "exercise", exerciseId, weeks),
+    queryKey: chartsKey(athleteId, "exercise", exerciseId, from, to),
     enabled: exerciseId !== null,
     queryFn: async ({ signal }) => {
       const { data, error, response } = await api.GET("/athletes/{athlete_id}/charts/exercise/{exercise_id}", {
-        params: { path: { athlete_id: athleteId, exercise_id: exerciseId ?? "" }, query: { weeks } },
+        params: { path: { athlete_id: athleteId, exercise_id: exerciseId ?? "" }, query: { from, to } },
         signal,
       });
       if (data) return data;
@@ -78,6 +81,36 @@ export function useWeeklySummary(athleteId: string, weekStart: string | null) {
     queryFn: async ({ signal }) => {
       const { data, error, response } = await api.GET("/athletes/{athlete_id}/charts/weekly-summary", {
         params: { path: { athlete_id: athleteId }, query: weekStart ? { week_start: weekStart } : {} },
+        signal,
+      });
+      if (data) return data;
+      throw apiError(response, error);
+    },
+  });
+}
+
+/** KPIs of `from`..`to` against the period before it, deltas, streak and bucketed series (`getPeriodSummary`, D109). */
+export function usePeriodSummary(athleteId: string, from: string, to: string) {
+  return useQuery({
+    queryKey: chartsKey(athleteId, "period-summary", from, to),
+    queryFn: async ({ signal }) => {
+      const { data, error, response } = await api.GET("/athletes/{athlete_id}/charts/period-summary", {
+        params: { path: { athlete_id: athleteId }, query: { from, to } },
+        signal,
+      });
+      if (data) return data;
+      throw apiError(response, error);
+    },
+  });
+}
+
+/** Weight, 7-day average and body fat over `from`..`to` (`getBodyChart`, D109). */
+export function useBodyChartRange(athleteId: string, from: string, to: string) {
+  return useQuery({
+    queryKey: chartsKey(athleteId, "body", from, to),
+    queryFn: async ({ signal }) => {
+      const { data, error, response } = await api.GET("/athletes/{athlete_id}/charts/body", {
+        params: { path: { athlete_id: athleteId }, query: { from, to } },
         signal,
       });
       if (data) return data;

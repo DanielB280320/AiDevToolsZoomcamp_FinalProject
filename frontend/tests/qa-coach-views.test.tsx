@@ -82,6 +82,17 @@ describe("QA #48: coach-context views", () => {
     },
   );
 
+  it("Progress is worded for the coach, with the period selector and the client's id in every request (F15.6, F15.7)", async () => {
+    const seen = recordRequests();
+    renderApp(`/coach/clients/${ANA}/progress?period=7d`);
+    expect(await screen.findByTestId("progress-description")).toHaveTextContent(/^See how your client's training, nutrition/);
+    expect(screen.getByTestId("progress-description")).toHaveTextContent(/as your client logs workouts, meals and weigh-ins/);
+    expect(screen.getByTestId("help-overview")).toHaveTextContent("how fully your client followed their training");
+    expect(screen.getByLabelText("7 days")).toBeChecked();
+    await waitFor(() => expect(seen.some((r) => r === `GET /api/v1/athletes/${ANA}/charts/period-summary`)).toBe(true));
+    expect(seen.filter((r) => r.includes("/athletes/me"))).toEqual([]);
+  });
+
   it("Month is worded for the coach and its day detail has no link to the athlete's own day (D103)", async () => {
     const day = new Date().toISOString().slice(0, 10);
     renderApp(`/coach/clients/${ANA}/month?month=${day.slice(0, 7)}&day=${day}`);

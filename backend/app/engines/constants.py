@@ -333,3 +333,14 @@ IMPORT_COLUMNS = ("date", "exercise", "set", "reps", "weight_kg", "duration_seco
 # Earliest day an import may reach back to.
 IMPORT_MIN_DATE_YEAR = 1970
 # --- end F10.5 ---------------------------------------------------------------------------------
+
+# --- F15.6-F15.10 Progress period overview (decision D109) -------------------------------------
+# A period of at most this many days is bucketed per day, a longer one per Monday-based week.
+PERIOD_DAILY_BUCKET_MAX_DAYS = 31
+# Longest period (days, both bounds included) the chart endpoints accept (adherence, F15).
+CHART_RANGE_MAX_DAYS = 371
+# Decimals kept for a difference of two KPI values (hides float noise, keeps ratios exact).
+PERIOD_DELTA_DECIMALS = 4
+# Weight change per week = change over the days between the two averaged dates, times this.
+DAYS_PER_WEEK = 7
+# --- end F15.6-F15.10 --------------------------------------------------------------------------
