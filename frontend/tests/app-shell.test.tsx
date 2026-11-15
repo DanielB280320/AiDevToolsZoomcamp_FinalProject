@@ -17,6 +17,17 @@ describe("app shell", () => {
     expect(screen.getByRole("link", { name: en.app.homeLink })).toHaveAttribute("href", "/");
   });
 
+  it.each(["/", "/no-such-page"])("shows a decorative logo mark before the wordmark on %s", async (path) => {
+    renderApp(path);
+
+    const home = await screen.findByRole("link", { name: en.app.homeLink });
+    const mark = home.querySelector("svg");
+    expect(mark).not.toBeNull();
+    expect(mark).toHaveAttribute("aria-hidden", "true");
+    expect(home.firstElementChild).toBe(mark);
+    expect(home).toHaveTextContent(en.app.name);
+  });
+
   it.each(["/", "/no-such-page"])("shows the spec §6.3 disclaimer in the footer on %s", async (path) => {
     renderApp(path);
 
