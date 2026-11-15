@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 
 COMPLETION_DECIMALS = 4  # matches Numeric(5, 4) in the database
 
@@ -41,7 +42,7 @@ def _fmt(value: float) -> str:
 
 
 def completion(sets: Sequence[PlannedSetResult]) -> Completion:
-    """Completion of the given planned sets, rounded to 4 decimals and capped at 1."""
+    """Completion of the given planned sets, rounded half up to 4 decimals and capped at 1."""
     counted = [s for s in sets if s.target is not None and s.target > 0]
     for s in counted:
         if s.actual is not None and (math.isnan(s.actual) or s.actual < 0):
@@ -51,9 +52,19 @@ def completion(sets: Sequence[PlannedSetResult]) -> Completion:
             None, 0.0, 0.0, "No planned working set has a target, so completion is undefined."
         )
     # Per-set share of its own target, capped at 1: extra reps never make up for another set.
-    achieved = math.fsum(min((s.actual or 0.0) / (s.target or 1.0), 1.0) for s in counted)
+    # Exact fractions, so a tie at the fifth decimal rounds half up, as the D110 migration's
+    # SQL `round(numeric, 4)` does; float `round()` would round such a tie to even.
+    exact = sum(
+        (
+            Fraction(min(s.actual or 0.0, s.target or 0.0)) / Fraction(s.target or 1.0)
+            for s in counted
+        ),
+        Fraction(0),
+    )
+    scale = 10**COMPLETION_DECIMALS
+    ratio = min(1.0, math.floor(exact / len(counted) * scale + Fraction(1, 2)) / scale)
+    achieved = float(exact)
     target = float(len(counted))
-    ratio = min(1.0, round(achieved / target, COMPLETION_DECIMALS))
     return Completion(
         ratio,
         achieved,

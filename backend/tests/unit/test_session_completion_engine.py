@@ -20,6 +20,8 @@ R = PlannedSetResult
         ([R(600, 300)], 0.5),  # timed: seconds
         ([R(8, 8), R(None, 5), R(0, 5)], 1.0),  # sets without a positive target are left out
         ([R(3, 1)], 0.3333),  # rounded to 4 decimals
+        ([R(10, 10)] + [R(10, None)] * 31, 0.0313),  # 1/32 = 0.03125: a tie rounds half up
+        ([R(3, 1), R(3, 2)] + [R(10, None)] * 30, 0.0313),  # 1/3 + 2/3 is exactly one set
         # D110: sets weigh the same whatever their unit; one 600 s set never outweighs the reps
         ([R(6, 6)] + [R(6, None)] * 4 + [R(10, None)] * 17 + [R(600, 600)], 0.087),  # 2 of 23
         ([R(6, 3), R(600, 600)], 0.75),  # (0.5 + 1) / 2, not 603 / 606

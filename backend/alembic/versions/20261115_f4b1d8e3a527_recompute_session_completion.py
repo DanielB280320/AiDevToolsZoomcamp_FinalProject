@@ -7,6 +7,9 @@ min(actual ÷ target, 1). Every stored `session.completion` is recalculated the 
 planned sets against the plan with an actual of 0, sets without a positive target left out.
 Sessions without a stored completion (nothing logged, imported) are not touched.
 
+Rounding is half up to 4 decimals, like the engine; the inner `round(..., 10)` removes the
+representation error of non-terminating shares (1/3 + 2/3) before the tie is decided.
+
 The previous release reads the column as a plain ratio, so it keeps working on the new values; the
 downgrade recalculates them with the previous formula.
 
@@ -51,7 +54,7 @@ def _recompute(aggregate: str) -> None:
     op.execute(
         f"""
         UPDATE session
-        SET completion = least(1, round(c.ratio, 4))
+        SET completion = least(1, round(round(c.ratio, 10), 4))
         FROM (
             SELECT session_id, {aggregate} AS ratio
             FROM ({_PLANNED_SETS}) planned_sets
