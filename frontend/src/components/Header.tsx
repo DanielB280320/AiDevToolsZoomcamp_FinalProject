@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router";
 import { useCachedMe, useSignOut } from "../api/session";
 import { Bell } from "../features/notifications/Bell";
 import { paths } from "../paths";
+import { LogoMark } from "./Logo";
 
 function SignOutButton() {
   const { t } = useTranslation();
@@ -44,8 +45,9 @@ export function Header() {
         <Link
           to={me ? paths.today : paths.home}
           aria-label={t("app.homeLink")}
-          className="font-display text-step-3 font-bold leading-none tracking-tight text-chalk no-underline"
+          className="flex items-center gap-2 font-display text-step-3 font-bold leading-none tracking-tight text-chalk no-underline"
         >
+          <LogoMark />
           {t("app.name")}
         </Link>
         {/* Primary navigation (Today, Plan, Progress) lands here with those pages. */}
