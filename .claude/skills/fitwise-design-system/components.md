@@ -21,18 +21,18 @@ Every shipped visual pattern, where it lives and its exact classes. Paths are re
 | Pattern | Where | Classes / notes |
 |---|---|---|
 | Shell | `components/AppShell.tsx` | Skip link, `Header`, `<main>` with `mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 sm:py-12`, `Footer` (disclaimer). Every route renders inside it. |
-| Header | `components/Header.tsx` | `border-b-4 border-plate bg-iron text-chalk`; wordmark `font-display text-step-3 font-bold leading-none tracking-tight`. On iron, an outline button is `border-2 border-chalk/60 text-chalk hover:border-chalk`, and an error message is `text-plate` (alert red fails contrast on iron). |
+| Header | `components/Header.tsx` | `border-b-4 border-plate bg-iron text-chalk` (unchanged by D111); wordmark `font-display text-step-3 font-semibold leading-none tracking-tight`. On iron, an outline button is `border-2 border-chalk/60 text-chalk hover:border-chalk`, and an error message is `text-plate` (alert red fails contrast on iron). |
 | Auth pages | `components/AuthLayout.tsx` | Sign-in / sign-up frame. |
 | Page column | `pages/*.tsx` | `<article className="max-w-[40rem]">`; add `min-w-0` when it holds charts; `max-w-[38rem]` for a lone message (not found, load error). |
-| Sticky action bar | `features/plan/SaveBar.tsx` | `sticky bottom-0 mt-6 border-t-4 border-iron bg-chalk py-3`, buttons in `flex flex-wrap gap-3`, status lines under them. |
+| Sticky action bar | `features/plan/SaveBar.tsx` | `sticky bottom-0 mt-6 border-t border-line bg-page py-3`, buttons in `flex flex-wrap gap-3`, status lines under them. |
 
 ## Headings
 
 | Level | Classes |
 |---|---|
-| Page `h1` | `font-display text-step-4 font-bold` (hero: add `text-balance sm:text-step-5`; compact page: `text-step-3`) |
-| Section `h2` | `font-display text-step-2 font-bold` (with an icon: `flex items-center gap-2 ...`) |
-| Sub-section `h3` | `font-display text-step-1 font-bold`, usually `mt-4` or `mt-6` |
+| Page `h1` | `font-display text-step-4 font-semibold` (hero: add `text-balance sm:text-step-5`; compact page: `text-step-3`) |
+| Section `h2` | `font-display text-step-1 font-semibold` (with an icon: `flex items-center gap-2 ...`); the first thing inside a `CARD` |
+| Sub-section `h3` | `font-display text-step-1 font-semibold`, usually `mt-4` or `mt-6` |
 | Row title | `font-semibold` (plain Barlow) |
 | KPI label | `text-step--1 font-semibold uppercase tracking-wide text-slate` |
 
@@ -44,16 +44,16 @@ Constants are exported from `features/plan/fields.tsx`; use them rather than ret
 
 | Pattern | Where | Classes |
 |---|---|---|
-| Primary | `PRIMARY` | `min-h-12 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark disabled:opacity-60` |
-| Outline (secondary) | `BUTTON` | `min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line disabled:opacity-60` |
-| Icon / square | `ICON_BUTTON` | `min-h-12 min-w-12 rounded-md border-2 border-iron/60 px-2 font-semibold hover:bg-line disabled:opacity-40` |
+| Primary | `PRIMARY` | `min-h-12 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark disabled:opacity-60` |
+| Outline (secondary) | `BUTTON` | `min-h-12 rounded-control border border-edge px-4 font-semibold hover:border-slate hover:bg-line disabled:opacity-60` |
+| Icon / square | `ICON_BUTTON` | `min-h-12 min-w-12 rounded-control border border-edge px-2 font-semibold hover:border-slate hover:bg-line disabled:opacity-40` |
 | Form submit | `SubmitButton` in `components/form/fields.tsx` | Primary at `px-6 py-3`, `w-full sm:w-auto`; while pending it stays focusable: `aria-disabled` with `aria-disabled:cursor-progress aria-disabled:opacity-75` |
 | Destructive | `features/plan/VersionHistory.tsx` | `${BUTTON} border-alert text-alert`, behind a confirmation |
-| Text button | inline | `min-h-12 rounded-md px-4 font-semibold text-spruce underline underline-offset-4` |
+| Text button | inline | `min-h-12 rounded-control px-4 font-semibold text-spruce underline underline-offset-4` |
 | Link | inline | `font-semibold text-spruce underline underline-offset-4`; standalone: add `inline-flex min-h-11 items-center` |
 | Link on iron | `Header` | `font-semibold text-chalk underline-offset-4 hover:underline` |
 
-Rows of buttons: `flex flex-wrap gap-3`. Toggle buttons carry `aria-pressed`; a pressed "done" check is a spruce fill with a `✓` (see `features/workout/ExerciseCard.tsx`).
+Press feedback is global: every `button` transitions colour and border in 150 ms and scales to 0.98 while pressed (not for `disabled` / `aria-disabled`), so buttons need no extra classes. Rows of buttons: `flex flex-wrap gap-3`. Toggle buttons carry `aria-pressed`; a pressed "done" check is a spruce fill with a `✓` (see `features/workout/ExerciseCard.tsx`).
 
 ## Form fields
 
@@ -67,20 +67,20 @@ Use the components; don't hand-roll a label + input.
 
 Anatomy, top to bottom: label `block font-semibold` → hint `mt-1 text-step--1 text-slate` → control → error `mt-1.5 text-step--1 font-semibold text-alert`. Hint and error ids go in `aria-describedby`; an invalid control has `aria-invalid`.
 
-- Control: `mt-1.5 block min-h-12 w-full rounded-md border-2 border-iron/35 bg-white px-3 py-2 text-step-0 text-iron hover:border-iron/60 aria-[invalid=true]:border-alert`
-- Narrow inline number input (in a row of controls): `min-h-12 w-28 rounded-md border-2 border-iron px-2` with a `text-step--1 font-semibold` label above.
-- Segmented choice (`ChoiceField`): native radios hidden with `sr-only` inside labels in `grid grid-cols-2 gap-2`; each label `min-h-14 rounded-md border-2 bg-white px-3 py-2`, selected `has-[:checked]:border-iron has-[:checked]:bg-iron has-[:checked]:text-chalk`; option title `font-display text-step-1 font-semibold leading-tight`, detail `text-step--1 opacity-80`.
+- Control: `mt-1.5 block min-h-12 w-full rounded-control border border-edge bg-card px-3 py-2 text-step-0 text-iron hover:border-slate aria-[invalid=true]:border-alert` (focus: the global spruce outline)
+- Narrow inline number input (in a row of controls): `min-h-12 w-28 rounded-control border border-edge hover:border-slate px-2` with a `text-step--1 font-semibold` label above.
+- Segmented choice (`ChoiceField`): native radios hidden with `sr-only` inside labels in `grid grid-cols-2 gap-2`; each label `min-h-14 rounded-control border bg-card px-3 py-2` with the control border, selected `has-[:checked]:border-iron has-[:checked]:bg-iron has-[:checked]:text-chalk`; option title `font-display text-step-1 font-semibold leading-tight`, detail `text-step--1 opacity-80`.
 - Checkbox: `size-6 accent-spruce`, label beside it in `flex items-start gap-3`.
-- Form-level error (`FormAlert`): `role="alert"`, `border-l-4 border-alert bg-white px-4 py-3 font-semibold text-alert`, focused when shown.
+- Form-level error (`FormAlert`): `role="alert"`, `border-l-[3px] border-alert bg-card px-4 py-3 font-semibold text-alert`, focused when shown.
 
 ## Tabs
 
 | Pattern | Where | Classes |
 |---|---|---|
-| Main tab strip | `features/calendar/CalendarNav.tsx` (same shape: `features/coach/ClientNav.tsx`, `CoachNav.tsx`) | `<nav aria-label>` → `ul` `no-scrollbar flex overflow-x-auto border-b-4 border-iron` → `li` `flex-1 shrink-0` → `NavLink` `flex min-h-12 items-center justify-center whitespace-nowrap px-3 font-display text-step-1 font-bold no-underline`; active `bg-iron text-chalk`, rest `text-iron hover:bg-line`. `useActiveTabInView` (`lib/`) keeps the active tab visible on a phone. |
+| Main tab strip | `features/calendar/CalendarNav.tsx` (same shape: `features/coach/ClientNav.tsx`, `CoachNav.tsx`, the Plan editor's tablist) | `<nav aria-label>` → `ul` with `TAB_STRIP` (`flex border-b border-line`, plus `no-scrollbar overflow-x-auto` where it scrolls) → `li` `flex-1 shrink-0` → `NavLink` with `tabClass(isActive, extra)` from `components/tabs.ts`: `press flex min-h-12 items-center justify-center border-b-[3px] font-display text-step-1 font-semibold no-underline`; active `border-spruce text-spruce`, rest `border-transparent text-iron hover:bg-line/50 hover:text-spruce`. Padding comes through `extra` (`px-3`). `useActiveTabInView` (`lib/`) keeps the active tab visible on a phone. |
 | Period / range switch | `features/charts/PeriodSelector.tsx`, `features/calendar/RangeControls.tsx` | Preset buttons plus previous/next; reuse for any date-range control. |
 
-The active state is a fill (iron), not a colour change of the text alone, and `NavLink` sets `aria-current`.
+The active tab is spruce text with a 3 px spruce underline (not colour alone: the underline is the second cue), and `NavLink` sets `aria-current` (a button tablist sets `aria-selected`).
 
 ## Badges and tags
 
@@ -88,35 +88,41 @@ All badges: `inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-step--
 
 | Pattern | Where | Fill |
 |---|---|---|
-| `StatusBadge` | `features/calendar/StatusBadge.tsx` | done `✓` `bg-spruce text-chalk` · partial `◐` `bg-plate text-iron` · missed `✕` `bg-alert text-chalk` · rest `–` `bg-line text-iron` · planned `○` `border-2 border-iron bg-chalk text-iron` |
+| `StatusBadge` | `features/calendar/StatusBadge.tsx` | done `✓` `bg-spruce text-chalk` · partial `◐` `bg-plate text-iron` · missed `✕` `bg-alert text-chalk` · rest `–` `bg-line text-iron` · planned `○` `border border-iron bg-card text-iron` |
 | `PrBadge` | `components/PrBadge.tsx` | `★` `bg-plate text-iron` |
 | Inline tag (e.g. "estimated") | `features/charts/PeriodOverview.tsx` | `rounded-sm bg-plate px-1.5 text-iron normal-case` |
-| Unread count | `features/notifications/Bell.tsx` | The only round badge: `min-w-5 rounded-full bg-plate px-1 text-center text-step--1 font-bold leading-5 text-iron`. |
+| Unread count | `features/notifications/Bell.tsx` | The only round badge: `min-w-5 rounded-full bg-plate px-1 text-center text-step--1 font-semibold leading-5 text-iron`. |
 
 A new status reuses one of the five fills with its own glyph; don't introduce a sixth colour for it.
 
 ## Sections, cards and callouts
 
+All from `components/card.tsx` unless noted.
+
 | Pattern | Classes | Used for |
 |---|---|---|
-| Section opener | `mt-8 border-t-4 border-iron pt-3` (`mt-6` when tighter; `scroll-mt-4` if linked to) | Each titled block on a page |
-| Emphasised section | `border-t-4 border-spruce pt-3` | The block holding the view's main action or result (finish summary) |
-| Card | `border-2 border-iron/30 p-3` (`border-iron` when selected/open) | A set, a day, an item you act on |
-| List row | `border-b border-line py-3`, or `divide-y divide-line` on the list | Suggestions, inbox, clients |
-| Note callout | `border-l-4 border-iron pl-3` (prose: `max-w-[52ch]`) | Coach note, explanation, reason |
-| Highlight callout | `border-l-4 border-plate pl-3`, or `border-l-4 border-plate bg-white p-4` when it must stand out | A prompt asking for a decision (recalculation, banner) |
-| Error callout | `border-l-4 border-alert pl-3` + `role="alert"`, text `text-alert` or `font-semibold` | Inline failure |
-| Quiet aside | `border-l-4 border-line pl-4` | Disclaimer, secondary info |
+| `CARD` | `min-w-0 rounded-card border border-line bg-card p-4`; add `mt-6`/`mt-8` between cards (`scroll-mt-4` if linked to) | Each titled section on a page (Today, Week days, Month, Body, Plan, Progress, Coach, Workout, Notifications, Account) and each standalone chart block |
+| `CARD_FLUSH` | `CARD` without padding | A card that sets its own padding (the Month grid at `p-2`, a notification row) |
+| `CARD_LINK` | `CARD_FLUSH card-link` | A card or row that opens something (notification, client row on a phone): border darkens on hover, fill on press. Never on a card that does nothing |
+| `CARD` emphasised | `CARD` plus `border-spruce!` | The block holding the view's main result or action (finish summary, finish button) |
+| `TILE` | `min-w-0 rounded-card bg-page p-3` | A KPI figure inside a section card (`Kpi`, `Tile`): a soft well, no border |
+| `ITEM` | `rounded-control border border-line p-3` | A repeated item inside a section card (a training exercise or meal inside a plan-day card, the duplicate-day panel); the plan day itself and a plan version are `CARD`s |
+| List row | `border-b border-line py-3`, or `divide-y divide-line` on the list | Suggestions, checklist, meal rows |
+| Note callout | `border-l-[3px] border-iron pl-3` (prose: `max-w-[52ch]`) | Coach note, explanation, reason |
+| Highlight callout | `border-l-[3px] border-plate pl-3`, or `border-l-[3px] border-plate bg-card p-4` when it must stand out | A prompt asking for a decision (recalculation, banner) |
+| Error callout | `border-l-[3px] border-alert pl-3` + `role="alert"`, text `text-alert` or `font-semibold` | Inline failure |
+| Quiet aside | `border-l-[3px] border-line pl-4` | Disclaimer, secondary info |
+| `Collapse` | `<Collapse id open>` renders `div#id[hidden]` with the `expand-in` animation | Expanding content (exercise sets, plan day, progression help); content stays in the DOM |
 
-No filled panels: a block is separated by a rule and space. `bg-white` appears only on controls, `FormAlert` and the highlight callout.
+Rule: **no card inside a card**. Decide per screen which is the card: a titled section is a `CARD` and what it holds is a `TILE`, an `ITEM`, a row or a chart; a figure or chart that sits outside any section card is a `CARD`. Callouts are never cards, and `bg-card` on a callout is only for one that must stand off the page.
 
-A suggestion row (`features/suggestions/SuggestionCard.tsx`) is the model for "item + reason + actions": title `font-semibold`, the change `font-display text-step-1 font-bold`, the engine's reason `text-step--1 text-slate`, then `flex flex-wrap gap-3` with one `PRIMARY` (accept) and `BUTTON`s (edit, reject).
+A suggestion row (`features/suggestions/SuggestionCard.tsx`) is the model for "item + reason + actions": title `font-semibold`, the change `font-display text-step-1 font-semibold`, the engine's reason `text-step--1 text-slate`, then `flex flex-wrap gap-3` with one `PRIMARY` (accept) and `BUTTON`s (edit, reject).
 
 ## Loading, error and empty states
 
 | Pattern | Where | Notes |
 |---|---|---|
-| `QueryState` | `features/calendar/QueryState.tsx` | Loading: `<p role="status" className="text-step-1 text-slate">`. Error: `role="alert"` `max-w-[38rem] border-l-4 border-alert pl-4`, message `text-step-1 font-semibold`, retry = primary button `mt-4`. |
+| `QueryState` | `features/calendar/QueryState.tsx` | Loading: `<p role="status" className="text-step-1 text-slate">`. Error: `role="alert"` `max-w-[38rem] border-l-[3px] border-alert pl-4`, message `text-step-1 font-semibold`, retry = primary button `mt-4`. |
 | `ChartState` | `features/charts/ChartState.tsx` | Same for chart blocks, plus the empty state. |
 | Empty / no data | inline | A sentence in `text-slate` saying what will appear and what to do; a figure with no data shows `—`, never `0`. |
 | Pending button | | Label changes ("Saving…"), `aria-disabled` or `disabled`; no spinner. |
@@ -127,18 +133,18 @@ No skeletons or spinners anywhere; keep it that way.
 
 | Pattern | Where | Notes |
 |---|---|---|
-| KPI tile | `features/charts/PeriodOverview.tsx` (also `features/calendar/MonthKpis.tsx`, `ProgressKpis.tsx`, `EnergySummary.tsx`) | `<section className="min-w-0 border-t-4 border-iron bg-chalk pt-2">`: KPI label, big value in `font-display font-bold`, hint `mt-1 text-step--1 text-slate`, then a `DeltaLine`. Grid: `grid min-w-0 grid-cols-1 gap-4 min-[420px]:grid-cols-2` (rings: `min-[420px]:grid-cols-3`). |
-| `ProgressRing` | `features/charts/ProgressRing.tsx` | 80 px, `stroke-line` track, `stroke-spruce` value, centre `font-display text-step-1 font-bold`; `role="progressbar"`; `null` draws an empty ring with `—`. Sits in `flex min-w-0 items-start gap-3` beside its label and caption. |
+| KPI tile | `features/charts/PeriodOverview.tsx` (also `features/calendar/MonthKpis.tsx`, `ProgressKpis.tsx`, `EnergySummary.tsx`) | `<section className={TILE}>`: KPI label, big value in `font-display font-semibold`, hint `mt-1 text-step--1 text-slate`, then a `DeltaLine`. Grid: `grid min-w-0 grid-cols-1 gap-4 min-[420px]:grid-cols-2` (rings: `min-[420px]:grid-cols-3`). |
+| `ProgressRing` | `features/charts/ProgressRing.tsx` | 80 px, `stroke-line` track, `stroke-spruce` value that fills from empty in 400 ms (state flipped on the next frame, CSS `transition-[stroke-dashoffset]`), centre `font-display text-step-1 font-semibold`; `role="progressbar"`; `null` draws an empty ring with `—`. Sits in `flex min-w-0 items-start gap-3` beside its label and caption. |
 | `DeltaLine` | `features/charts/DeltaLine.tsx` | Arrow glyph + screen-reader direction + signed value. `tone="higherIsBetter"`: up `text-spruce`, down `text-alert`; `tone="neutral"` (weight, energy): always `text-slate`. No data: slate sentence. |
 
-| Progress bar | `features/calendar/EnergySummary.tsx`, `TodayView.tsx` | Track `h-2 overflow-hidden rounded-full bg-line`, fill in spruce, with the figures in text beside it. |
-| Floating popover | `features/calendar/MonthView.tsx` | `absolute z-20 w-48 rounded-md border-2 border-iron bg-chalk p-2 text-step--1 shadow-lg`, shown on hover and on keyboard focus. The only shadow in the app. |
+| Progress bar | `features/calendar/EnergySummary.tsx`, `TodayView.tsx` | Track `h-2 overflow-hidden rounded-full bg-line`, fill in spruce with `transition-[width]`, with the figures in text beside it. |
+| Floating popover | `features/calendar/MonthView.tsx` | `absolute z-20 w-48 rounded-control border border-line bg-card p-2 text-step--1 shadow-lg`, shown on hover and on keyboard focus. The only shadow in the app. |
 
 Figures that change in place or line up in columns use `tabular-nums` (rest timer, set values). Energy figures carry the "estimated" tag or wording.
 
 ## Charts
 
-Recharts, always inside `ChartBox` (`features/charts/ChartBox.tsx`: `role="img"` + `aria-label`, fixed height 220, `min-w-0` so it shrinks at 360 px), with an accessible data table or summary alongside (see `PeriodTimelines.tsx`).
+Recharts, always inside `ChartBox` (`features/charts/ChartBox.tsx`: `role="img"` + `aria-label`, fixed height 220, `min-w-0` so it shrinks at 360 px), with an accessible data table or summary alongside (see `PeriodTimelines.tsx`), and the whole block inside a `CARD` (usually its section's card).
 
 Colours only from `CHART_COLORS` in `features/charts/chartData.ts` (hex copies of the theme tokens; keep both in step):
 
@@ -151,7 +157,7 @@ Colours only from `CHART_COLORS` in `features/charts/chartData.ts` (hex copies o
 | `alert` | alert | A series whose rise is unwelcome (body fat) |
 | `line` | line | `CartesianGrid` (`vertical={false}`) |
 
-Every series has `isAnimationActive={false}` and a translated `name`; two lines on one chart differ by dash or dots as well as colour; a `<Legend />` is shown when there is more than one series; axis ticks use the default text colour and `minTickGap`. Units (kg/lb, %, kcal) appear on the axis or in the series name.
+Every series spreads `{...anim}` from `useChartAnimation()` (`lib/motion.ts`: 400 ms ease-out, off under `prefers-reduced-motion`) and has a translated `name`; two lines on one chart differ by dash or dots as well as colour; a `<Legend />` is shown when there is more than one series; axis ticks use the default text colour and `minTickGap`. Units (kg/lb, %, kcal) appear on the axis or in the series name.
 
 ## Icons and logo
 

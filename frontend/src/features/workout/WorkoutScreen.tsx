@@ -25,6 +25,7 @@ import { canLogAsPlanned } from "./values";
 import { FinishSummary, percent } from "./FinishSummary";
 import { RestTimer } from "./RestTimer";
 import { useRestTimer } from "./useRestTimer";
+import { CARD } from "../../components/card";
 
 /** Rest used for an exercise added on the spot (spec F10 default). */
 const DEFAULT_REST_SECONDS = 90;
@@ -118,7 +119,7 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
 
   return (
     <div>
-      <h1 className="font-display text-step-4 font-bold leading-tight">{data.training_day_name ?? t("workout.imported")}</h1>
+      <h1 className="font-display text-step-4 font-semibold leading-tight">{data.training_day_name ?? t("workout.imported")}</h1>
       <p className="mt-1 text-slate">
         {data.status === "done" ? t("workout.statusDone") : t("workout.progress", { value: percent(data.completion) })}
       </p>
@@ -131,7 +132,7 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
       )}
 
       {locked && (
-        <p role="status" className="mt-3 border-l-4 border-plate pl-3">
+        <p role="status" className="mt-3 border-l-[3px] border-plate pl-3">
           {t("workout.locked")}
         </p>
       )}
@@ -141,38 +142,38 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
       ) : (
         <>
           {data.exercises.some((e) => e.pending_suggestion_id !== null) && (
-            <p role="status" className="mt-3 border-l-4 border-plate pl-3">
+            <p role="status" className="mt-3 border-l-[3px] border-plate pl-3">
               {t("workout.suggestionPending")}
             </p>
           )}
           {logSet.isError && (
-            <p role="alert" className="mt-3 border-l-4 border-alert pl-3 text-alert">
+            <p role="alert" className="mt-3 border-l-[3px] border-alert pl-3 text-alert">
               {t(`workout.errors.${errorKey(logSet.error)}`)}
             </p>
           )}
           {completeAll.isError && (
-            <p role="alert" className="mt-3 border-l-4 border-alert pl-3 text-alert">
+            <p role="alert" className="mt-3 border-l-[3px] border-alert pl-3 text-alert">
               {t(`workout.errors.${errorKey(completeAll.error)}`)}
             </p>
           )}
           {!locked && remaining > 0 && (
             <div className="mt-4">
               {confirming ? (
-                <div role="group" aria-label={t("workout.completeAll.button")} className="border-l-4 border-plate pl-3">
+                <div role="group" aria-label={t("workout.completeAll.button")} className="border-l-[3px] border-plate pl-3">
                   <p>{t("workout.completeAll.confirm", { count: remaining })}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={onCompleteAll}
                       aria-disabled={completeAll.isPending || undefined}
-                      className="min-h-12 rounded-md bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark aria-disabled:opacity-75"
+                      className="min-h-12 rounded-control bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark aria-disabled:opacity-75"
                     >
                       {completeAll.isPending ? t("workout.completeAll.working") : t("workout.completeAll.yes")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirming(false)}
-                      className="min-h-12 rounded-md px-4 font-semibold text-spruce underline underline-offset-4"
+                      className="min-h-12 rounded-control px-4 font-semibold text-spruce underline underline-offset-4"
                     >
                       {t("workout.completeAll.no")}
                     </button>
@@ -182,7 +183,7 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
                 <button
                   type="button"
                   onClick={() => setConfirming(true)}
-                  className="min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
+                  className="min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line"
                 >
                   {t("workout.completeAll.button")}
                 </button>
@@ -207,9 +208,9 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
           {!locked && <ExerciseAdder onPick={(exercise) => setAdded([...added, exercise])} />}
 
           {!locked && (
-            <div className="mt-8 border-t-4 border-spruce pt-4">
+            <div className={`mt-8 ${CARD} border-spruce!`}>
               {finish.isError && (
-                <p role="alert" className="mb-3 border-l-4 border-alert pl-3 text-alert">
+                <p role="alert" className="mb-3 border-l-[3px] border-alert pl-3 text-alert">
                   {t(`workout.errors.${errorKey(finish.error)}`)}
                 </p>
               )}
@@ -217,7 +218,7 @@ export function WorkoutScreen({ me, sessionId, clock = systemClock }: { me: Me; 
                 type="button"
                 onClick={onFinish}
                 aria-disabled={finish.isPending || undefined}
-                className="min-h-14 w-full rounded-md bg-iron px-5 font-display text-step-1 font-bold text-chalk hover:bg-spruce-dark aria-disabled:opacity-75 sm:w-auto"
+                className="min-h-14 w-full rounded-control bg-iron px-5 font-display text-step-1 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark aria-disabled:opacity-75 sm:w-auto"
               >
                 {finish.isPending
                   ? t("workout.finishing")

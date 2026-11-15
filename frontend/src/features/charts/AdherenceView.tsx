@@ -7,6 +7,7 @@ import { DAY_FORMAT, formatDay } from "../../lib/calendarDates";
 import { ChartBox } from "./ChartBox";
 import { CHART_COLORS, percent } from "./chartData";
 import { ChartState } from "./ChartState";
+import { useChartAnimation } from "../../lib/motion";
 
 /** Above this many days the heat map uses smaller cells, so a year stays a short grid. */
 const LONG_PERIOD_DAYS = 93;
@@ -38,7 +39,7 @@ function Cell({ day, metric, locale }: { day: AdherenceDay; metric: Metric; loca
       title={label}
       style={style}
       className={`flex aspect-square min-w-0 items-center justify-center rounded-sm text-step--1 font-semibold ${
-        pct === null ? "border border-dashed border-line bg-chalk text-slate" : pct >= 60 ? "text-chalk" : "border border-alert/40 text-iron"
+        pct === null ? "border border-dashed border-line bg-page text-slate" : pct >= 60 ? "text-chalk" : "border border-alert/40 text-iron"
       }`}
     >
       <span aria-hidden="true">{day.date.slice(8)}</span>
@@ -48,6 +49,7 @@ function Cell({ day, metric, locale }: { day: AdherenceDay; metric: Metric; loca
 
 function AdherenceBody({ data, metric }: { data: AdherenceChart; metric: Metric }) {
   const { t, i18n } = useTranslation();
+  const anim = useChartAnimation();
   // The grid starts on a Monday; pad so the first API day sits in the right column.
   const lead = Array.from({ length: data.days[0] ? (new Date(`${data.days[0].date}T00:00:00Z`).getUTCDay() + 6) % 7 : 0 });
   const weeks = data.weeks.map((w) => ({
@@ -69,14 +71,14 @@ function AdherenceBody({ data, metric }: { data: AdherenceChart; metric: Metric 
         ))}
       </ol>
       <p className="mt-2 text-step--1 text-slate">{t("charts.adherence.legend")}</p>
-      <h3 className="mt-6 font-display text-step-1 font-bold">{t("charts.adherence.weekly")}</h3>
+      <h3 className="mt-6 font-display text-step-1 font-semibold">{t("charts.adherence.weekly")}</h3>
       <ChartBox label={t("charts.adherence.weeklyLabel")} height={180}>
         <BarChart data={weeks} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
           <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
           <XAxis dataKey="week" tickFormatter={(d: string) => formatDay(d, i18n.language, DAY_FORMAT.dayMonth)} minTickGap={16} />
           <YAxis domain={[0, 100]} unit="%" width={48} />
           <Legend />
-          <Bar dataKey="value" name={t(`charts.adherence.${metric}`)} fill={CHART_COLORS.actual} isAnimationActive={false} />
+          <Bar dataKey="value" name={t(`charts.adherence.${metric}`)} fill={CHART_COLORS.actual} {...anim} />
         </BarChart>
       </ChartBox>
     </div>
@@ -95,7 +97,7 @@ export function AdherenceView({ athleteId, from, to }: { athleteId: string; from
         <legend className="sr-only">{t("charts.adherence.metric")}</legend>
         <div className="flex gap-2">
           {METRICS.map((m) => (
-            <label key={m} className={`flex min-h-11 cursor-pointer items-center rounded-md border-2 border-iron px-3 font-semibold ${metric === m ? "bg-iron text-chalk" : "hover:bg-line"}`}>
+            <label key={m} className={`flex min-h-11 cursor-pointer items-center rounded-control border border-edge hover:border-slate px-3 font-semibold ${metric === m ? "bg-iron text-chalk" : "hover:bg-line"}`}>
               <input type="radio" name="adherence-metric" value={m} checked={metric === m} onChange={() => setMetric(m)} className="sr-only" />
               {t(`charts.adherence.${m}`)}
             </label>

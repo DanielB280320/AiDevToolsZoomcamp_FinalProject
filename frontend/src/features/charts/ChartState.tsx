@@ -9,7 +9,7 @@ import { QueryState } from "../calendar/QueryState";
 export function ForbiddenState() {
   const { t } = useTranslation();
   return (
-    <div role="alert" className="max-w-[38rem] border-l-4 border-alert pl-4">
+    <div role="alert" className="max-w-[38rem] border-l-[3px] border-alert pl-4">
       <p className="font-semibold">{t("charts.forbidden.title")}</p>
       <p className="text-slate">{t("charts.forbidden.detail")}</p>
     </div>
@@ -17,7 +17,7 @@ export function ForbiddenState() {
 }
 
 export function EmptyState({ children }: { children: ReactNode }) {
-  return <p className="border-l-4 border-line pl-3 text-slate">{children}</p>;
+  return <p className="border-l-[3px] border-line pl-3 text-slate">{children}</p>;
 }
 
 /**

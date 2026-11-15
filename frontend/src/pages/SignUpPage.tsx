@@ -192,7 +192,7 @@ export function SignUpPage() {
           error={e.timezone}
         />
 
-        <div className="border-l-4 border-iron bg-white px-4 py-4">
+        <div className="border-l-[3px] border-iron bg-card px-4 py-4">
           <p id={DISCLAIMER_TEXT_ID} className="max-w-[60ch] text-step--1">
             {t("footer.disclaimer")}
           </p>

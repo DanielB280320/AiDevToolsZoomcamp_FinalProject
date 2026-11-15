@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAthleteProfile, useAthleteTargets } from "../../api/athlete";
 import { formatLength, type UnitSystem } from "../../lib/units";
 import { QueryState } from "../calendar/QueryState";
+import { CARD } from "../../components/card";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -20,8 +21,8 @@ export function ClientProfile({ athleteId, units }: { athleteId: string; units: 
   const targets = useAthleteTargets(athleteId);
   return (
     <>
-      <section aria-labelledby="client-profile-heading" className="mt-2">
-        <h2 id="client-profile-heading" className="font-display text-step-2 font-bold">
+      <section aria-labelledby="client-profile-heading" className={`mt-2 ${CARD}`}>
+        <h2 id="client-profile-heading" className="font-display text-step-1 font-semibold">
           {t("coach.client.profile.title")}
         </h2>
         {!profile.data ? (
@@ -42,8 +43,8 @@ export function ClientProfile({ athleteId, units }: { athleteId: string; units: 
           </dl>
         )}
       </section>
-      <section aria-labelledby="client-targets-heading" className="mt-8 border-t-4 border-iron pt-3">
-        <h2 id="client-targets-heading" className="font-display text-step-2 font-bold">
+      <section aria-labelledby="client-targets-heading" className={`mt-8 ${CARD}`}>
+        <h2 id="client-targets-heading" className="font-display text-step-1 font-semibold">
           {t("onboarding.result.targets")}
         </h2>
         {!targets.data ? (

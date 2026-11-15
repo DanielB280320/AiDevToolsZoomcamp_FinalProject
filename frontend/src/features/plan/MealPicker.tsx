@@ -6,6 +6,7 @@ import { useFoodSearch, type MealSlot } from "../../api/meals";
 import { type Meal, useCreateMeal, useMealSearch } from "../../api/plan";
 import { CustomFoodForm } from "../meals/AddFood";
 import { BUTTON, PRIMARY, SelectInput, TextInput } from "./fields";
+import { CARD } from "../../components/card";
 
 export const SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
 
@@ -38,7 +39,7 @@ function CreateMealForm({ slot, onCreated }: { slot: MealSlot; onCreated: (meal:
   return (
     <form
       aria-label={t("plan.meals.create.title")}
-      className="mt-3 border-l-4 border-iron pl-3"
+      className="mt-3 border-l-[3px] border-iron pl-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (!valid) return;
@@ -48,7 +49,7 @@ function CreateMealForm({ slot, onCreated }: { slot: MealSlot; onCreated: (meal:
         );
       }}
     >
-      <h5 className="font-display text-step-1 font-bold">{t("plan.meals.create.title")}</h5>
+      <h5 className="font-display text-step-1 font-semibold">{t("plan.meals.create.title")}</h5>
       <TextInput id={`${uid}-name`} label={t("plan.meals.create.name")} value={name} maxLength={120} onChange={setName} />
       <fieldset className="mt-2">
         <legend className="font-semibold">{t("plan.meals.create.slots")}</legend>
@@ -132,7 +133,7 @@ export function MealPicker({
   const search = useMealSearch(useDeferredValue(text), slot);
 
   return (
-    <section aria-label={t("plan.meals.picker.title")} className="mt-3 border-2 border-iron/30 p-3">
+    <section aria-label={t("plan.meals.picker.title")} className={`mt-3 ${CARD}`}>
       {askSlot && (
         <SelectInput id={`${uid}-slot`} label={t("plan.meals.slot")} value={slot} onChange={(v) => setSlot(v as MealSlot)} options={SLOTS.map((s) => ({ value: s, label: t(`plan.slot.${s}`) }))} />
       )}

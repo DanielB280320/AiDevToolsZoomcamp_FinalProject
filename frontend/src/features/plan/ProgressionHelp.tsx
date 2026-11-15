@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ChevronDownIcon, LightbulbIcon } from "../../components/icons";
+import { CARD, Collapse } from "../../components/card";
 
 const TOPICS = ["range", "increase", "hold", "deload", "effort"] as const;
 
@@ -12,11 +13,11 @@ export function ProgressionHelp() {
   return (
     <section
       aria-labelledby="progression-help-title"
-      className="mt-3 border-2 border-iron/30 p-3"
+      className={`mt-3 ${CARD}`}
     >
       <h3
         id="progression-help-title"
-        className="font-display text-step-1 font-bold"
+        className="font-display text-step-1 font-semibold"
       >
         <button
           type="button"
@@ -35,7 +36,7 @@ export function ProgressionHelp() {
       <p className="text-step--1 font-semibold" data-testid="progression-disclaimer">
         {t("plan.progression.disclaimer")}
       </p>
-      <div id="progression-help-content" hidden={!open}>
+      <Collapse id="progression-help-content" open={open}>
         <p className="text-step--1 text-slate">{t("plan.progression.lead")}</p>
         <ul className="mt-2 flex list-disc flex-col gap-2 pl-5 text-step--1">
           {TOPICS.map(
@@ -44,7 +45,7 @@ export function ProgressionHelp() {
             ),
           )}
         </ul>
-      </div>
+      </Collapse>
     </section>
   );
 }

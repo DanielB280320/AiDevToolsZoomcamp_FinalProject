@@ -7,6 +7,8 @@ import { weightUnit, type UnitSystem } from "../../lib/units";
 import { ChartBox } from "./ChartBox";
 import { CHART_COLORS, displayWeight, percent, setBars, setMeasure, STATUS_MARKER } from "./chartData";
 import { ChartState } from "./ChartState";
+import { CARD } from "../../components/card";
+import { useChartAnimation } from "../../lib/motion";
 
 const STATUS_COLOR = {
   met: "text-spruce",
@@ -19,6 +21,7 @@ const STATUS_COLOR = {
 /** The target vs. actual bars of one exercise and its set list. */
 function SetsChart({ entry, units }: { entry: SessionChartExercise; units: UnitSystem }) {
   const { t } = useTranslation();
+  const anim = useChartAnimation();
   const measure = setMeasure(entry.sets);
   const bars = setBars(entry.sets, measure);
   const unit = weightUnit(units);
@@ -31,8 +34,8 @@ function SetsChart({ entry, units }: { entry: SessionChartExercise; units: UnitS
           <XAxis dataKey="set_no" tickFormatter={(n: number) => t("charts.session.setShort", { n })} />
           <YAxis allowDecimals={false} />
           <Legend />
-          <Bar dataKey="target" name={t("charts.session.target")} fill={CHART_COLORS.target} isAnimationActive={false} />
-          <Bar dataKey="actual" name={t("charts.session.actual")} fill={CHART_COLORS.actual} isAnimationActive={false} />
+          <Bar dataKey="target" name={t("charts.session.target")} fill={CHART_COLORS.target} {...anim} />
+          <Bar dataKey="actual" name={t("charts.session.actual")} fill={CHART_COLORS.actual} {...anim} />
         </BarChart>
       </ChartBox>
       <ol className="mt-2">
@@ -47,7 +50,7 @@ function SetsChart({ entry, units }: { entry: SessionChartExercise; units: UnitS
               data-status={s.status}
               className="flex flex-wrap items-baseline gap-x-3 border-b border-line py-1.5"
             >
-              <span aria-hidden="true" className={`w-5 text-center font-bold ${STATUS_COLOR[s.status]}`}>
+              <span aria-hidden="true" className={`w-5 text-center font-semibold ${STATUS_COLOR[s.status]}`}>
                 {STATUS_MARKER[s.status]}
               </span>
               <span className="font-semibold">{t("charts.session.set", { n: s.set_no })}</span>
@@ -72,8 +75,8 @@ function ExerciseSets({ entry, units }: { entry: SessionChartExercise; units: Un
   const { t } = useTranslation();
   const completion = percent(entry.completion);
   return (
-    <section aria-labelledby={`ex-${entry.exercise.id}`} className="mt-6 min-w-0" data-testid="session-exercise">
-      <h3 id={`ex-${entry.exercise.id}`} className="font-display text-step-1 font-bold">
+    <section aria-labelledby={`ex-${entry.exercise.id}`} className={`mt-6 ${CARD}`} data-testid="session-exercise">
+      <h3 id={`ex-${entry.exercise.id}`} className="font-display text-step-1 font-semibold">
         {entry.exercise.name}
         {entry.is_extra && <span className="ml-2 text-step--1 font-semibold text-slate">{t("charts.session.extra")}</span>}
         {completion !== null && <span className="ml-2 text-step--1 font-semibold text-slate">{t("charts.percent", { value: completion })}</span>}

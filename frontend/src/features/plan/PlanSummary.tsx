@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { type Plan, usePlans } from "../../api/plan";
 import { ClipboardIcon } from "../../components/icons";
 import { localDay } from "../../lib/today";
+import { CARD } from "../../components/card";
 
 export type Viewer = "athlete" | "coach";
 
@@ -53,17 +54,17 @@ export function PlanSummary({
   return (
     <section
       aria-labelledby="plan-current-title"
-      className="mt-4 border-2 border-iron/30 p-3"
+      className={`mt-4 ${CARD}`}
       data-testid="plan-summary"
     >
       <h2
         id="plan-current-title"
-        className="flex items-center gap-2 font-display text-step-2 font-bold"
+        className="flex items-center gap-2 font-display text-step-1 font-semibold"
       >
         <ClipboardIcon className="size-6 text-spruce" />
         {t("plan.current.title")}
       </h2>
-      <p className="mt-1 break-words font-display text-step-1 font-bold">
+      <p className="mt-1 break-words font-display text-step-1 font-semibold">
         {plan.name ?? t("plan.current.fallbackName", { number: plan.plan_no })}
       </p>
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-step--1">

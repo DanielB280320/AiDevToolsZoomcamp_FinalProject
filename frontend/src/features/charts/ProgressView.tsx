@@ -9,6 +9,7 @@ import { paramsFromPeriod, periodFromParams, type Period } from "./period";
 import { PeriodOverview } from "./PeriodOverview";
 import { PeriodSelector } from "./PeriodSelector";
 import { PeriodTimelines } from "./PeriodTimelines";
+import { CARD } from "../../components/card";
 
 const SECTIONS = ["overview", "timelines", "adherence", "exercise", "body"] as const;
 
@@ -51,8 +52,8 @@ export function ProgressView({
       </p>
       <PeriodSelector period={period} today={today} onChange={choose} />
       {SECTIONS.map((key) => (
-        <section key={key} aria-labelledby={`progress-${key}`} className="mt-8 min-w-0 border-t-4 border-iron pt-3">
-          <h2 id={`progress-${key}`} className="font-display text-step-2 font-bold">
+        <section key={key} aria-labelledby={`progress-${key}`} className={`mt-8 ${CARD}`}>
+          <h2 id={`progress-${key}`} className="font-display text-step-1 font-semibold">
             {t(`charts.sections.${key}`)}
           </h2>
           <p className="mt-1 max-w-[38rem] text-slate" data-testid={`help-${key}`}>

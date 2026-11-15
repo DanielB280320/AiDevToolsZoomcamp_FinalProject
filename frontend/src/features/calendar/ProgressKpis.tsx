@@ -6,6 +6,7 @@ import { useBodyChart, useProgressTotals, useWeeklySummary } from "../../api/cha
 import { DAY_FORMAT, formatDay, mondayOf } from "../../lib/calendarDates";
 import { weightUnit, type UnitSystem } from "../../lib/units";
 import { displayWeight, percent } from "../charts/chartData";
+import { TILE } from "../../components/card";
 
 /** The longest range the body chart offers: the weight change looks back this far (D100). */
 const LOOKBACK_WEEKS = 52;
@@ -13,10 +14,10 @@ const LOOKBACK_WEEKS = 52;
 /** One figure of a KPI row: label, value and an optional hint. */
 export function Tile({ id, label, value, hint }: { id: string; label: string; value: string; hint?: string }) {
   return (
-    <div data-testid={`kpi-${id}`} className="min-w-0 border-t-4 border-iron pt-2">
+    <div data-testid={`kpi-${id}`} className={TILE}>
       <dt className="text-step--1 font-semibold uppercase tracking-wide text-slate">{label}</dt>
       <dd className="m-0">
-        <span className="block font-display text-step-3 font-bold leading-none">{value}</span>
+        <span className="block font-display text-step-3 font-semibold leading-none">{value}</span>
         {hint && <span className="block text-step--1 text-slate">{hint}</span>}
       </dd>
     </div>
@@ -59,7 +60,7 @@ export function ProgressKpis({
 
   return (
     <div className="mt-4" data-testid="progress-kpis">
-      <h3 className="font-display text-step-1 font-bold">{t("calendar.today.kpis.title")}</h3>
+      <h3 className="font-display text-step-1 font-semibold">{t("calendar.today.kpis.title")}</h3>
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
         <Tile
           id="week"

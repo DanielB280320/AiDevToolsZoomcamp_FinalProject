@@ -12,6 +12,7 @@ import { QueryState } from "./QueryState";
 import { RangeControls } from "./RangeControls";
 import { StatusBadge } from "./StatusBadge";
 import { dayBadge } from "./status";
+import { CARD_FLUSH } from "../../components/card";
 
 /** One day of the grid: selects the day, and summarises it on hover or keyboard focus (D103). */
 function DayCell({ day, inMonth, selected, column, to }: { day: CalendarDay; inMonth: boolean; selected: boolean; column: number; to: string }) {
@@ -24,14 +25,14 @@ function DayCell({ day, inMonth, selected, column, to }: { day: CalendarDay; inM
     <li
       aria-current={day.is_today ? "date" : undefined}
       data-selected={selected || undefined}
-      className={`group relative min-h-16 ${selected ? "bg-spruce/15" : inMonth ? "bg-chalk" : "bg-line/50 text-slate"} ${
+      className={`group relative min-h-16 ${selected ? "bg-spruce/15" : inMonth ? "bg-card" : "bg-line/50 text-slate"} ${
         selected ? "outline outline-2 -outline-offset-2 outline-spruce" : day.is_today ? "outline outline-2 -outline-offset-2 outline-plate" : ""
       }`}
     >
       <Link
         to={to}
         aria-describedby={tipId}
-        className="flex h-full min-h-16 flex-col items-center gap-1 p-1 text-iron no-underline hover:bg-line"
+        className="press flex h-full min-h-16 flex-col items-center gap-1 p-1 text-iron no-underline hover:bg-line active:bg-line"
       >
         <span className="sr-only">
           {label}
@@ -47,7 +48,7 @@ function DayCell({ day, inMonth, selected, column, to }: { day: CalendarDay; inM
       <div
         id={tipId}
         role="tooltip"
-        className={`pointer-events-none absolute top-full z-20 hidden w-48 rounded-md border-2 border-iron bg-chalk p-2 text-left text-step--1 text-iron shadow-lg group-hover:block group-has-[a:focus-visible]:block ${
+        className={`pointer-events-none absolute top-full z-20 hidden w-48 rounded-control border border-line bg-card p-2 text-left text-step--1 text-iron shadow-lg group-hover:block group-has-[a:focus-visible]:block ${
           column >= 4 ? "right-0" : "left-0"
         }`}
       >
@@ -126,6 +127,7 @@ export function MonthView({
             today={today}
             title={t("calendar.month.kpis.title", { month: title })}
           />
+          <div className={`${CARD_FLUSH} p-2`}>
           <div aria-hidden="true" className="grid grid-cols-7 gap-px text-center text-step--1 font-semibold text-slate">
             {weekdayLabels.map((label) => (
               <span key={label}>{label}</span>
@@ -143,6 +145,7 @@ export function MonthView({
               />
             ))}
           </ol>
+          </div>
           <p className="mt-3 text-step--1 text-slate">{t("calendar.month.legend")}</p>
         </>
       )}

@@ -41,17 +41,17 @@ function Composer({ athleteId, target, label }: { athleteId: string; target: Not
         maxLength={MAX}
         rows={2}
         onChange={(e) => setText(e.target.value)}
-        className="mt-1 w-full rounded-md border-2 border-iron p-2"
+        className="mt-1 w-full rounded-control border border-edge hover:border-slate p-2"
       />
       <button
         type="submit"
         aria-disabled={!text.trim() || create.isPending || undefined}
-        className="mt-1 min-h-11 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark aria-disabled:opacity-75"
+        className="mt-1 min-h-11 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark aria-disabled:opacity-75"
       >
         {t("notes.save")}
       </button>
       {create.isError && (
-        <p role="alert" className="mt-1 border-l-4 border-alert pl-3 text-alert">
+        <p role="alert" className="mt-1 border-l-[3px] border-alert pl-3 text-alert">
           {t("notes.failed")}
         </p>
       )}
@@ -67,7 +67,7 @@ function NoteItem({ athleteId, note, canEdit }: { athleteId: string; note: Coach
   const remove = useDeleteNote(athleteId);
   const editId = useId();
   return (
-    <li data-testid="coach-note" className="border-l-4 border-plate py-1 pl-3">
+    <li data-testid="coach-note" className="border-l-[3px] border-plate py-1 pl-3">
       <p className="text-step--1 font-semibold text-slate">{t("notes.by", { name: note.author.display_name })}</p>
       {editing ? (
         <form
@@ -86,9 +86,9 @@ function NoteItem({ athleteId, note, canEdit }: { athleteId: string; note: Coach
             maxLength={MAX}
             rows={2}
             onChange={(e) => setText(e.target.value)}
-            className="w-full rounded-md border-2 border-iron p-2"
+            className="w-full rounded-control border border-edge hover:border-slate p-2"
           />
-          <button type="submit" className="min-h-11 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark">
+          <button type="submit" className="min-h-11 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark">
             {t("notes.save")}
           </button>
           <button
@@ -102,7 +102,7 @@ function NoteItem({ athleteId, note, canEdit }: { athleteId: string; note: Coach
             {t("notes.cancel")}
           </button>
           {update.isError && (
-            <p role="alert" className="border-l-4 border-alert pl-3 text-alert">
+            <p role="alert" className="border-l-[3px] border-alert pl-3 text-alert">
               {t("notes.failed")}
             </p>
           )}
@@ -129,7 +129,7 @@ function NoteItem({ athleteId, note, canEdit }: { athleteId: string; note: Coach
         </p>
       )}
       {remove.isError && (
-        <p role="alert" className="border-l-4 border-alert pl-3 text-alert">
+        <p role="alert" className="border-l-[3px] border-alert pl-3 text-alert">
           {t("notes.failed")}
         </p>
       )}

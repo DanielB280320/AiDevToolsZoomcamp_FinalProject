@@ -1,6 +1,6 @@
 const control =
-  "mt-1.5 block min-h-12 w-full rounded-md border-2 bg-white px-3 py-2 text-step-0 text-iron " +
-  "border-iron/35 hover:border-iron/60 aria-[invalid=true]:border-alert";
+  "mt-1.5 block min-h-12 w-full rounded-control border bg-card px-3 py-2 text-step-0 text-iron " +
+  "border-edge hover:border-slate aria-[invalid=true]:border-alert";
 
 interface NumberFieldProps {
   id: string;
@@ -74,8 +74,8 @@ export function MultiChoiceField<V extends string>({ id, legend, values, onToggl
             key={option.value}
             htmlFor={`${id}-${option.value}`}
             className={
-              "flex min-h-12 min-w-14 cursor-pointer items-center justify-center rounded-md border-2 bg-white px-3 py-2 font-semibold " +
-              (error ? "border-alert " : "border-iron/35 hover:border-iron/60 ") +
+              "flex min-h-12 min-w-14 cursor-pointer items-center justify-center rounded-control border bg-card px-3 py-2 font-semibold " +
+              (error ? "border-alert " : "border-edge hover:border-slate ") +
               "has-[:checked]:border-iron has-[:checked]:bg-iron has-[:checked]:text-chalk " +
               "has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-offset-2 " +
               "has-[:focus-visible]:outline-spruce has-[:focus-visible]:outline-solid"

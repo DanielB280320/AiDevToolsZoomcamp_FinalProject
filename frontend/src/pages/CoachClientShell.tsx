@@ -15,8 +15,8 @@ function NotLinked({ onCheck }: { onCheck: () => void }) {
   const { t } = useTranslation();
   return (
     <article className="max-w-[40rem]" data-testid="not-linked">
-      <h1 className="font-display text-step-3 font-bold">{t("coach.client.notLinked.title")}</h1>
-      <p role="alert" className="mt-3 border-l-4 border-iron pl-3">
+      <h1 className="font-display text-step-3 font-semibold">{t("coach.client.notLinked.title")}</h1>
+      <p role="alert" className="mt-3 border-l-[3px] border-iron pl-3">
         {t("coach.client.notLinked.body")}
       </p>
       <p className="mt-4 flex flex-wrap items-center gap-x-6">
@@ -110,7 +110,7 @@ export function CoachClientShell() {
         aria-label={t("coach.client.bannerLabel")}
         className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-l-8 border-plate bg-line px-3 py-2"
       >
-        <p className="min-w-0 break-words font-display text-step-1 font-bold">
+        <p className="min-w-0 break-words font-display text-step-1 font-semibold">
           {t("coach.client.viewing", { name: scope.displayName })}
         </p>
         <Link to={paths.coachClients} className="inline-flex min-h-11 items-center font-semibold text-spruce underline underline-offset-4">

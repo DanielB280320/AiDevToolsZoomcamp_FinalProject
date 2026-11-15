@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 
-export const BUTTON = "min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line disabled:opacity-60";
-export const PRIMARY = "min-h-12 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark disabled:opacity-60";
-export const ICON_BUTTON = "min-h-12 min-w-12 rounded-md border-2 border-iron/60 px-2 font-semibold hover:bg-line disabled:opacity-40";
+export const BUTTON = "min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line disabled:opacity-60";
+export const PRIMARY = "min-h-12 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark disabled:opacity-60";
+export const ICON_BUTTON = "min-h-12 min-w-12 rounded-control border border-edge hover:border-slate px-2 font-semibold hover:bg-line disabled:opacity-40";
 const CONTROL =
-  "mt-1 block min-h-12 w-full rounded-md border-2 border-iron/35 bg-white px-3 py-2 hover:border-iron/60 aria-[invalid=true]:border-alert";
+  "mt-1 block min-h-12 w-full rounded-control border border-edge bg-card px-3 py-2 hover:border-slate aria-[invalid=true]:border-alert";
 
 export function FieldError({ id, children }: { id: string; children: ReactNode }) {
   return (

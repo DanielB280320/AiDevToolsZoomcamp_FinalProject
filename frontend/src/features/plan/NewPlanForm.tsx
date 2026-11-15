@@ -13,6 +13,7 @@ import { localDay } from "../../lib/today";
 import { BUTTON, DateInput, PRIMARY, SelectInput, TextInput } from "./fields";
 import { GoalSelect } from "./GoalSelect";
 import { defaultTrainingGoal, type TrainingGoal } from "./trainingGoal";
+import { CARD } from "../../components/card";
 
 type Scope = NonNullable<CreatePlanRequest["scope"]>;
 type StartFrom = NonNullable<CreatePlanRequest["start_from"]>;
@@ -110,11 +111,11 @@ export function NewPlanForm({
   return (
     <section
       aria-labelledby="plan-new-title"
-      className="mt-8 border-t-4 border-iron pt-4"
+      className={`mt-8 ${CARD}`}
     >
       <h2
         id="plan-new-title"
-        className="flex items-center gap-2 font-display text-step-2 font-bold"
+        className="flex items-center gap-2 font-display text-step-1 font-semibold"
       >
         <PlusCircleIcon className="size-6 text-spruce" />
         {t("plan.newPlan.title")}
@@ -137,7 +138,7 @@ export function NewPlanForm({
           onSubmit={submit}
           noValidate
           aria-labelledby="plan-new-title"
-          className="mt-3 flex flex-col gap-4 border-2 border-iron p-3"
+          className="mt-3 flex flex-col gap-4 rounded-control border border-line p-3"
         >
           <TextInput
             id="new-plan-name"
@@ -198,7 +199,7 @@ export function NewPlanForm({
               hint={t("plan.newPlan.scopeHint")}
             />
           )}
-          <p className="border-l-4 border-iron pl-3">
+          <p className="border-l-[3px] border-iron pl-3">
             {t("plan.newPlan.replaces")}
           </p>
           {unsaved && (

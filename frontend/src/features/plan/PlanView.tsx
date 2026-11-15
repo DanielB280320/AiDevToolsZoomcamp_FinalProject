@@ -29,7 +29,7 @@ export function PlanView({ plan, units }: { plan: Plan; units: UnitSystem }) {
     );
   return (
     <div>
-      <h3 className="font-display text-step-2 font-bold">{t("plan.view.training")}</h3>
+      <h3 className="font-display text-step-1 font-semibold">{t("plan.view.training")}</h3>
       {plan.training_days.length === 0 && <p className="text-slate">{t("plan.training.empty")}</p>}
       <ul className="mt-2 flex flex-col gap-4">
         {plan.training_days.map((day) => (
@@ -65,7 +65,7 @@ export function PlanView({ plan, units }: { plan: Plan; units: UnitSystem }) {
           </DayRow>
         ))}
       </ul>
-      <h3 className="mt-6 font-display text-step-2 font-bold">{t("plan.view.meals")}</h3>
+      <h3 className="mt-6 font-display text-step-1 font-semibold">{t("plan.view.meals")}</h3>
       {plan.meal_days.length === 0 && <p className="text-slate">{t("plan.meals.empty")}</p>}
       <ul className="mt-2 flex flex-col gap-4">
         {plan.meal_days.map((day) => (

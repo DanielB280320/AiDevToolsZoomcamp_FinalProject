@@ -24,6 +24,7 @@ import { buildMealUpdate, draftFromLibraryMeal, draftFromSwap, duplicateMealDay,
 import { FIELD, type LocalError } from "./trainingDraft";
 import { SaveBar } from "./SaveBar";
 import type { EditorProps } from "./TrainingEditor";
+import { ITEM } from "../../components/card";
 
 const DEFAULT_SLOT: MealSlot = "lunch";
 const pickerSlot = (day: DraftMealDay, replace: string | null): MealSlot =>
@@ -160,9 +161,9 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
                 {day.meals.map((meal, j) => {
                   const id = (f: string) => `meal-${meal.uid}-${f}`;
                   return (
-                    <li key={meal.uid} className="border-2 border-iron/30 p-3">
+                    <li key={meal.uid} className={ITEM}>
                       <div className="flex items-start justify-between gap-2">
-                        <h4 className="min-w-0 break-words font-display text-step-1 font-bold">{meal.mealName}</h4>
+                        <h4 className="min-w-0 break-words font-display text-step-1 font-semibold">{meal.mealName}</h4>
                         <button type="button" className={ICON_BUTTON} onClick={() => edit(days.map((x) => (x.weekday === day.weekday ? { ...x, meals: x.meals.filter((m) => m.uid !== meal.uid) } : x)))} aria-label={t("plan.meals.remove", { name: meal.mealName })}>
                           <span aria-hidden="true">×</span>
                         </button>

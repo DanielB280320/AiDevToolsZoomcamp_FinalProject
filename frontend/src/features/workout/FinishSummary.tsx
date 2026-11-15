@@ -6,6 +6,7 @@ import type { UnitSystem } from "../../lib/units";
 import { PrBadge } from "../../components/PrBadge";
 import { paths } from "../../paths";
 import { PendingSuggestions } from "../suggestions/PendingSuggestions";
+import { CARD } from "../../components/card";
 
 export const percent = (ratio: number | null) => (ratio === null ? "–" : `${Math.round(ratio * 100)}%`);
 
@@ -29,22 +30,22 @@ export function FinishSummary({
       : null;
   const records = session.exercises.filter((e) => e.is_pr);
   return (
-    <section aria-labelledby="finish-title" className="mt-2 border-t-4 border-spruce pt-3">
-      <h2 id="finish-title" className="font-display text-step-3 font-bold">
+    <section aria-labelledby="finish-title" className={`mt-2 ${CARD} border-spruce!`}>
+      <h2 id="finish-title" className="font-display text-step-3 font-semibold">
         {t("workout.summary.title")}
       </h2>
       <dl className="mt-3 grid grid-cols-3 gap-3 text-center">
         <div>
           <dt className="text-step--1 text-slate">{t("workout.summary.completion")}</dt>
-          <dd className="font-display text-step-3 font-bold">{percent(session.completion)}</dd>
+          <dd className="font-display text-step-3 font-semibold">{percent(session.completion)}</dd>
         </div>
         <div>
           <dt className="text-step--1 text-slate">{t("workout.summary.kcal")}</dt>
-          <dd className="font-display text-step-3 font-bold">{session.kcal ?? "–"}</dd>
+          <dd className="font-display text-step-3 font-semibold">{session.kcal ?? "–"}</dd>
         </div>
         <div>
           <dt className="text-step--1 text-slate">{t("workout.summary.duration")}</dt>
-          <dd className="font-display text-step-3 font-bold">
+          <dd className="font-display text-step-3 font-semibold">
             {minutes === null ? "–" : t("workout.summary.minutes", { count: minutes })}
           </dd>
         </div>
@@ -72,20 +73,20 @@ export function FinishSummary({
       <div className="mt-6 flex flex-wrap gap-3">
         <Link
           to={paths.today}
-          className="inline-flex min-h-12 items-center rounded-md bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark"
+          className="inline-flex min-h-12 items-center rounded-control bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark"
         >
           {t("workout.summary.backToToday")}
         </Link>
         <Link
           to={paths.sessionChart(session.id)}
-          className="inline-flex min-h-12 items-center rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
+          className="inline-flex min-h-12 items-center rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line"
         >
           {t("charts.session.viewChart")}
         </Link>
         <button
           type="button"
           onClick={onReview}
-          className="min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
+          className="min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line"
         >
           {t("workout.summary.review")}
         </button>

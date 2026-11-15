@@ -40,7 +40,7 @@ export function PendingSuggestions({
   if (!pending.data || (pending.data.length === 0 && !emptyMessage)) return null;
   return (
     <section id={id} aria-labelledby={headingId} className={className}>
-      <h2 id={headingId} className="flex items-center gap-2 font-display text-step-2 font-bold">
+      <h2 id={headingId} className="flex items-center gap-2 font-display text-step-1 font-semibold">
         {icon}
         {t("suggestions.title")}
       </h2>

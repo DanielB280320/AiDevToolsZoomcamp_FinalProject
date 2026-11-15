@@ -1,11 +1,13 @@
 @import "tailwindcss";
 
 /*
- * FitWise tokens. Gym-floor palette: chalk paper, iron ink, spruce for actions and
+ * FitWise tokens (D111). Near-white page with white cards, iron ink, spruce for actions and
  * one bumper-plate yellow used only for the brand bar. Barlow Condensed (signage) for
  * the wordmark and headings, Barlow for reading text. Type scale: 1.25 ratio from 16 px.
  */
 @theme {
+  --color-page: #f8f9f8;
+  --color-card: #ffffff;
   --color-chalk: #f2f4f1;
   --color-iron: #1c2530;
   --color-spruce: #1e6b57;
@@ -14,6 +16,18 @@
   --color-slate: #56616c;
   --color-line: #d3d9d4;
   --color-alert: #a3321f;
+  /* Border of an input or secondary button: 3.3:1 against white, so the control is identifiable. */
+  --color-edge: #868f98;
+
+  --radius-card: 0.75rem;
+  --radius-control: 0.5rem;
+
+  --ease-soft: cubic-bezier(0.2, 0, 0, 1);
+  --duration-press: 150ms;
+  --duration-open: 200ms;
+  --duration-fill: 400ms;
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 
   --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, system-ui, sans-serif;
@@ -36,7 +50,7 @@
 
 @layer base {
   html {
-    background-color: var(--color-chalk);
+    background-color: var(--color-page);
     color: var(--color-iron);
     font-family: var(--font-sans);
     -webkit-text-size-adjust: 100%;
@@ -52,6 +66,20 @@
     outline-offset: 2px;
   }
 
+  /* Press feedback and colour transitions for everything you can click (D111). */
+  button,
+  summary,
+  [role="tab"],
+  label:has(input[type="radio"], input[type="checkbox"]) {
+    transition-property: color, background-color, border-color, transform, opacity;
+    transition-duration: var(--duration-press);
+    transition-timing-function: var(--ease-soft);
+  }
+
+  button:not(:disabled, [aria-disabled="true"]):active {
+    transform: scale(0.98);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -59,7 +87,86 @@
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
     }
+
+    button:active {
+      transform: none !important;
+    }
   }
+}
+
+/* Colour and press feedback for links that behave as controls (tabs, clickable cards). */
+@utility press {
+  transition-property: color, background-color, border-color, transform, opacity;
+  transition-duration: var(--duration-press);
+  transition-timing-function: var(--ease-soft);
+  &:active {
+    transform: scale(0.98);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:active {
+      transform: none;
+    }
+  }
+}
+
+/* A card or row that opens something: border and background react on hover and press. */
+@utility card-link {
+  transition-property: border-color, background-color, transform;
+  transition-duration: var(--duration-press);
+  transition-timing-function: var(--ease-soft);
+  &:hover {
+    border-color: var(--color-edge);
+  }
+  &:active {
+    background-color: var(--color-page);
+    border-color: var(--color-slate);
+  }
+}
+
+/*
+ * An expanding section: the wrapper animates its grid row from 0fr to 1fr while its child is clipped.
+ * It plays whenever the content is shown (mounted or un-hidden), which is immediately in the DOM and
+ * focusable; clipping only applies while the animation runs, so focus outlines are not cut off.
+ */
+@keyframes expand-in {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+@keyframes expand-clip {
+  from,
+  to {
+    overflow: hidden;
+  }
+}
+@utility expand-in {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: expand-in var(--duration-open) var(--ease-soft);
+  & > * {
+    min-height: 0;
+    animation: expand-clip var(--duration-open) var(--ease-soft);
+  }
+}
+
+/* The set check and the rings fill with a short animation. */
+@keyframes check-pop {
+  from {
+    transform: scale(0.7);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@utility check-pop {
+  animation: check-pop var(--duration-press) var(--ease-soft);
 }
 
 /* A strip that scrolls sideways (tab bars on a phone) without the browser's scrollbar and arrows. */

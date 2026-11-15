@@ -17,10 +17,10 @@ export function BodyPage() {
   return (
     <article className="max-w-[40rem]">
       {me.role === "athlete" && <CalendarNav />}
-      <h1 className="font-display text-step-4 font-bold">{t("body.title")}</h1>
+      <h1 className="font-display text-step-4 font-semibold">{t("body.title")}</h1>
       {me.role === "coach" ? (
         // A coach has no weigh-ins of their own; the athlete view arrives with the coach dashboard (#48).
-        <p className="mt-6 border-l-4 border-iron pl-3">{t("body.coachNotice")}</p>
+        <p className="mt-6 border-l-[3px] border-iron pl-3">{t("body.coachNotice")}</p>
       ) : (
         <BodyTracking athleteId={me.id} units={me.units} today={today} canLog />
       )}

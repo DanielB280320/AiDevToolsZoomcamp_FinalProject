@@ -7,7 +7,7 @@ const STYLE: Record<BadgeKind, { glyph: string; className: string }> = {
   partial: { glyph: "◐", className: "bg-plate text-iron" },
   missed: { glyph: "✕", className: "bg-alert text-chalk" },
   rest: { glyph: "–", className: "bg-line text-iron" },
-  planned: { glyph: "○", className: "border-2 border-iron bg-chalk text-iron" },
+  planned: { glyph: "○", className: "border border-iron bg-card text-iron" },
 };
 
 /** Status chip. The glyph and the label both carry the meaning, so colour is never the only cue. */

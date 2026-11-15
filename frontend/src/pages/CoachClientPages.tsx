@@ -21,7 +21,7 @@ import { paths } from "../paths";
  */
 
 function Heading({ children }: { children: string }) {
-  return <h1 className="font-display text-step-3 font-bold">{children}</h1>;
+  return <h1 className="font-display text-step-3 font-semibold">{children}</h1>;
 }
 
 export function CoachClientTodayPage() {
@@ -30,7 +30,7 @@ export function CoachClientTodayPage() {
   const today = localDay(new Date(), scope.timezone, i18n.language);
   return (
     <article>
-      <h1 className="font-display font-bold">
+      <h1 className="font-display font-semibold">
         <time dateTime={today.isoDate} className="block">
           <span className="block text-step-4 leading-none">{today.weekday}</span>
           <span className="mt-1 block text-step-2 font-semibold leading-tight text-slate">{today.date}</span>

@@ -25,8 +25,8 @@ export function MealSwaps({
   const { t } = useTranslation();
   const swaps = useMealSwaps(athleteId, mealKey, true);
   return (
-    <div role="group" aria-label={t("plan.meals.swap.title", { name: mealName })} className="mt-3 border-l-4 border-iron pl-3">
-      <h5 className="font-display text-step-1 font-bold">{t("plan.meals.swap.heading")}</h5>
+    <div role="group" aria-label={t("plan.meals.swap.title", { name: mealName })} className="mt-3 border-l-[3px] border-iron pl-3">
+      <h5 className="font-display text-step-1 font-semibold">{t("plan.meals.swap.heading")}</h5>
       {swaps.isPending && <p role="status">{t("plan.meals.swap.loading")}</p>}
       {swaps.isError && (
         <p role="alert" className="font-semibold text-alert">

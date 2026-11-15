@@ -7,6 +7,7 @@ import { isApiError } from "../api/errors";
 import { rowErrors, useImportWorkouts } from "../api/importWorkouts";
 import { FormAlert, SubmitButton, TextField } from "../components/form/fields";
 import { paths } from "../paths";
+import { CARD } from "../components/card";
 
 const PASSWORD_MAX_LENGTH = 128;
 
@@ -14,8 +15,8 @@ function ExportSection() {
   const { t } = useTranslation();
   const exportData = useExportData();
   return (
-    <section aria-labelledby="export-title" className="border-t-2 border-iron/20 pt-6">
-      <h2 id="export-title" className="font-display text-step-2 font-bold">
+    <section aria-labelledby="export-title" className={CARD}>
+      <h2 id="export-title" className="font-display text-step-1 font-semibold">
         {t("account.export.title")}
       </h2>
       <p className="mt-2 text-slate">{t("account.export.lead")}</p>
@@ -25,7 +26,7 @@ function ExportSection() {
           if (!exportData.isPending) exportData.mutate();
         }}
         aria-disabled={exportData.isPending || undefined}
-        className="mt-4 min-h-12 rounded-md bg-spruce px-6 py-3 font-semibold text-chalk hover:bg-spruce-dark aria-disabled:opacity-75"
+        className="mt-4 min-h-12 rounded-control bg-spruce px-6 py-3 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark aria-disabled:opacity-75"
       >
         {exportData.isPending ? t("account.export.exporting") : t("account.export.button")}
       </button>
@@ -68,8 +69,8 @@ function ImportSection() {
   }
 
   return (
-    <section aria-labelledby="import-title" className="border-t-2 border-iron/20 pt-6">
-      <h2 id="import-title" className="font-display text-step-2 font-bold">
+    <section aria-labelledby="import-title" className={CARD}>
+      <h2 id="import-title" className="font-display text-step-1 font-semibold">
         {t("account.import.title")}
       </h2>
       <p className="mt-2 text-slate">{t("account.import.lead")}</p>
@@ -151,8 +152,8 @@ function DeleteSection() {
   const wrong = remove.isError && isApiError(remove.error) && remove.error.status === 403;
 
   return (
-    <section aria-labelledby="delete-title" className="border-t-2 border-iron/20 pt-6">
-      <h2 id="delete-title" className="font-display text-step-2 font-bold">
+    <section aria-labelledby="delete-title" className={CARD}>
+      <h2 id="delete-title" className="font-display text-step-1 font-semibold">
         {t("account.delete.title")}
       </h2>
       <p className="mt-2 text-slate">{t("account.delete.lead")}</p>
@@ -160,7 +161,7 @@ function DeleteSection() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="mt-4 min-h-12 rounded-md border-2 border-alert px-6 py-3 font-semibold text-alert hover:bg-alert hover:text-chalk"
+          className="mt-4 min-h-12 rounded-control border border-alert px-6 py-3 font-semibold text-alert hover:bg-alert hover:text-chalk"
         >
           {t("account.delete.open")}
         </button>
@@ -191,7 +192,7 @@ function DeleteSection() {
                 setPassword("");
                 remove.reset();
               }}
-              className="min-h-12 rounded-md border-2 border-iron/40 px-6 py-3 font-semibold"
+              className="min-h-12 rounded-control border border-edge hover:border-slate px-6 py-3 font-semibold"
             >
               {t("account.delete.cancel")}
             </button>
@@ -207,7 +208,7 @@ export function AccountPage() {
   const { t } = useTranslation();
   return (
     <article className="flex max-w-[40rem] flex-col gap-8">
-      <h1 className="font-display text-step-4 font-bold">{t("account.title")}</h1>
+      <h1 className="font-display text-step-4 font-semibold">{t("account.title")}</h1>
       <ExportSection />
       <ImportSection />
       <DeleteSection />

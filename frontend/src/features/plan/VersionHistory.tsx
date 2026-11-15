@@ -15,6 +15,7 @@ import type { UnitSystem } from "../../lib/units";
 import { BUTTON, PRIMARY } from "./fields";
 import { PlanView } from "./PlanView";
 import type { Viewer } from "./PlanSummary";
+import { CARD } from "../../components/card";
 
 type Props = {
   athleteId: string;
@@ -107,11 +108,11 @@ export function VersionHistory({ athleteId, units, timezone, viewer = "athlete",
         <button type="button" className={BUTTON} onClick={() => setVersion(null)}>
           {t("plan.history.backToChanges")}
         </button>
-        <h3 className="mt-4 break-words font-display text-step-2 font-bold">
+        <h3 className="mt-4 break-words font-display text-step-1 font-semibold">
           {t("plan.history.snapshotTitle", { name, date: when })}
         </h3>
         {entry && <p className="mt-1 text-step--1">{`${t(`plan.history.kinds.${entry.change.kind}`)}, ${author(entry.change)}`}</p>}
-        <p className="mt-1 border-l-4 border-iron pl-3">{t("plan.history.readOnly")}</p>
+        <p className="mt-1 border-l-[3px] border-iron pl-3">{t("plan.history.readOnly")}</p>
         {snapshot.isPending && <p role="status">{t("plan.loading")}</p>}
         {snapshot.isError && <p role="alert" className="font-semibold text-alert">{t("plan.history.failed")}</p>}
         {snapshot.data && (
@@ -130,8 +131,8 @@ export function VersionHistory({ athleteId, units, timezone, viewer = "athlete",
         <button type="button" className={BUTTON} onClick={() => setPlanNo(null)}>
           {t("plan.history.backToPlans")}
         </button>
-        <h3 className="mt-4 break-words font-display text-step-2 font-bold">{name}</h3>
-        <h4 className="mt-2 font-display text-step-1 font-bold">{t("plan.history.timelineTitle")}</h4>
+        <h3 className="mt-4 break-words font-display text-step-1 font-semibold">{name}</h3>
+        <h4 className="mt-2 font-display text-step-1 font-semibold">{t("plan.history.timelineTitle")}</h4>
         {plan && plan.changes === 0 && <p className="mt-1 text-slate">{t("plan.history.noChanges")}</p>}
         {timeline.isPending && <p role="status">{t("plan.loading")}</p>}
         {timeline.isError && <p role="alert" className="font-semibold text-alert">{t("plan.history.failed")}</p>}
@@ -140,7 +141,7 @@ export function VersionHistory({ athleteId, units, timezone, viewer = "athlete",
             const kind = t(`plan.history.kinds.${v.change.kind}`);
             const date = dateTime(v.change.at);
             return (
-              <li key={v.id} className="border-2 border-iron/30 p-3">
+              <li key={v.id} className={CARD}>
                 <p className="font-semibold">{kind}</p>
                 <p className="text-step--1">{`${date}, ${author(v.change)}`}</p>
                 <button
@@ -169,8 +170,8 @@ export function VersionHistory({ athleteId, units, timezone, viewer = "athlete",
       {plans.data?.length === 0 && <p className="text-slate">{t("plan.history.empty")}</p>}
       <ul className="flex flex-col gap-3">
         {(plans.data ?? []).map((p) => (
-          <li key={p.plan_no} className="border-2 border-iron/30 p-3">
-            <p className="break-words font-display text-step-1 font-bold">
+          <li key={p.plan_no} className={CARD}>
+            <p className="break-words font-display text-step-1 font-semibold">
               {planName(p)}
               {p.active && <span className="ml-2 text-step--1 font-semibold text-spruce-dark">{t("plan.history.current")}</span>}
             </p>
@@ -223,7 +224,7 @@ export function VersionHistory({ athleteId, units, timezone, viewer = "athlete",
               )}
             </div>
             {pending?.plan.plan_no === p.plan_no && (
-              <div role="alertdialog" aria-label={t(`plan.history.confirm.${pending.kind}Title`, { name: planName(p) })} className="mt-3 border-l-4 border-iron pl-3">
+              <div role="alertdialog" aria-label={t(`plan.history.confirm.${pending.kind}Title`, { name: planName(p) })} className="mt-3 border-l-[3px] border-iron pl-3">
                 <p className="font-semibold">{t(`plan.history.confirm.${pending.kind}Title`, { name: planName(p) })}</p>
                 <p className="mt-1">{t(`plan.history.confirm.${pending.kind}Body`)}</p>
                 {pending.kind === "activate" && unsaved && <p className="mt-1">{t("plan.newPlan.unsaved")}</p>}

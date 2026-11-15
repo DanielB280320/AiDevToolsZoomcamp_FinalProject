@@ -30,6 +30,7 @@ import {
   type WizardValues,
   weightToKg,
 } from "../onboarding/model";
+import { CARD } from "../components/card";
 
 type Weekday = Schemas["Weekday"];
 type Allergen = Schemas["Allergen"];
@@ -194,7 +195,7 @@ export function OnboardingPage() {
       <p className="mt-2 text-step--1 text-slate">{t("onboarding.progress", { current: stepIndex + 1, total, name: stepName })}</p>
 
       <form noValidate onSubmit={onSubmit} aria-label={stepName} className="mt-6 flex flex-col gap-6">
-        <h1 ref={headingRef} tabIndex={-1} className="font-display text-step-4 font-bold focus:outline-none">
+        <h1 ref={headingRef} tabIndex={-1} className="font-display text-step-4 font-semibold focus:outline-none">
           {t(`onboarding.${step}.title`)}
         </h1>
         <p className="-mt-3 max-w-[52ch]">{t(`onboarding.${step}.lead`)}</p>
@@ -357,7 +358,7 @@ export function OnboardingPage() {
                 setErrors({});
                 setStepIndex(stepIndex - 1);
               }}
-              className="min-h-12 rounded-md border-2 border-iron px-6 py-3 font-semibold hover:bg-white"
+              className="min-h-12 rounded-control border border-edge hover:border-slate px-6 py-3 font-semibold hover:bg-card"
             >
               {t("onboarding.nav.back")}
             </button>
@@ -428,9 +429,9 @@ function Review({ values, units, onEdit }: { values: WizardValues; units: "metri
   return (
     <div className="flex flex-col gap-5">
       {sections.map(({ step, rows }) => (
-        <section key={step} aria-label={t(`onboarding.stepNames.${step}`)} className="border-t-4 border-iron pt-3">
+        <section key={step} aria-label={t(`onboarding.stepNames.${step}`)} className={CARD}>
           <div className="flex items-baseline justify-between gap-4">
-            <h2 className="font-display text-step-1 font-bold">{t(`onboarding.stepNames.${step}`)}</h2>
+            <h2 className="font-display text-step-1 font-semibold">{t(`onboarding.stepNames.${step}`)}</h2>
             <button
               type="button"
               onClick={() => onEdit(STEPS.indexOf(step))}
@@ -466,34 +467,34 @@ function ResultStep({ result, headingRef }: { result: OnboardingResult; headingR
 
   return (
     <article className="max-w-[40rem]">
-      <h1 ref={headingRef} tabIndex={-1} className="font-display text-step-4 font-bold focus:outline-none">
+      <h1 ref={headingRef} tabIndex={-1} className="font-display text-step-4 font-semibold focus:outline-none">
         {t("onboarding.result.title")}
       </h1>
       <p className="mt-2 max-w-[52ch]">{t("onboarding.result.lead")}</p>
 
-      <section aria-labelledby="result-targets" className="mt-6 border-t-4 border-iron pt-3">
-        <h2 id="result-targets" className="font-display text-step-1 font-bold">
+      <section aria-labelledby="result-targets" className={`mt-6 ${CARD}`}>
+        <h2 id="result-targets" className="font-display text-step-1 font-semibold">
           {t("onboarding.result.targets")}
         </h2>
         <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {figures.map(([label, value]) => (
             <div key={label}>
               <dt className="text-step--1 text-slate">{label}</dt>
-              <dd className="font-display text-step-2 font-bold">{value}</dd>
+              <dd className="font-display text-step-2 font-semibold">{value}</dd>
             </div>
           ))}
         </dl>
       </section>
 
-      <section aria-labelledby="result-explanation" className="mt-6">
-        <h2 id="result-explanation" className="font-display text-step-1 font-bold">
+      <section aria-labelledby="result-explanation" className={`mt-6 ${CARD}`}>
+        <h2 id="result-explanation" className="font-display text-step-1 font-semibold">
           {t("onboarding.result.explanation")}
         </h2>
         <p className="mt-2 max-w-[60ch] whitespace-pre-line">{targets.explanation}</p>
       </section>
 
-      <section aria-labelledby="result-plan" className="mt-6">
-        <h2 id="result-plan" className="font-display text-step-1 font-bold">
+      <section aria-labelledby="result-plan" className={`mt-6 ${CARD}`}>
+        <h2 id="result-plan" className="font-display text-step-1 font-semibold">
           {t("onboarding.result.plan")}
         </h2>
         <p className="mt-2">{t("onboarding.result.planSummary", { count: plan.training_days.length })}</p>
@@ -508,7 +509,7 @@ function ResultStep({ result, headingRef }: { result: OnboardingResult; headingR
 
       <Link
         to={paths.today}
-        className="mt-8 inline-flex min-h-12 items-center rounded-md bg-spruce px-6 py-3 font-semibold text-chalk hover:bg-spruce-dark"
+        className="mt-8 inline-flex min-h-12 items-center rounded-control bg-spruce px-6 py-3 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark"
       >
         {t("onboarding.nav.goToToday")}
       </Link>

@@ -27,20 +27,20 @@ export function TodayBanners() {
       </h2>
       <ul className="flex flex-col gap-3">
         {shown.map((n) => (
-          <li key={n.id} data-testid="notification-banner" className="border-l-4 border-plate bg-white p-3">
+          <li key={n.id} data-testid="notification-banner" className="border-l-[3px] border-plate bg-card p-3">
             <p className="font-semibold">{t(textKey(n.type) as never)}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => actions.open(n)}
-                className="min-h-11 rounded-md bg-spruce px-4 py-2 font-semibold text-chalk hover:bg-spruce-dark"
+                className="min-h-11 rounded-control bg-spruce px-4 py-2 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark"
               >
                 {t("notifications.banners.open")}
               </button>
               <button
                 type="button"
                 onClick={() => actions.dismiss(n)}
-                className="min-h-11 rounded-md border-2 border-iron px-4 py-2 font-semibold hover:bg-iron hover:text-chalk"
+                className="min-h-11 rounded-control border border-edge hover:border-slate px-4 py-2 font-semibold hover:bg-line"
               >
                 {t("notifications.banners.dismiss")}
               </button>
