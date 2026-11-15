@@ -1059,6 +1059,32 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
+  /athletes/{athlete_id}/plans:
+    parameters:
+      - $ref: '#/components/parameters/AthleteId'
+    get:
+      tags: [Plan]
+      operationId: listPlans
+      summary: List the athlete's plans
+      description: |
+        One item per plan, newest first (D106). Only onboarding and the New plan form
+        (`createPlan`) start a plan; every other change is a version inside the plan
+        (see `listPlanVersions` with `plan_no`).
+      x-fitwise-access: owner-or-coach
+      responses:
+        '200':
+          description: Plans.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /athletes/{athlete_id}/plan/versions:
     parameters:
       - $ref: '#/components/parameters/AthleteId'
@@ -1066,8 +1092,17 @@ paths:
       tags: [Plan]
       operationId: listPlanVersions
       summary: List plan versions
-      description: All versions, newest first.
+      description: |
+        All versions, newest first, each with the change that produced it (D106). `plan_no`
+        keeps only the versions of one plan (its change timeline).
       x-fitwise-access: owner-or-coach
+      parameters:
+        - name: plan_no
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: Versions.
@@ -4020,7 +4055,7 @@ components:
             - type: 'null'
     Plan:
       type: object
-      required: [id, athlete_id, version, source, active, revision, name, start_date, created_by, created_at, updated_at, training_days, meal_days, warnings]
+      required: [id, athlete_id, version, plan_no, source, active, revision, name, start_date, created_by, created_at, updated_at, training_days, meal_days, warnings]
       properties:
         id:
           $ref: '#/components/schemas/Id'
@@ -4029,6 +4064,10 @@ components:
         version:
           type: integer
           minimum: 1
+        plan_no:
+          type: integer
+          minimum: 1
+          description: Number of the plan this version belongs to (D106). Only onboarding and `createPlan` start a new plan; every other change is a new version of the same plan.
         source:
           $ref: '#/components/schemas/PlanSource'
         active:
@@ -4128,12 +4167,18 @@ components:
           description: Used only with `start_from = generated`.
     PlanVersionSummary:
       type: object
-      required: [id, version, source, active, name, start_date, created_by, created_at]
+      required: [id, version, plan_no, source, active, name, start_date, created_by, created_at, change]
       properties:
         id:
           $ref: '#/components/schemas/Id'
         version:
           type: integer
+        plan_no:
+          type: integer
+          minimum: 1
+          description: Number of the plan this version belongs to (D106).
+        change:
+          $ref: '#/components/schemas/PlanChangeSummary'
         source:
           $ref: '#/components/schemas/PlanSource'
         active:
@@ -4151,6 +4196,71 @@ components:
             - type: 'null'
         created_at:
           $ref: '#/components/schemas/Timestamp'
+    PlanChangeSummary:
+      description: What produced a plan version (D75(3), D106). Never holds plan content or the plan name.
+      type: object
+      required: [kind, author_role, author, at]
+      properties:
+        kind:
+          type: string
+          enum: [created, created_new, training_edited, meals_edited, regenerated, suggestion_accepted, portions_rescaled, unknown]
+          description: "`created` is onboarding; `created_new` the New plan form; `unknown` is a row written before the kind was recorded."
+        author_role:
+          type: [string, 'null']
+          enum: [athlete, coach, null]
+        author:
+          description: Null once the author (a linked coach) has deleted their account.
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+        at:
+          $ref: '#/components/schemas/Timestamp'
+    PlanSummary:
+      description: One plan of the athlete, grouping all its versions (D106).
+      type: object
+      required: [plan_no, name, start_date, created_at, last_changed_at, changes, active, source, first_version, latest_version]
+      properties:
+        plan_no:
+          type: integer
+          minimum: 1
+        name:
+          type: [string, 'null']
+          maxLength: 60
+          description: User text; null for plans without a name. Never logged.
+        start_date:
+          type: [string, 'null']
+          format: date
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+          description: When the plan was created (its first version).
+        last_changed_at:
+          $ref: '#/components/schemas/Timestamp'
+          description: When the plan was last changed (equals `created_at` while it has no changes).
+        changes:
+          type: integer
+          minimum: 0
+          description: Number of versions after the first one.
+        active:
+          type: boolean
+          description: True for the plan that holds the active version.
+        source:
+          $ref: '#/components/schemas/PlanSource'
+          description: Source of the latest version.
+        first_version:
+          type: integer
+          minimum: 1
+        latest_version:
+          type: integer
+          minimum: 1
+    PlanList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: Newest plan first.
+          items:
+            $ref: '#/components/schemas/PlanSummary'
     PlanVersionList:
       type: object
       required: [items]

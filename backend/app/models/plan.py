@@ -43,6 +43,7 @@ class Plan(Base):
         CheckConstraint(f"source IN {PLAN_SOURCES!r}", name="source"),
         CheckConstraint("version >= 1", name="version"),
         CheckConstraint("revision >= 0", name="revision"),
+        CheckConstraint("plan_no IS NULL OR plan_no >= 1", name="plan_no"),
         UniqueConstraint("athlete_id", "version", name="uq_plan_athlete_id_version"),
     )
 
@@ -63,6 +64,10 @@ class Plan(Base):
     # plans created before D105; every later version of a plan carries both forward.
     name: Mapped[str | None] = mapped_column(String(60))
     start_date: Mapped[dt.date | None] = mapped_column(Date)
+    # D106: number of the plan within the athlete; onboarding is 1, the New plan form starts the
+    # next one, every other version keeps it. Null for rows the previous release wrote: read it
+    # through `app.services.plans.plan_numbers`, never directly.
+    plan_no: Mapped[int | None] = mapped_column(Integer)
 
     training_days: Mapped[list["TrainingDay"]] = relationship(
         back_populates="plan", cascade="all, delete-orphan", order_by="TrainingDay.position"

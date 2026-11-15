@@ -173,6 +173,7 @@ function Editor({
               athleteId={me.id}
               units={me.units}
               timezone={me.timezone}
+              viewer={viewer}
             />
           </>
         )}

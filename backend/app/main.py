@@ -97,6 +97,7 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     api.include_router(foods.foods_router)
     api.include_router(foods.meals_router)
     api.include_router(plans.router)
+    api.include_router(plans.plans_router)
     api.include_router(calendar.router)
     api.include_router(logging.router)
     api.include_router(suggestions.router)

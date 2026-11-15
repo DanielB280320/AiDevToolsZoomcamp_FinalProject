@@ -32,6 +32,7 @@ const plan: Schemas["Plan"] = {
   id: "plan-1",
   athlete_id: ANA,
   version: 1,
+  plan_no: 1,
   source: "generated",
   active: true,
   revision: 3,

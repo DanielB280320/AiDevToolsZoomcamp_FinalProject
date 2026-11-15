@@ -1125,27 +1125,50 @@
       }
     },
     "history": {
-      "version": "Version {{version}}",
-      "active": "Active",
-      "date": "Date",
       "source": "Source",
-      "author": "Author",
       "sources": {
         "generated": "Generated",
         "custom": "Custom"
       },
-      "roles": {
-        "athlete": "Athlete",
-        "coach": "Coach",
+      "openButton": "Open",
+      "planFallback": "Plan {{number}}",
+      "current": "Current",
+      "started": "Started",
+      "created": "Created",
+      "changes": "Changes",
+      "changesValue_one": "{{count}} change",
+      "changesValue_other": "{{count}} changes",
+      "lastChange": "Last change",
+      "noChanges": "No changes since it was created.",
+      "openPlan": "Open {{name}}",
+      "backToPlans": "Back to plans",
+      "backToChanges": "Back to changes",
+      "timelineTitle": "Changes over time",
+      "timeline": "Changes of {{name}}",
+      "snapshotTitle": "{{name}} as it was on {{date}}",
+      "snapshotLabel": "{{name}} on {{date}}",
+      "openChange": "Open the plan as it was after: {{kind}}, {{date}}",
+      "readOnly": "Read-only: this is the plan as it was after this change. Nothing here can be edited.",
+      "failed": "Couldn't load the plan history.",
+      "empty": "There are no plans yet.",
+      "authors": {
+        "you": "You",
+        "client": "The client",
+        "athlete": "The athlete",
+        "coach": "Coach {{name}}",
+        "coachUnknown": "A coach",
         "unknown": "Unknown"
       },
-      "open": "Open version {{version}}",
-      "openButton": "Open",
-      "back": "Back to versions",
-      "viewing": "Version {{version}}",
-      "readOnly": "Read-only: you are viewing an older version. Nothing here can be edited.",
-      "failed": "Couldn't load the plan versions.",
-      "name": "Name"
+      "kinds": {
+        "created": "Plan created (onboarding)",
+        "created_new": "Plan created",
+        "training_edited": "Training edited",
+        "meals_edited": "Meals edited",
+        "regenerated": "Regenerated from the profile",
+        "suggestion_accepted": "Suggestion accepted",
+        "portions_rescaled": "Meal portions rescaled",
+        "unknown": "Plan changed"
+      }
     },
     "view": {
       "training": "Training",
@@ -1156,16 +1179,14 @@
       "meal": "{{slot}}: {{name}} ({{kcal}} kcal)"
     },
     "about": {
-      "athlete": "Your training and meal plan for the week. Create a new plan, adjust the training days and meals, and check earlier versions. Changes apply from today; past sessions and logs never change.",
+      "athlete": "Your training and meal plan for the week. Create a new plan, adjust the training days and meals, and check how a plan changed over time. Changes apply from today; past sessions and logs never change.",
       "coach": "The client's training and meal plan. Review it, edit the days and meals, or create a new plan for them. Changes apply from today; past sessions and logs never change."
     },
     "current": {
       "title": "Current plan",
-      "fallbackName": "Plan, version {{version}}",
+      "fallbackName": "Plan {{number}}",
       "startDate": "Started",
       "startDateValue": "{{date}} (week {{week}})",
-      "version": "Version",
-      "versionValue": "{{version}}, {{source}}",
       "lastChange": "Last change",
       "trainingDays": "Training days per week",
       "meals": "Planned meals",
@@ -1174,7 +1195,11 @@
       "review": {
         "athlete": "Review that the training days fit your week and that the meals match your goal, then edit them in the Training and Meals tabs.",
         "coach": "Review that the training days fit the client's week and that the meals match their goal, then edit them in the Training and Meals tabs."
-      }
+      },
+      "origin": "Type",
+      "changes": "Changes",
+      "changesValue_one": "{{count}} change since it was created",
+      "changesValue_other": "{{count}} changes since it was created"
     },
     "tabAbout": {
       "training": {
@@ -1186,8 +1211,8 @@
         "coach": "For each day add or replace the client's meals, choose the slot, adjust the portion or the grams, or swap a meal for a similar one, then press Save changes. Open a day to edit it."
       },
       "history": {
-        "athlete": "Every change to your plan is kept as a version. Open one to see what the plan was; versions are read-only, and the active one is the plan you follow.",
-        "coach": "Every change to the client's plan is kept as a version. Open one to see what the plan was; versions are read-only, and the active one is the plan the client follows."
+        "athlete": "Every plan you create is listed here. Open one to see its changes over time and open a change to see the plan as it was; earlier states are read-only, and the current plan is the one you follow.",
+        "coach": "Every plan created for the client is listed here. Open one to see its changes over time and open a change to see the plan as it was; earlier states are read-only, and the current plan is the one the client follows."
       }
     },
     "days": {

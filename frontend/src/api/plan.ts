@@ -12,6 +12,8 @@ export type MealSwap = Schemas["MealSwap"];
 export type TrainingPlanUpdate = Schemas["TrainingPlanUpdate"];
 export type MealPlanUpdate = Schemas["MealPlanUpdate"];
 export type PlanVersionSummary = Schemas["PlanVersionSummary"];
+export type PlanSummary = Schemas["PlanSummary"];
+export type PlanChangeSummary = Schemas["PlanChangeSummary"];
 export type Weekday = Schemas["Weekday"];
 export type Meal = Schemas["Meal"];
 export type MealInput = Schemas["MealInput"];
@@ -38,12 +40,29 @@ export function usePlan(athleteId: string) {
   });
 }
 
-export function usePlanVersions(athleteId: string) {
+/** One item per plan, newest first (D106). */
+export function usePlans(athleteId: string) {
   return useQuery({
-    queryKey: ["plan-versions", athleteId],
+    queryKey: ["plan-versions", athleteId, "plans"],
+    queryFn: async ({ signal }) => {
+      const { data, error, response } = await api.GET("/athletes/{athlete_id}/plans", {
+        params: { path: { athlete_id: athleteId } },
+        signal,
+      });
+      if (data) return data.items;
+      throw apiError(response, error);
+    },
+  });
+}
+
+/** The versions of one plan, newest first: its change timeline (D106). */
+export function usePlanVersions(athleteId: string, planNo: number | null) {
+  return useQuery({
+    queryKey: ["plan-versions", athleteId, "plan", planNo],
+    enabled: planNo !== null,
     queryFn: async ({ signal }) => {
       const { data, error, response } = await api.GET("/athletes/{athlete_id}/plan/versions", {
-        params: { path: { athlete_id: athleteId } },
+        params: { path: { athlete_id: athleteId }, query: { plan_no: planNo! } },
         signal,
       });
       if (data) return data.items;

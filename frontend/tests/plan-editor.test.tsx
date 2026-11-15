@@ -27,6 +27,7 @@ function planFixture(over: Partial<Schemas["Plan"]> = {}): Schemas["Plan"] {
     id: "plan-3",
     athlete_id: ATHLETE.id,
     version: 3,
+    plan_no: 1,
     source: "generated",
     active: true,
     revision: 4,
@@ -87,6 +88,7 @@ function fakePlan(
     put?: () => Response | undefined;
     post?: () => Response | undefined;
     versions?: Schemas["PlanVersionSummary"][];
+    plans?: Schemas["PlanSummary"][];
   } = {},
 ) {
   let current = options.plan ?? planFixture();
@@ -136,8 +138,14 @@ function fakePlan(
       };
       return HttpResponse.json(current, { status: 201 });
     }),
-    http.get(apiUrl("/athletes/:athleteId/plan/versions"), () =>
-      HttpResponse.json({ items: options.versions ?? [] }),
+    http.get(apiUrl("/athletes/:athleteId/plan/versions"), ({ request }) => {
+      const planNo = Number(new URL(request.url).searchParams.get("plan_no"));
+      return HttpResponse.json({
+        items: (options.versions ?? []).filter((v) => !planNo || v.plan_no === planNo),
+      });
+    }),
+    http.get(apiUrl("/athletes/:athleteId/plans"), () =>
+      HttpResponse.json({ items: options.plans ?? [] }),
     ),
     http.get(apiUrl("/exercises"), ({ request }) => {
       const q = new URL(request.url).searchParams.get("q")?.toLowerCase() ?? "";
@@ -758,7 +766,7 @@ describe("Plan editor: summary and descriptions (D105)", () => {
     ).toBeInTheDocument();
     expect(summary.getByText("Summer cut")).toBeInTheDocument();
     expect(summary.getByText(/\(week 2\)$/)).toBeInTheDocument();
-    expect(summary.getByText("3, Generated")).toBeInTheDocument();
+    expect(summary.getByText("Generated")).toBeInTheDocument();
     expect(summary.getByText("2 meals in 1 days")).toBeInTheDocument();
     expect(
       summary.getByText(/Review that the training days fit your week/),
@@ -769,14 +777,16 @@ describe("Plan editor: summary and descriptions (D105)", () => {
       screen.getByText(/For each day add meals or replace them/),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "History" }));
-    expect(screen.getByText(/versions are read-only/)).toBeInTheDocument();
+    expect(screen.getByText(/Every plan you create is listed here/)).toBeInTheDocument();
   });
 
-  it("falls back to the version when the plan has no name and omits the start date", async () => {
-    fakePlan();
+  it("falls back to the plan number, shows its changes and omits the start date", async () => {
+    fakePlan({ plans: [{ ...PLAN_ONE, changes: 5, plan_no: 1 }] });
     await openPlan();
     const summary = within(screen.getByTestId("plan-summary"));
-    expect(summary.getByText("Plan, version 3")).toBeInTheDocument();
+    expect(summary.getByText("Plan 1")).toBeInTheDocument();
+    expect(await summary.findByText("5 changes since it was created")).toBeInTheDocument();
+    expect(summary.queryByText(/version/i)).not.toBeInTheDocument();
     expect(summary.queryByText("Started")).not.toBeInTheDocument();
   });
 });
@@ -833,62 +843,152 @@ describe("Plan editor: progression methods (D105)", () => {
   });
 });
 
-describe("Plan editor: version history", () => {
-  const versions: Schemas["PlanVersionSummary"][] = [
+const PLAN_ONE: Schemas["PlanSummary"] = {
+  plan_no: 1,
+  name: null,
+  start_date: null,
+  created_at: "2026-10-01T08:00:00Z",
+  last_changed_at: "2026-10-01T08:00:00Z",
+  changes: 0,
+  active: true,
+  source: "generated",
+  first_version: 1,
+  latest_version: 1,
+};
+
+describe("Plan editor: history of plans (D106)", () => {
+  const change = (
+    kind: Schemas["PlanChangeSummary"]["kind"],
+    role: "athlete" | "coach",
+    at: string,
+  ): Schemas["PlanChangeSummary"] => ({
+    kind,
+    author_role: role,
+    author: role === "coach" ? COACH_REF : ATHLETE_REF,
+    at,
+  });
+  const version = (
+    n: number,
+    planNo: number,
+    summary: Schemas["PlanChangeSummary"],
+    over: Partial<Schemas["PlanVersionSummary"]> = {},
+  ): Schemas["PlanVersionSummary"] => ({
+    id: `plan-${n}`,
+    version: n,
+    plan_no: planNo,
+    change: summary,
+    source: "custom",
+    active: false,
+    name: null,
+    start_date: null,
+    created_by: summary.author,
+    created_at: summary.at,
+    ...over,
+  });
+  const versions = [
+    version(5, 2, change("training_edited", "coach", "2026-10-25T10:30:00Z"), { active: true, name: "Summer cut" }),
+    version(4, 2, change("created_new", "athlete", "2026-10-20T08:00:00Z"), { name: "Summer cut" }),
+    version(3, 1, change("suggestion_accepted", "athlete", "2026-10-15T08:00:00Z")),
+    version(2, 1, change("meals_edited", "athlete", "2026-10-10T08:00:00Z")),
+    version(1, 1, change("created", "athlete", "2026-10-01T08:00:00Z")),
+  ];
+  const plans: Schemas["PlanSummary"][] = [
     {
-      id: "plan-3",
-      version: 3,
-      source: "custom",
-      active: true,
-      name: null,
-      start_date: null,
-      created_by: COACH_REF,
-      created_at: "2026-10-25T10:30:00Z",
-    },
-    {
-      id: "plan-2",
-      version: 2,
-      source: "generated",
-      active: false,
-      name: null,
-      start_date: null,
-      created_by: ATHLETE_REF,
+      ...PLAN_ONE,
+      plan_no: 2,
+      name: "Summer cut",
+      start_date: "2026-10-20",
       created_at: "2026-10-20T08:00:00Z",
+      last_changed_at: "2026-10-25T10:30:00Z",
+      changes: 1,
+      source: "custom",
+      first_version: 4,
+      latest_version: 5,
     },
+    { ...PLAN_ONE, active: false, changes: 2, last_changed_at: "2026-10-15T08:00:00Z", latest_version: 3 },
   ];
 
-  it("lists the name of a version that has one", async () => {
-    fakePlan({ versions: [{ ...versions[0]!, name: "Summer cut" }, versions[1]!] });
+  it("lists one row per plan, newest first, with its changes and the current one marked", async () => {
+    fakePlan({ plans, versions });
     const user = await openPlan();
     await user.click(screen.getByRole("tab", { name: "History" }));
-    const items = await screen.findAllByRole("listitem");
-    expect(items.find((li) => li.textContent?.includes("Version 3"))).toHaveTextContent("Summer cut");
-    expect(items.find((li) => li.textContent?.includes("Version 2"))).not.toHaveTextContent("Name");
+    const rows = await within(await screen.findByRole("region", { name: "History" })).findAllByRole("listitem");
+    expect(rows).toHaveLength(2); // five versions, two plans
+    expect(rows[0]).toHaveTextContent("Summer cut");
+    expect(rows[0]).toHaveTextContent("Current");
+    expect(rows[0]).toHaveTextContent("1 change");
+    expect(rows[0]).toHaveTextContent("Oct 25, 2026, 11:30 AM");
+    expect(rows[1]).toHaveTextContent("Plan 1");
+    expect(rows[1]).toHaveTextContent("2 changes");
+    expect(rows[1]).not.toHaveTextContent("Current");
   });
 
-  it("lists versions with date, source and author role and opens one read-only", async () => {
-    fakePlan({ versions });
-    const old = planFixture({ id: "plan-2", version: 2, active: false, source: "generated" });
-    server.use(http.get(apiUrl("/athletes/:athleteId/plan/versions/:version"), () => HttpResponse.json(old)));
+  it("shows an athlete with one plan and five edits as one row with five changes", async () => {
+    fakePlan({ plans: [{ ...PLAN_ONE, changes: 5, latest_version: 6 }] });
     const user = await openPlan();
     await user.click(screen.getByRole("tab", { name: "History" }));
+    const rows = await within(await screen.findByRole("region", { name: "History" })).findAllByRole("listitem");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent("5 changes");
+  });
 
-    const items = await screen.findAllByRole("listitem");
-    const v3 = items.find((li) => li.textContent?.includes("Version 3"))!;
-    expect(v3).toHaveTextContent("Custom");
-    expect(v3).toHaveTextContent("Coach");
-    expect(v3).toHaveTextContent("Active");
-    expect(v3).toHaveTextContent("Oct 25, 2026, 11:30 AM");
-    const v2 = items.find((li) => li.textContent?.includes("Version 2"))!;
-    expect(v2).toHaveTextContent("Generated");
-    expect(v2).toHaveTextContent("Athlete");
+  it("opens a plan to its changes over time with author, time and kind", async () => {
+    fakePlan({ plans, versions });
+    const user = await openPlan();
+    await user.click(screen.getByRole("tab", { name: "History" }));
+    await user.click(await screen.findByRole("button", { name: "Open Plan 1" }));
+    const timeline = within(await screen.findByTestId("plan-timeline"));
+    const entries = await timeline.findAllByRole("listitem");
+    expect(entries.map((li) => li.querySelector("p")?.textContent)).toEqual([
+      "Suggestion accepted",
+      "Meals edited",
+      "Plan created (onboarding)",
+    ]);
+    expect(entries[0]).toHaveTextContent("Oct 15, 2026, 10:00 AM, You");
+    await user.click(screen.getByRole("button", { name: "Back to plans" }));
+    await user.click(await screen.findByRole("button", { name: "Open Summer cut" }));
+    const coachEntries = await within(await screen.findByTestId("plan-timeline")).findAllByRole("listitem");
+    expect(coachEntries[0]).toHaveTextContent("Training edited");
+    expect(coachEntries[0]).toHaveTextContent("Oct 25, 2026, 11:30 AM, Coach Coach Carla");
+    expect(coachEntries[1]).toHaveTextContent("Plan created");
+  });
 
-    await user.click(screen.getByRole("button", { name: "Open version 2" }));
+  it("says so when a plan has no changes yet", async () => {
+    fakePlan({
+      plans: [PLAN_ONE],
+      versions: [version(1, 1, change("created", "athlete", "2026-10-01T08:00:00Z"), { active: true })],
+    });
+    const user = await openPlan();
+    await user.click(screen.getByRole("tab", { name: "History" }));
+    await user.click(await screen.findByRole("button", { name: "Open Plan 1" }));
+    expect(await screen.findByText("No changes since it was created.")).toBeInTheDocument();
+    expect(within(screen.getByTestId("plan-timeline")).getAllByRole("listitem")).toHaveLength(1);
+  });
+
+  it("opens the plan as it was after a change, read-only", async () => {
+    fakePlan({ plans, versions });
+    const old = planFixture({ id: "plan-2", version: 2, active: false, source: "custom" });
+    let requested = "";
+    server.use(
+      http.get(apiUrl("/athletes/:athleteId/plan/versions/:version"), ({ params }) => {
+        requested = String(params.version);
+        return HttpResponse.json(old);
+      }),
+    );
+    const user = await openPlan();
+    await user.click(screen.getByRole("tab", { name: "History" }));
+    await user.click(await screen.findByRole("button", { name: "Open Plan 1" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Open the plan as it was after: Meals edited, Oct 10, 2026, 10:00 AM" }),
+    );
     expect(await screen.findByText(/Read-only/)).toBeInTheDocument();
-    const view = screen.getByRole("region", { name: "Version 2" });
+    expect(requested).toBe("2");
+    const view = screen.getByRole("region", { name: "Plan 1 on Oct 10, 2026, 10:00 AM" });
     expect(within(view).getByText(/Bench press/)).toBeInTheDocument();
     expect(within(view).queryAllByRole("textbox")).toHaveLength(0);
     expect(within(view).queryByRole("button", { name: /save|remove|add/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back to changes" }));
+    expect(await screen.findByTestId("plan-timeline")).toBeInTheDocument();
   });
 });
 

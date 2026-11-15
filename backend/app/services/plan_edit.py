@@ -34,6 +34,7 @@ from app.models import (
     MealDay,
     MealItem,
     Plan,
+    PlanChange,
     PlannedExercise,
     SetLog,
     Suggestion,
@@ -707,7 +708,15 @@ def create_plan(
     change = {"kind": "created_new", "start_from": body.start_from}
     if body.start_from == "generated":
         return _generated(
-            db, user, athlete_uuid, body.scope, now, change, name=body.name, start_date=start
+            db,
+            user,
+            athlete_uuid,
+            body.scope,
+            now,
+            change,
+            name=body.name,
+            start_date=start,
+            starts_plan=True,
         )
     old = _lock_active(db, athlete_uuid, None)
     _check_start_date(start, today)
@@ -723,6 +732,7 @@ def create_plan(
         change=change,
         name=body.name,
         start_date=start,
+        starts_plan=True,
     )
     _finish(db, athlete=athlete, author=user, old=old, new=new, now=now, planned_map={})
     db.commit()
@@ -732,11 +742,41 @@ def create_plan(
 # ───────────── versions ─────────────
 
 
-def _summary(plan: Plan, users: dict[uuid.UUID, User]) -> schemas.PlanVersionSummary:
+_KINDS = set(schemas.PlanChangeKind.__args__)  # type: ignore[attr-defined]
+
+
+def _changes(db: Session, plan_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, PlanChange]:
+    rows = db.scalars(
+        select(PlanChange).where(PlanChange.plan_id.in_(plan_ids)).order_by(PlanChange.created_at)
+    )
+    return {c.plan_id: c for c in rows}
+
+
+def _change_summary(
+    plan: Plan, change: PlanChange | None, users: dict[uuid.UUID, User]
+) -> dict[str, Any]:
+    author_id = change.author_id if change else plan.created_by
+    kind = str(change.change.get("kind")) if change else "unknown"
+    return {
+        "kind": kind if kind in _KINDS else "unknown",
+        "author_role": change.author_role if change else None,
+        "author": plans.user_ref(users[author_id]) if author_id in users else None,
+        "at": change.created_at if change else plan.created_at,
+    }
+
+
+def _summary(
+    plan: Plan,
+    number: int,
+    change: PlanChange | None,
+    users: dict[uuid.UUID, User],
+) -> schemas.PlanVersionSummary:
     return schemas.PlanVersionSummary.model_validate(
         {
             "id": plan.id,
             "version": plan.version,
+            "plan_no": number,
+            "change": _change_summary(plan, change, users),
             "source": plan.source,
             "active": plan.active,
             "name": plan.name,
@@ -747,13 +787,59 @@ def _summary(plan: Plan, users: dict[uuid.UUID, User]) -> schemas.PlanVersionSum
     )
 
 
-def list_versions(db: Session, athlete: uuid.UUID) -> schemas.PlanVersionList:
-    rows = list(
-        db.scalars(select(Plan).where(Plan.athlete_id == athlete).order_by(Plan.version.desc()))
-    )
-    ids = {p.created_by for p in rows if p.created_by}
+def list_versions(
+    db: Session, athlete: uuid.UUID, plan_no: int | None = None
+) -> schemas.PlanVersionList:
+    """Versions newest first with the change that produced each; `plan_no` keeps one plan's."""
+    numbers = plans.plan_numbers(db, athlete)
+    rows = [
+        p
+        for p in db.scalars(
+            select(Plan).where(Plan.athlete_id == athlete).order_by(Plan.version.desc())
+        )
+        if plan_no is None or numbers[p.version] == plan_no
+    ]
+    changes = _changes(db, [p.id for p in rows])
+    ids = {p.created_by for p in rows if p.created_by} | {
+        c.author_id for c in changes.values() if c.author_id
+    }
     users = {u.id: u for u in db.scalars(select(User).where(User.id.in_(ids)))}
-    return schemas.PlanVersionList(items=[_summary(p, users) for p in rows])
+    return schemas.PlanVersionList(
+        items=[_summary(p, numbers[p.version], changes.get(p.id), users) for p in rows]
+    )
+
+
+def list_plans(db: Session, athlete: uuid.UUID) -> schemas.PlanList:
+    """One item per plan, newest first (D106). The name and source are the latest version's."""
+    numbers = plans.plan_numbers(db, athlete)
+    versions = list(
+        db.scalars(select(Plan).where(Plan.athlete_id == athlete).order_by(Plan.version))
+    )
+    changes = _changes(db, [p.id for p in versions])
+    groups: dict[int, list[Plan]] = {}
+    for plan in versions:
+        groups.setdefault(numbers[plan.version], []).append(plan)
+
+    def when(plan: Plan) -> dt.datetime:
+        change = changes.get(plan.id)
+        return change.created_at if change else plan.created_at
+
+    items = [
+        schemas.PlanSummary(
+            plan_no=no,
+            name=group[-1].name,
+            start_date=group[-1].start_date,
+            created_at=when(group[0]),
+            last_changed_at=when(group[-1]),
+            changes=len(group) - 1,
+            active=any(p.active for p in group),
+            source=group[-1].source,  # type: ignore[arg-type]
+            first_version=group[0].version,
+            latest_version=group[-1].version,
+        )
+        for no, group in sorted(groups.items(), reverse=True)
+    ]
+    return schemas.PlanList(items=items)
 
 
 def get_version(db: Session, athlete: uuid.UUID, version: int) -> schemas.Plan:
@@ -773,6 +859,7 @@ def get_version(db: Session, athlete: uuid.UUID, version: int) -> schemas.Plan:
 __all__ = [
     "create_plan",
     "get_version",
+    "list_plans",
     "list_versions",
     "regenerate",
     "update_meals",
