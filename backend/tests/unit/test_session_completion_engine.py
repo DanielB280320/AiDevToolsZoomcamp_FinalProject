@@ -45,6 +45,13 @@ def test_negative_actual_is_rejected() -> None:
         completion([R(8, -1)])
 
 
+def test_nan_actual_is_rejected() -> None:
+    with pytest.raises(ValueError, match="non-negative"):
+        completion([R(8, float("nan"))])
+    with pytest.raises(ValueError, match="non-negative"):
+        completion([R(8, 8), R(8, float("nan"))])
+
+
 _sets = st.lists(
     st.builds(
         R,

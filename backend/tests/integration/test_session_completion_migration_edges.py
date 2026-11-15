@@ -157,3 +157,35 @@ def test_migration_rounds_a_half_like_the_application(fresh_database_url: str) -
         assert stored == pytest.approx(_recomputed(fresh_database_url, session), abs=1e-9)
     finally:
         engine.dispose()
+
+
+def test_migration_rounds_a_tie_from_non_terminating_shares_like_the_application(
+    fresh_database_url: str,
+) -> None:
+    """Sets done 1/3 and 2/3 of target plus 30 unlogged sets: (1/3 + 2/3) / 32 = 1/32 = 0.03125
+    exactly. The shares do not terminate in decimal, so the migration must round the tie
+    up (not miss it through representation error) to match the application's 0.0313."""
+    _upgrade_from_previous(fresh_database_url)
+    engine = create_engine(fresh_database_url)
+    try:
+        with engine.begin() as conn:
+            athlete = _user(conn, "qa")
+            plan, day = _plan_and_day(conn, athlete)
+            exercise = _exercise(conn, "strength")
+            _plan_row(conn, day, exercise, 8, reps=10, order=1)
+            for order in range(2, 5):
+                _plan_row(conn, day, _exercise(conn, "strength"), 8, reps=10, order=order)
+            session = _session(conn, athlete, plan, day, "2026-11-05", 0.01)
+            _log(conn, session, exercise, 1, target_reps=3, reps=1)
+            _log(conn, session, exercise, 2, target_reps=3, reps=2)
+
+        _upgrade_head(fresh_database_url)
+
+        with engine.begin() as conn:
+            stored = _stored(conn, session)
+        recomputed = _recomputed(fresh_database_url, session)
+        assert recomputed == pytest.approx(0.0313, abs=1e-9)
+        assert stored == pytest.approx(0.0313, abs=1e-9)
+        assert stored == pytest.approx(recomputed, abs=1e-9)
+    finally:
+        engine.dispose()
