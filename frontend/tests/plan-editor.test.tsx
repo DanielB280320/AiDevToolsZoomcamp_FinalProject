@@ -8,6 +8,7 @@ import { buildTrainingUpdate, draftFromPlan } from "../src/features/plan/trainin
 import { meFixture, meOk, problem } from "./mocks/fixtures";
 import { apiUrl } from "./mocks/handlers";
 import { server } from "./mocks/server";
+import { PLAN_GOAL } from "./mocks/planGoal";
 import { renderApp } from "./renderApp";
 
 type Schemas = components["schemas"];
@@ -33,6 +34,7 @@ function planFixture(over: Partial<Schemas["Plan"]> = {}): Schemas["Plan"] {
     revision: 4,
     name: null,
     start_date: null,
+    ...PLAN_GOAL,
     created_by: ATHLETE_REF,
     created_at: "2026-10-20T08:00:00Z",
     updated_at: "2026-10-20T08:00:00Z",
@@ -109,7 +111,13 @@ function fakePlan(
       calls.training.push(body);
       const failure = options.put?.();
       if (failure) return failure;
-      current = { ...current, revision: current.revision + 1, version: current.version + 1, source: "custom" };
+      current = {
+        ...current,
+        revision: current.revision + 1,
+        version: current.version + 1,
+        source: "custom",
+        ...(body.training_goal ? { training_goal: body.training_goal } : {}),
+      };
       return HttpResponse.json(current);
     }),
     http.put(apiUrl("/athletes/:athleteId/plan/meals"), async ({ request }) => {
@@ -132,6 +140,7 @@ function fakePlan(
         source: body.start_from === "generated" ? "generated" : "custom",
         name: body.name,
         start_date: body.start_date ?? null,
+        training_goal: body.training_goal ?? "hypertrophy",
         ...(body.start_from === "generated"
           ? {}
           : { training_days: [], meal_days: [] }),
@@ -189,12 +198,10 @@ describe("Plan editor: training", () => {
     const sets = screen.getAllByLabelText("Sets")[0]!;
     await user.clear(sets);
     await user.type(sets, "4");
-    await user.clear(screen.getAllByLabelText("Max reps (optional)")[0]!);
-    await user.type(screen.getAllByLabelText("Max reps (optional)")[0]!, "12");
+    await user.clear(screen.getAllByLabelText("Max reps")[0]!);
+    await user.type(screen.getAllByLabelText("Max reps")[0]!, "12");
     await user.clear(screen.getAllByLabelText("Weight (kg)")[0]!);
     await user.type(screen.getAllByLabelText("Weight (kg)")[0]!, "62.5");
-    await user.selectOptions(screen.getAllByLabelText("Progression")[0]!, "manual");
-    await user.click(screen.getAllByLabelText("Allow deload weeks")[0]!);
     await user.clear(screen.getAllByLabelText("Rest (seconds)")[0]!);
     await user.type(screen.getAllByLabelText("Rest (seconds)")[0]!, "120");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -213,10 +220,11 @@ describe("Plan editor: training", () => {
       target_weight_kg: 62.5,
       target_seconds: null,
       rest_seconds: 120,
-      rule: "manual",
+      rule: "double", // no longer edited in the app: sent back as it was (D107)
       increment_kg: 2.5,
-      deload_enabled: false,
+      deload_enabled: true,
     });
+    expect(day).not.toHaveProperty("training_goal"); // unchanged goal is not sent
     // The timed exercise keeps seconds only.
     expect(day.training_days[0]!.exercises[1]).toMatchObject({ id: "pe-plank", reps_min: null, target_weight_kg: null, target_seconds: 45 });
   });
@@ -289,8 +297,8 @@ describe("Plan editor: training", () => {
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     const reps = await screen.findByText("Set the target reps.");
-    expect(field("Reps")).toHaveAttribute("aria-describedby", reps.id);
-    expect(field("Reps")).toBeInvalid();
+    expect(field("Reps (min)")).toHaveAttribute("aria-describedby", reps.id);
+    expect(field("Reps (min)")).toBeInvalid();
     const seconds = screen.getByText("A timed exercise needs seconds.");
     expect(field("Seconds")).toHaveAttribute("aria-describedby", seconds.id);
     expect(screen.getByText("A timed exercise has seconds only.")).toBeInTheDocument();
@@ -559,6 +567,7 @@ describe("Plan editor: new plan (D105)", () => {
         start_date: TODAY,
         start_from: "empty",
         scope: "all",
+        training_goal: "cutting", // the default derived from the profile goal
       },
     ]);
     // The editor reloads with the new plan: the summary shows its name, and the days are gone.
@@ -598,6 +607,7 @@ describe("Plan editor: new plan (D105)", () => {
         start_date: "2026-09-01",
         start_from: "generated",
         scope: "training",
+        training_goal: "cutting",
       },
     ]);
   });
@@ -791,55 +801,114 @@ describe("Plan editor: summary and descriptions (D105)", () => {
   });
 });
 
-describe("Plan editor: progression methods (D105)", () => {
-  it("lists the three methods, increment and deload, collapsed under the tab description", async () => {
+describe("Plan editor: goal-driven progression (D107)", () => {
+  it("explains progression, effort and the disclaimer; the removed fields are gone", async () => {
     fakePlan();
     const user = await openPlan();
-    const toggle = screen.getByRole("button", { name: /Progression methods/ });
+    const toggle = screen.getByRole("button", { name: /How progression works/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // The disclaimer and the effort explanation are visible without opening the help.
+    expect(screen.getByTestId("progression-disclaimer")).toHaveTextContent(
+      /not a professional recommendation.*proper technique and professional supervision.*health conditions/,
+    );
+    expect(screen.getByTestId("effort-note")).toHaveTextContent(/heavy enough.*real effort/);
     await user.click(toggle);
-    const content = document.getElementById(
-      toggle.getAttribute("aria-controls")!,
-    )!;
+    const content = document.getElementById(toggle.getAttribute("aria-controls")!)!;
     expect(content).not.toHaveAttribute("hidden");
-    expect(
-      within(content).getByText(
-        /^Linear progression: one fixed number of reps/,
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(content).getByText(/^Double progression: a range of reps/),
-    ).toBeInTheDocument();
-    expect(
-      within(content).getByText(/^Manual: FitWise makes no suggestions/),
-    ).toBeInTheDocument();
-    expect(within(content).getByText(/^Increment:/)).toBeInTheDocument();
-    expect(
-      within(content).getByText(
-        /^Allow deload weeks: after 3 finished sessions in a row/,
-      ),
-    ).toBeInTheDocument();
+    expect(within(content).getByText(/^Rep range:/)).toBeInTheDocument();
+    expect(within(content).getByText(/^Heavier:/)).toBeInTheDocument();
+    expect(within(content).getByText(/^Deload:/)).toBeInTheDocument();
+    expect(within(content).getByText(/^Effort: the weight must be heavy enough/)).toBeInTheDocument();
+    for (const gone of ["Progression", /^Increment/, "Allow deload weeks"]) {
+      expect(screen.queryByLabelText(gone)).not.toBeInTheDocument();
+    }
   });
 
-  it("shows the meaning of the selected method under the select and follows the selection", async () => {
-    fakePlan();
+  it("shows the plan's goal and the recommended range under the reps, warning when outside it", async () => {
+    fakePlan({ plan: planFixture({ training_goal: "strength" }) });
     const user = await openPlan();
-    const rule = screen.getAllByLabelText("Progression")[0]!; // bench: double
-    const hint = () =>
-      document.getElementById(
-        rule.getAttribute("aria-describedby")!.split(" ")[0]!,
-      )!;
-    expect(hint()).toHaveTextContent(
-      /^Double: add reps until every set reaches the top/,
-    );
-    await user.selectOptions(rule, "Manual");
-    expect(hint()).toHaveTextContent(
-      "Manual: no suggestions; you change the targets yourself.",
-    );
-    await user.selectOptions(rule, "Linear");
-    expect(hint()).toHaveTextContent(
-      /^Linear: hit the fixed reps on every set/,
-    );
+    expect(screen.getByLabelText("Training goal")).toHaveValue("strength");
+    expect(screen.getByTestId("goal-detail")).toHaveTextContent("Heavy loads, few reps.");
+    const note = screen.getAllByTestId("rep-range")[0]!;
+    expect(note).toHaveTextContent("Recommended for this goal: 3 to 6 reps.");
+    // Bench is 8 to 10 reps: outside 3 to 6, but saving stays possible.
+    expect(within(note).getByRole("status")).toHaveTextContent("8 to 10 reps is outside the recommended 3 to 6");
+    await user.click(within(note).getByRole("button", { name: "Use 3 to 6 reps" }));
+    expect(screen.getAllByLabelText("Reps (min)")[0]).toHaveValue("3");
+    expect(screen.getAllByLabelText("Max reps")[0]).toHaveValue("6");
+    expect(within(screen.getAllByTestId("rep-range")[0]!).queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("does not block saving a plan that is outside the range", async () => {
+    const { calls } = fakePlan({ plan: planFixture({ training_goal: "strength" }) });
+    const user = await openPlan();
+    expect(within(screen.getAllByTestId("rep-range")[0]!).getByRole("status")).toBeInTheDocument();
+    await user.clear(screen.getAllByLabelText("Sets")[0]!);
+    await user.type(screen.getAllByLabelText("Sets")[0]!, "4");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(calls.training).toHaveLength(1));
+    expect(calls.training[0]!.training_days[0]!.exercises[0]).toMatchObject({ reps_min: 8, reps_max: 10 });
+  });
+
+  it("changing the goal offers the new range for all exercises, and saves the goal", async () => {
+    const { calls } = fakePlan(); // hypertrophy: 8 to 12
+    const user = await openPlan();
+    expect(screen.queryByTestId("goal-range-offer")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Training goal"), "Endurance");
+    const offer = screen.getByTestId("goal-range-offer");
+    expect(offer).toHaveTextContent("The recommended range for Endurance is 13 to 20 reps.");
+    await user.click(within(offer).getByRole("button", { name: "Apply 13 to 20 reps to all exercises" }));
+    expect(screen.queryByTestId("goal-range-offer")).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText("Reps (min)")[0]).toHaveValue("13");
+    expect(screen.getAllByLabelText("Max reps")[0]).toHaveValue("20");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(calls.training).toHaveLength(1));
+    const body = calls.training[0]!;
+    expect(body.training_goal).toBe("endurance");
+    const [bench, plank] = body.training_days[0]!.exercises;
+    expect(bench).toMatchObject({ reps_min: 13, reps_max: 20 });
+    expect(plank).toMatchObject({ reps_min: null, reps_max: null, target_seconds: 45 }); // timed: untouched
+  });
+
+  it("lets the athlete keep the current reps when the goal changes", async () => {
+    const { calls } = fakePlan();
+    const user = await openPlan();
+    await user.selectOptions(screen.getByLabelText("Training goal"), "Strength");
+    await user.click(within(screen.getByTestId("goal-range-offer")).getByRole("button", { name: "Keep the current reps" }));
+    expect(screen.queryByTestId("goal-range-offer")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(calls.training).toHaveLength(1));
+    expect(calls.training[0]!.training_goal).toBe("strength");
+    expect(calls.training[0]!.training_days[0]!.exercises[0]).toMatchObject({ reps_min: 8, reps_max: 10 });
+  });
+
+  it("starts a new exercise at the recommended range of the goal", async () => {
+    const { calls } = fakePlan({ plan: planFixture({ training_goal: "endurance" }) });
+    const user = await openPlan();
+    await user.type(screen.getAllByLabelText("Add exercise")[0]!, "squ");
+    await user.click(await screen.findByRole("button", { name: "Add Squat" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(calls.training).toHaveLength(1));
+    expect(calls.training[0]!.training_days[0]!.exercises[2]).toMatchObject({
+      exercise_id: "ex-squat",
+      reps_min: 13,
+      reps_max: 20,
+      rule: "double",
+    });
+  });
+
+  it("offers the training goal in the new plan form, defaulting to the profile goal", async () => {
+    const { calls } = fakePlan();
+    const user = await openPlan();
+    await user.click(screen.getByRole("button", { name: "New plan" }));
+    const form = screen.getByRole("form", { name: "New plan" });
+    const goal = within(form).getByLabelText("Training goal");
+    await waitFor(() => expect(goal).toHaveValue("cutting")); // the profile goal is cutting
+    await user.selectOptions(goal, "Strength");
+    await user.type(within(form).getByLabelText("Plan name"), "Heavy");
+    await user.click(within(form).getByRole("button", { name: "Create plan" }));
+    await screen.findByText("New plan created: Heavy.");
+    expect(calls.create[0]).toMatchObject({ name: "Heavy", training_goal: "strength" });
   });
 });
 

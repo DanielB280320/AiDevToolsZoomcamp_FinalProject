@@ -28,10 +28,13 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.engines import progression, progression_v2
+from app.engines import progression, progression_goal, progression_v2
 from app.engines.progression import LoggedSet, ProgressionInput
+from app.engines.progression_goal import GoalProgressionInput
 from app.errors import ProblemError
 from app.models import (
+    AthleteProfile,
+    BodyMetric,
     Exercise,
     Plan,
     PlannedExercise,
@@ -45,8 +48,13 @@ from app.schemas import suggestions as out
 from app.schemas.users import UserRef
 from app.services import adaptive_calories, athlete, body, notifications, portion_rescale
 from app.services.access import not_linked
-from app.services.clock import local_today
-from app.services.plans import NewPlannedExercise, NewTrainingDay, create_plan_version
+from app.services.clock import age_on, local_today
+from app.services.plans import (
+    NewPlannedExercise,
+    NewTrainingDay,
+    create_plan_version,
+    plan_training_goal,
+)
 from app.telemetry.metrics import SuggestionRule
 
 Engine = Callable[[ProgressionInput], progression.Suggestion]
@@ -165,6 +173,21 @@ def _is_first_session(db: Session, row: TrainingSession, exercise_id: uuid.UUID)
     return earlier is None
 
 
+def _body_weight(db: Session, user_id: uuid.UUID, day: dt.date) -> float | None:
+    """The athlete's latest logged weight on or before `day` (a step-sizing input, D107)."""
+    weight = db.scalar(
+        select(BodyMetric.weight_kg)
+        .where(
+            BodyMetric.user_id == user_id,
+            BodyMetric.date <= day,
+            BodyMetric.weight_kg.is_not(None),
+        )
+        .order_by(BodyMetric.date.desc())
+        .limit(1)
+    )
+    return None if weight is None else float(weight)
+
+
 def refresh_for_session(
     db: Session, user: User, session_id: uuid.UUID, engine_version: str, now: dt.datetime
 ) -> list[Row]:
@@ -185,6 +208,11 @@ def refresh_for_session(
     day = db.get(TrainingDay, session.training_day_id)
     assert day is not None  # noqa: S101 - FK guarantees it for a planned session
     planned_list = list(day.exercises)
+    plan = db.get(Plan, session.plan_id) if session.plan_id else None
+    profile = db.get(AthleteProfile, user.id)
+    goal = plan_training_goal(db, plan) if plan is not None else None
+    body_weight = _body_weight(db, user.id, session.date)
+    age = age_on(user.birth_date, session.date)
     exercises = {
         e.id: e
         for e in db.scalars(
@@ -224,6 +252,25 @@ def refresh_for_session(
         target_seconds = (
             first.target_seconds if first.target_seconds is not None else planned.target_seconds
         )
+        failures = _previous_failures(db, session, exercise.id)
+        first_session = _is_first_session(db, session, exercise.id)
+        goal_data = GoalProgressionInput(
+            goal=goal or progression_goal.default_training_goal(profile.goal if profile else None),
+            equipment=exercise.equipment,
+            sets_planned=planned.sets,
+            logged_sets=[LoggedSet(x.reps, x.weight_kg, x.seconds, True) for x in logs],
+            target_weight_kg=target_weight,
+            reps_min=target_reps,
+            reps_max=planned.reps_max,
+            rule=planned.rule,
+            consecutive_failures=failures,
+            is_first_session=first_session,
+            age_years=age,
+            experience=profile.experience if profile else None,
+            lifestyle=profile.lifestyle if profile else None,
+            body_weight_kg=body_weight,
+            imperial=user.units == "imperial",
+        )
         data = ProgressionInput(
             exercise_type=exercise.type,  # type: ignore[arg-type]
             rule=planned.rule,  # type: ignore[arg-type]
@@ -237,13 +284,16 @@ def refresh_for_session(
             target_seconds=target_seconds,
             increment_kg=planned.increment_kg,
             deload_enabled=planned.deload_enabled,
-            consecutive_failures=_previous_failures(db, session, exercise.id),
-            is_first_session=_is_first_session(db, session, exercise.id),
+            consecutive_failures=failures,
+            is_first_session=first_session,
             allows_added_weight=exercise.allows_added_weight,
             imperial=user.units == "imperial",
             region=exercise.region,
         )
-        result = engine(data)
+        # Weighted strength exercises follow the plan's training goal (D107); timed and
+        # bodyweight ones keep the per-type engine (flag `progression_engine`).
+        goal_driven = exercise.type == "strength"
+        result = progression_goal.suggest(goal_data) if goal_driven else engine(data)
         if result.action == "none":
             continue
         current = _targets(

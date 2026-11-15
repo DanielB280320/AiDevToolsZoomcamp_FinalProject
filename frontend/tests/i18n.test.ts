@@ -19,6 +19,14 @@ describe("i18n", () => {
     expect(section).toContain(`"${en.footer.disclaimer}"`);
   });
 
+  it("uses the spec §6.3 progression disclaimer verbatim in both places it is shown (D107)", async () => {
+    const spec = await readFile(new URL("../../docs/spec.md", import.meta.url), "utf8");
+    const section = spec.slice(spec.indexOf("### 6.3"), spec.indexOf("### 6.4"));
+
+    expect(section).toContain(`"${en.plan.progression.disclaimer}"`);
+    expect(en.suggestions.progressionDisclaimer).toBe(en.plan.progression.disclaimer);
+  });
+
   describe("eslint i18next/no-literal-string", () => {
     const eslint = new ESLint({ cwd: frontendDir });
     const lint = async (code: string) => {

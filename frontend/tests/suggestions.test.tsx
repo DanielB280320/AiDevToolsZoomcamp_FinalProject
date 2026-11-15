@@ -101,6 +101,15 @@ describe("Suggestions on Today", () => {
     expect(within(card).getByText(progression().reason)).toBeInTheDocument();
   });
 
+  it("shows the progression disclaimer with progression suggestions (spec 6.3, D107)", async () => {
+    fakeSuggestions([progression()]);
+    renderToday();
+    await screen.findByTestId("suggestion");
+    expect(screen.getByTestId("progression-disclaimer")).toHaveTextContent(
+      /not a professional recommendation and are informative only.*proper technique and professional supervision.*health conditions/,
+    );
+  });
+
   it("shows nothing when none are pending", async () => {
     fakeSuggestions([]);
     renderToday();
