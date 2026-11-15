@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 
 import type { components } from "../../src/api/schema";
 import { defaultCalendar, defaultDay } from "./calendar";
+import { PLAN_GOAL } from "./planGoal";
 
 type Schemas = components["schemas"];
 
@@ -69,6 +70,7 @@ export const handlers = [
       revision: 0,
       name: null,
       start_date: null,
+      ...PLAN_GOAL,
       created_by: { id: String(params.athleteId), display_name: "Ana", role: "athlete" },
       created_at: "2026-10-20T08:00:00Z",
       updated_at: "2026-10-20T08:00:00Z",

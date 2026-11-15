@@ -25,6 +25,7 @@ from typing import Any
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.engines.progression_goal import default_training_goal
 from app.errors import ProblemError
 from app.models import (
     AthleteProfile,
@@ -50,6 +51,7 @@ from app.services import athlete as athlete_service
 from app.services import meal_plans, plans
 from app.services.clock import local_today
 from app.services.plans import (
+    CARRY,
     NewMealDay,
     NewPlannedExercise,
     NewPlannedMeal,
@@ -420,6 +422,7 @@ def update_training(
             "days": len(new_days),
             "exercises": sum(len(d.exercises) for d in new_days),
         },
+        training_goal=CARRY if body.training_goal is None else body.training_goal,
     )
     planned_map: dict[uuid.UUID, uuid.UUID] = {}
     for day, created in zip(body.training_days, new.training_days, strict=True):
@@ -705,6 +708,8 @@ def create_plan(
     assert athlete is not None  # noqa: S101
     today = local_today(now, athlete.timezone)
     start = body.start_date or today
+    profile = db.get(AthleteProfile, athlete_uuid)
+    goal = body.training_goal or default_training_goal(profile.goal if profile else None)
     change = {"kind": "created_new", "start_from": body.start_from}
     if body.start_from == "generated":
         return _generated(
@@ -717,6 +722,7 @@ def create_plan(
             name=body.name,
             start_date=start,
             starts_plan=True,
+            training_goal=goal,
         )
     old = _lock_active(db, athlete_uuid, None)
     _check_start_date(start, today)
@@ -733,6 +739,7 @@ def create_plan(
         name=body.name,
         start_date=start,
         starts_plan=True,
+        training_goal=goal,
     )
     _finish(db, athlete=athlete, author=user, old=old, new=new, now=now, planned_map={})
     db.commit()

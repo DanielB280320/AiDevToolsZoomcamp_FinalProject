@@ -35,6 +35,7 @@ MEAL_SLOTS = ("breakfast", "lunch", "dinner", "snack")
 PLAN_SOURCES = ("generated", "custom")
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 PROGRESSION_RULES = ("linear", "double", "manual")
+TRAINING_GOALS = ("strength", "hypertrophy", "endurance", "maintenance", "cutting")
 
 
 class Plan(Base):
@@ -44,6 +45,9 @@ class Plan(Base):
         CheckConstraint("version >= 1", name="version"),
         CheckConstraint("revision >= 0", name="revision"),
         CheckConstraint("plan_no IS NULL OR plan_no >= 1", name="plan_no"),
+        CheckConstraint(
+            f"training_goal IS NULL OR training_goal IN {TRAINING_GOALS!r}", name="training_goal"
+        ),
         UniqueConstraint("athlete_id", "version", name="uq_plan_athlete_id_version"),
     )
 
@@ -68,6 +72,10 @@ class Plan(Base):
     # next one, every other version keeps it. Null for rows the previous release wrote: read it
     # through `app.services.plans.plan_numbers`, never directly.
     plan_no: Mapped[int | None] = mapped_column(Integer)
+    # D107: what the plan trains for (drives rep ranges and progression, not calories). Carried to
+    # every later version of the plan. Null for plans created before D107: read it through
+    # `app.services.plans.plan_training_goal`, which falls back to the profile-goal default.
+    training_goal: Mapped[str | None] = mapped_column(String(16))
 
     training_days: Mapped[list["TrainingDay"]] = relationship(
         back_populates="plan", cascade="all, delete-orphan", order_by="TrainingDay.position"

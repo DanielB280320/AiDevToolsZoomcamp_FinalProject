@@ -7,6 +7,7 @@ import type { components } from "../src/api/schema";
 import en from "../src/i18n/en.json";
 import { dayViewFixture, sessionFixture } from "./mocks/calendar";
 import { meFixture, meOk } from "./mocks/fixtures";
+import { PLAN_GOAL } from "./mocks/planGoal";
 import { apiUrl } from "./mocks/handlers";
 import { server } from "./mocks/server";
 import { renderApp } from "./renderApp";
@@ -278,6 +279,7 @@ describe("'edited by' labels", () => {
     revision: 2,
     name: null,
     start_date: null,
+    ...PLAN_GOAL,
     created_by: { id: "c-1", display_name: "Cleo", role: "coach" },
     created_at: "2026-10-20T08:00:00Z",
     updated_at: "2026-10-20T08:00:00Z",

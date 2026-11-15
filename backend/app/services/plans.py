@@ -17,9 +17,12 @@ from typing import Any
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
+from app.engines.constants import TRAINING_GOAL_REP_RANGES
 from app.engines.exercise_kcal import duration_minutes, set_based_minutes
+from app.engines.progression_goal import resolve_training_goal
 from app.errors import ProblemError
 from app.models import (
+    AthleteProfile,
     Exercise,
     MealDay,
     Plan,
@@ -43,6 +46,15 @@ class _Carry:
 
 
 CARRY: Any = _Carry()
+
+
+def plan_training_goal(session: Session, plan: Plan) -> str:
+    """The plan's training goal (D107): the stored one, or the default from the profile goal for a
+    plan that has none (created before D107, or written by the previous release)."""
+    if plan.training_goal is not None:
+        return resolve_training_goal(plan.training_goal, None)
+    profile = session.get(AthleteProfile, plan.athlete_id)
+    return resolve_training_goal(None, profile.goal if profile else None)
 
 
 def plan_numbers(session: Session, athlete_id: uuid.UUID) -> dict[int, int]:
@@ -135,6 +147,7 @@ def create_plan_version(
     name: str | _Carry | None = CARRY,
     start_date: dt.date | _Carry | None = CARRY,
     starts_plan: bool = False,
+    training_goal: str | _Carry | None = CARRY,
 ) -> Plan:
     """Store `days` as the athlete's next plan version and make it the active one.
 
@@ -151,6 +164,7 @@ def create_plan_version(
     `name` and `start_date` (D105) are carried forward from the previous active version unless
     given (`createPlan` gives them; `None` clears). `plan_no` (D106) is the previous version's plan
     number, or the next one when `starts_plan` (onboarding is plan 1, `createPlan` starts the next).
+    `training_goal` (D107) is carried forward like `name` unless given.
     """
     session.execute(select(User.id).where(User.id == athlete_id).with_for_update()).one()
     previous = session.scalar(
@@ -160,6 +174,8 @@ def create_plan_version(
         name = previous.name if previous else None
     if not isinstance(start_date, dt.date) and start_date is CARRY:
         start_date = previous.start_date if previous else None
+    if not isinstance(training_goal, str) and training_goal is CARRY:
+        training_goal = previous.training_goal if previous else None
     if meal_days is None:
         meal_days = (
             []
@@ -197,6 +213,7 @@ def create_plan_version(
         name=name,
         start_date=start_date,
         plan_no=plan_no,
+        training_goal=training_goal,
     )
     for day_order, day in enumerate(days):
         training_day = TrainingDay(
@@ -318,6 +335,11 @@ def plan_view(session: Session, plan: Plan, warnings: Sequence[str] = ()) -> out
             "revision": plan.revision,
             "name": plan.name,
             "start_date": plan.start_date,
+            "training_goal": plan_training_goal(session, plan),
+            "rep_ranges": {
+                goal: {"reps_min": low, "reps_max": high}
+                for goal, (low, high) in TRAINING_GOAL_REP_RANGES.items()
+            },
             "created_by": user_ref(users[plan.created_by]) if plan.created_by else None,
             "created_at": plan.created_at,
             "updated_at": plan.updated_at,

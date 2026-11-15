@@ -3,9 +3,9 @@ import { useTranslation } from "react-i18next";
 
 import { ChevronDownIcon, LightbulbIcon } from "../../components/icons";
 
-const TOPICS = ["linear", "double", "manual", "increment", "deload"] as const;
+const TOPICS = ["range", "increase", "hold", "deload", "effort"] as const;
 
-/** Collapsible explanation of the progression methods, increment and deload (F11, D105). */
+/** Collapsible explanation of goal-driven progression, with the disclaimer always visible (F11, D107, spec 6.3). */
 export function ProgressionHelp() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -32,6 +32,9 @@ export function ProgressionHelp() {
           />
         </button>
       </h3>
+      <p className="text-step--1 font-semibold" data-testid="progression-disclaimer">
+        {t("plan.progression.disclaimer")}
+      </p>
       <div id="progression-help-content" hidden={!open}>
         <p className="text-step--1 text-slate">{t("plan.progression.lead")}</p>
         <ul className="mt-2 flex list-disc flex-col gap-2 pl-5 text-step--1">

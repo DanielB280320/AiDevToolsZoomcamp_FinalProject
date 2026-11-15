@@ -400,6 +400,7 @@
   },
   "suggestions": {
     "title": "Suggestions",
+    "progressionDisclaimer": "These suggestions are not a professional recommendation and are informative only. Exercises need proper technique and professional supervision, and whether a weight or rep range suits you depends on your health conditions.",
     "loadFailed": "FitWise couldn't load your suggestions.",
     "change": "Old targets to new targets",
     "accept": "Accept",
@@ -1061,21 +1062,14 @@
         "timed": "Timed"
       },
       "sets": "Sets",
-      "repsMin": "Reps",
-      "repsMax": "Max reps (optional)",
-      "repsMaxHint": "Leave empty for fixed reps, fill for a range.",
+      "repsMin": "Reps (min)",
+      "repsMax": "Max reps",
+      "repsMaxHint": "Top of the range. Leave empty for a fixed number of reps.",
       "weight": "Weight ({{unit}})",
       "weightHint": "Leave empty to choose a weight at the first session.",
       "seconds": "Seconds",
       "rest": "Rest (seconds)",
-      "rule": "Progression",
-      "rules": {
-        "linear": "Linear",
-        "double": "Double progression",
-        "manual": "Manual"
-      },
-      "increment": "Increment ({{unit}})",
-      "deload": "Allow deload weeks"
+      "effort": "Pick a weight heavy enough that finishing the reps in every set takes real effort."
     },
     "meals": {
       "empty": "No meals planned.",
@@ -1257,18 +1251,38 @@
       }
     },
     "progression": {
-      "title": "Progression methods",
-      "lead": "How the weight and reps of an exercise are suggested as you train. A suggestion is never applied by itself: you accept or reject it.",
-      "linear": "Linear progression: one fixed number of reps. When every working set reaches it at the planned weight, the next session suggests the weight plus the increment.",
-      "double": "Double progression: a range of reps. First add reps at the same weight until every working set reaches the top of the range; then the weight goes up by the increment and the reps restart at the bottom.",
-      "manual": "Manual: FitWise makes no suggestions for this exercise. You change the targets yourself.",
-      "increment": "Increment: how much weight is added when the method suggests going up.",
-      "deload": "Allow deload weeks: after 3 finished sessions in a row below the target at the same weight, FitWise may suggest a lighter weight (90 % of it, rounded down to the plate step) and then starts counting again.",
-      "hint": {
-        "linear": "Linear: hit the fixed reps on every set and the next session suggests the weight plus the increment.",
-        "double": "Double: add reps until every set reaches the top of the range, then the weight goes up by the increment and the reps restart at the bottom.",
-        "manual": "Manual: no suggestions; you change the targets yourself."
-      }
+      "title": "How progression works",
+      "lead": "FitWise suggests the next weight and reps from the sets you log, using the training goal of this plan. A suggestion is never applied by itself: you accept or reject it.",
+      "range": "Rep range: you work inside the range for your goal. Add reps at the same weight until every set reaches the top of the range.",
+      "increase": "Heavier: when every set reaches the top of the range, the weight goes up and the reps restart at the bottom. The step depends on the plates of the equipment, your experience, age, lifestyle, body weight and the goal.",
+      "hold": "Maintenance and cutting: the weight is held and only reps are added; FitWise never suggests a heavier weight for these goals.",
+      "deload": "Deload: after 3 finished sessions in a row below the bottom of the range at the same weight, FitWise suggests a lighter weight (90 % of it, rounded down to the plate step) and starts counting again.",
+      "effort": "Effort: the weight must be heavy enough that completing the reps of the range in every set takes real effort. If the last reps feel easy, choose a heavier weight; if you can't reach the bottom of the range with good technique, choose a lighter one.",
+      "disclaimer": "These suggestions are not a professional recommendation and are informative only. Exercises need proper technique and professional supervision, and whether a weight or rep range suits you depends on your health conditions."
+    },
+    "goal": {
+      "label": "Training goal",
+      "hint": "What this plan trains for. It sets the rep range and how progression suggestions work; your profile goal still sets calories.",
+      "options": {
+        "strength": "Strength",
+        "hypertrophy": "Hypertrophy (muscle size)",
+        "endurance": "Endurance",
+        "maintenance": "Maintenance",
+        "cutting": "Cutting"
+      },
+      "details": {
+        "strength": "Heavy loads, few reps.",
+        "hypertrophy": "Moderate loads and reps: the usual range to build muscle.",
+        "endurance": "Lighter loads, many reps.",
+        "maintenance": "Keep what you have: the weight is held and only reps are added.",
+        "cutting": "Keep muscle while eating less: the weight is held and only reps are added."
+      },
+      "range": "Recommended for this goal: {{min}} to {{max}} reps.",
+      "outOfRange": "{{min}} to {{max}} reps is outside the recommended {{low}} to {{high}} for this goal. You can still save it.",
+      "applyRange": "Use {{min}} to {{max}} reps",
+      "applyAll": "Apply {{min}} to {{max}} reps to all exercises",
+      "changed": "The recommended range for {{goal}} is {{min}} to {{max}} reps.",
+      "keep": "Keep the current reps"
     }
   },
   "notes": {

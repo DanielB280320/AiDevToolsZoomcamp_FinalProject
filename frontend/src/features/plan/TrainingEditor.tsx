@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { isApiError } from "../../api/errors";
 import { useExerciseSearch, type Exercise } from "../../api/onboarding";
-import { type Plan, type ProgressionRule, useSaveTraining, WEEKDAYS, type Weekday } from "../../api/plan";
+import { type Plan, useSaveTraining, WEEKDAYS, type Weekday } from "../../api/plan";
 import { type UnitSystem, weightUnit } from "../../lib/units";
 import {
   BUTTON,
@@ -14,9 +14,12 @@ import {
 } from "./fields";
 import { DayRow } from "./DayRow";
 import { DuplicateDay } from "./DuplicateDay";
+import { GoalSelect } from "./GoalSelect";
 import { ProgressionHelp } from "./ProgressionHelp";
 import { SaveBar } from "./SaveBar";
+import { outsideRange, type RepRange, type TrainingGoal } from "./trainingGoal";
 import {
+  applyRepRange,
   buildTrainingUpdate,
   type LocalError,
   dayPath,
@@ -30,8 +33,6 @@ import {
   newDraftDay,
   newDraftExercise,
 } from "./trainingDraft";
-
-const RULES: ProgressionRule[] = ["linear", "double", "manual"];
 
 export interface EditorProps {
   plan: Plan;
@@ -47,7 +48,7 @@ export interface EditorProps {
   onDirtyChange: (dirty: boolean) => void;
 }
 
-function ExercisePicker({ units, onPick }: { units: UnitSystem; onPick: (e: DraftExercise) => void }) {
+function ExercisePicker({ units, range, onPick }: { units: UnitSystem; range: RepRange; onPick: (e: DraftExercise) => void }) {
   const { t } = useTranslation();
   const [text, setText] = useState("");
   const inputId = useId();
@@ -64,7 +65,7 @@ function ExercisePicker({ units, onPick }: { units: UnitSystem; onPick: (e: Draf
               <button
                 type="button"
                 onClick={() => {
-                  onPick(newDraftExercise(exercise, units));
+                  onPick(newDraftExercise(exercise, units, range));
                   setText("");
                 }}
                 aria-label={t("plan.training.addNamed", { name: exercise.name })}
@@ -89,6 +90,7 @@ function ExerciseCard({
   exercise,
   count,
   units,
+  range,
   error,
   onChange,
   onMove,
@@ -99,6 +101,7 @@ function ExerciseCard({
   exercise: DraftExercise;
   count: number;
   units: UnitSystem;
+  range: RepRange;
   error: (path: string) => string | undefined;
   onChange: (patch: Partial<DraftExercise>) => void;
   onMove: (delta: -1 | 1) => void;
@@ -110,6 +113,7 @@ function ExerciseCard({
   const kg = weightUnit(units);
   const timed = exercise.type === "timed";
   const own = error(exercisePath(d, x));
+  const outside = !timed && outsideRange(exercise.repsMin, exercise.repsMax, range);
   return (
     <li className="border-2 border-iron/30 p-3">
       <div className="flex items-start justify-between gap-2">
@@ -132,31 +136,34 @@ function ExerciseCard({
       {own && <FieldError id={id("error")}>{own}</FieldError>}
       <div className="mt-2 grid grid-cols-2 gap-3">
         <TextInput id={id("sets")} label={t("plan.training.sets")} value={exercise.sets} inputMode="numeric" onChange={(sets) => onChange({ sets })} error={error(at(FIELD.sets))} />
+        <TextInput id={id("rest")} label={t("plan.training.rest")} value={exercise.rest} inputMode="numeric" onChange={(rest) => onChange({ rest })} error={error(at(FIELD.rest))} />
         {timed ? (
           <TextInput id={id("seconds")} label={t("plan.training.seconds")} value={exercise.seconds} inputMode="numeric" onChange={(seconds) => onChange({ seconds })} error={error(at(FIELD.seconds))} />
         ) : (
           <>
             <TextInput id={id("repsMin")} label={t("plan.training.repsMin")} value={exercise.repsMin} inputMode="numeric" onChange={(repsMin) => onChange({ repsMin })} error={error(at(FIELD.repsMin))} />
             <TextInput id={id("repsMax")} label={t("plan.training.repsMax")} value={exercise.repsMax} inputMode="numeric" onChange={(repsMax) => onChange({ repsMax })} error={error(at(FIELD.repsMax))} hint={t("plan.training.repsMaxHint")} />
+            <div className="col-span-2" data-testid="rep-range">
+              <p className="text-step--1 text-slate">{t("plan.goal.range", { min: range.reps_min, max: range.reps_max })}</p>
+              {outside && (
+                <div role="status" className="mt-1 border-l-4 border-alert pl-3">
+                  <p className="text-step--1 font-semibold">
+                    {t("plan.goal.outOfRange", { min: exercise.repsMin, max: exercise.repsMax || exercise.repsMin, low: range.reps_min, high: range.reps_max })}
+                  </p>
+                  <button
+                    type="button"
+                    className={`${BUTTON} mt-1`}
+                    onClick={() => onChange({ repsMin: String(range.reps_min), repsMax: String(range.reps_max) })}
+                  >
+                    {t("plan.goal.applyRange", { min: range.reps_min, max: range.reps_max })}
+                  </button>
+                </div>
+              )}
+            </div>
             <TextInput id={id("weight")} label={t("plan.training.weight", { unit: kg })} value={exercise.weight} inputMode="decimal" onChange={(weight) => onChange({ weight })} error={error(at(FIELD.weight))} hint={t("plan.training.weightHint")} />
           </>
         )}
-        <TextInput id={id("rest")} label={t("plan.training.rest")} value={exercise.rest} inputMode="numeric" onChange={(rest) => onChange({ rest })} error={error(at(FIELD.rest))} />
-        <SelectInput
-          id={id("rule")}
-          label={t("plan.training.rule")}
-          value={exercise.rule}
-          onChange={(rule) => onChange({ rule: rule as ProgressionRule })}
-          options={RULES.map((rule) => ({ value: rule, label: t(`plan.training.rules.${rule}`) }))}
-          error={error(at(FIELD.rule))}
-          hint={t(`plan.progression.hint.${exercise.rule}`)}
-        />
-        <TextInput id={id("increment")} label={t("plan.training.increment", { unit: kg })} value={exercise.increment} inputMode="decimal" onChange={(increment) => onChange({ increment })} error={error(at(FIELD.increment))} />
       </div>
-      <label className="mt-3 flex min-h-12 items-center gap-3 font-semibold">
-        <input type="checkbox" checked={exercise.deload} onChange={(event) => onChange({ deload: event.target.checked })} className="size-6" />
-        {t("plan.training.deload")}
-      </label>
     </li>
   );
 }
@@ -175,7 +182,13 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
   // Days are collapsed by default; a day opens when it is added or when it has an error (D105).
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const save = useSaveTraining(athleteId);
-  const dirty = JSON.stringify(days) !== initial;
+  // The plan's training goal (D107); the goal select is part of the draft and saved with it.
+  const [goal, setGoal] = useState<TrainingGoal>(plan.training_goal);
+  const [offerFor, setOfferFor] = useState<TrainingGoal | null>(null);
+  const range = plan.rep_ranges[goal];
+  const goalChanged = goal !== plan.training_goal;
+  const dirty = JSON.stringify(days) !== initial || goalChanged;
+  const anyOutside = days.some((day) => day.exercises.some((e) => e.type !== "timed" && outsideRange(e.repsMin, e.repsMax, range)));
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
 
   const error = (path: string): string | undefined => (local[path] ? t(`plan.errors.${local[path]}`) : server[path]);
@@ -200,7 +213,7 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
     patchDay(d, { exercises: days[d]!.exercises.map((e, i) => (i === x ? { ...e, ...patch } : e)) });
 
   const onSave = () => {
-    const built = buildTrainingUpdate(days, conflict ? plan.revision : baseRevision, units);
+    const built = buildTrainingUpdate(days, conflict ? plan.revision : baseRevision, units, goalChanged ? goal : undefined);
     if (!built.body) {
       setLocal(built.errors);
       openWithErrors(built.errors);
@@ -229,7 +242,42 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
 
   return (
     <section aria-label={t("plan.tabs.training")}>
+      <div className="mt-3">
+        <GoalSelect
+          id="plan-training-goal"
+          value={goal}
+          onChange={(next) => {
+            setGoal(next);
+            setOfferFor(next);
+          }}
+        />
+        {offerFor === goal && anyOutside && (
+          <div role="status" className="mt-2 border-l-4 border-iron pl-3" data-testid="goal-range-offer">
+            <p className="text-step--1 font-semibold">
+              {t("plan.goal.changed", { goal: t(`plan.goal.options.${goal}`), min: range.reps_min, max: range.reps_max })}
+            </p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={BUTTON}
+                onClick={() => {
+                  edit(applyRepRange(days, range));
+                  setOfferFor(null);
+                }}
+              >
+                {t("plan.goal.applyAll", { min: range.reps_min, max: range.reps_max })}
+              </button>
+              <button type="button" className={BUTTON} onClick={() => setOfferFor(null)}>
+                {t("plan.goal.keep")}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
       <ProgressionHelp />
+      <p className="mt-3 text-step--1 text-slate" data-testid="effort-note">
+        {t("plan.training.effort")}
+      </p>
       {days.length === 0 && (
         <p className="text-slate">{t("plan.training.empty")}</p>
       )}
@@ -310,6 +358,7 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
                     exercise={exercise}
                     count={day.exercises.length}
                     units={units}
+                    range={range}
                     error={error}
                     onChange={(patch) => patchExercise(d, x, patch)}
                     onMove={(delta) => patchDay(d, { exercises: move(day.exercises, x, delta) })}
@@ -330,6 +379,7 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
               />
               <ExercisePicker
                 units={units}
+                range={range}
                 onPick={(e) =>
                   patchDay(d, { exercises: [...day.exercises, e] })
                 }

@@ -1950,7 +1950,9 @@ export interface components {
         /** @enum {string} */
         PlanSource: "generated" | "custom";
         /**
-         * @description Bodyweight and timed exercises progress by their type (F11) unless `manual`.
+         * @description Kept for compatibility (D107): the app no longer edits it (new exercises are `double`). `manual` still
+         *     turns suggestions off. Weighted strength exercises otherwise progress by the plan's `training_goal`;
+         *     bodyweight and timed ones progress by their type (F11).
          * @enum {string}
          */
         ProgressionRule: "linear" | "double" | "manual";
@@ -1971,9 +1973,12 @@ export interface components {
             /** @default 90 */
             rest_seconds: number;
             rule: components["schemas"]["ProgressionRule"];
-            /** @description Defaults to the exercise's increment. */
+            /** @description Defaults to the exercise's increment. Kept for compatibility (D107); weighted strength exercises size the step from the plate step, the goal and the athlete instead. */
             increment_kg?: number;
-            /** @default true */
+            /**
+             * @description Kept for compatibility (D107); the engine deloads after 3 failing sessions regardless.
+             * @default true
+             */
             deload_enabled: boolean;
         };
         PlannedExercise: {
@@ -2083,6 +2088,8 @@ export interface components {
              * @description Label set when the plan was created (D105); null for older plans.
              */
             start_date: string | null;
+            training_goal: components["schemas"]["TrainingGoal"];
+            rep_ranges: components["schemas"]["RepRanges"];
             /** @description Null once the author (a linked coach) has deleted their account. */
             created_by: components["schemas"]["UserRef"] | null;
             created_at: components["schemas"]["Timestamp"];
@@ -2092,8 +2099,30 @@ export interface components {
             meal_days: components["schemas"]["MealDay"][];
             warnings: string[];
         };
+        /**
+         * @description What the plan trains for (D107). It selects the recommended rep range and how the progression engine
+         *     moves weight and reps; the profile goal keeps driving calories. Plans created before D107 return the
+         *     default derived from the profile goal (muscle gain and recomposition hypertrophy, cutting cutting,
+         *     maintenance maintenance, wellness endurance).
+         * @enum {string}
+         */
+        TrainingGoal: "strength" | "hypertrophy" | "endurance" | "maintenance" | "cutting";
+        RepRange: {
+            reps_min: number;
+            reps_max: number;
+        };
+        /** @description Recommended rep range per training goal (D107), the single source for the clients. */
+        RepRanges: {
+            strength: components["schemas"]["RepRange"];
+            hypertrophy: components["schemas"]["RepRange"];
+            endurance: components["schemas"]["RepRange"];
+            maintenance: components["schemas"]["RepRange"];
+            cutting: components["schemas"]["RepRange"];
+        };
         TrainingPlanUpdate: {
             revision: number;
+            /** @description Omitted keeps the plan's goal. The exercises are stored as sent; the app applies the recommended range to them when the athlete asks for it. */
+            training_goal?: components["schemas"]["TrainingGoal"] | null;
             training_days: components["schemas"]["TrainingDayInput"][];
         };
         MealPlanUpdate: {
@@ -2126,6 +2155,8 @@ export interface components {
              * @enum {string}
              */
             scope: "all" | "training" | "meals";
+            /** @description Omitted or null derives the default from the profile goal (D107). */
+            training_goal?: components["schemas"]["TrainingGoal"] | null;
         };
         PlanVersionSummary: {
             id: components["schemas"]["Id"];

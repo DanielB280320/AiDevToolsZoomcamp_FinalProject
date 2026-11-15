@@ -50,6 +50,11 @@ export function PendingSuggestions({
         </p>
       )}
       {pending.data.length === 0 && <p className="mt-1 text-slate">{emptyMessage}</p>}
+      {pending.data.some((s) => s.kind === "progression") && (
+        <p className="mt-1 text-step--1 font-semibold" data-testid="progression-disclaimer">
+          {t("suggestions.progressionDisclaimer")}
+        </p>
+      )}
       <ul className="mt-1">
         {pending.data.map((suggestion) => (
           <SuggestionCard key={suggestion.id} suggestion={suggestion} units={units} />

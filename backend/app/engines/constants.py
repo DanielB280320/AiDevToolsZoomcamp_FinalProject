@@ -106,6 +106,64 @@ MIN_WEIGHT_LB_DISPLAY_BY_EQUIPMENT: dict[str, float] = {"barbell": 45.0}
 DELOAD_FAILING_SESSIONS = 3
 # F11 deload weight = this share of the current weight, rounded down to the plate step.
 DELOAD_FACTOR = 0.9
+# F11 / D107 goal-driven progression. The plan's training goal (not the profile goal, which keeps
+# driving calories) selects the rep range and how weight grows.
+TRAINING_GOALS = ("strength", "hypertrophy", "endurance", "maintenance", "cutting")
+# Default training goal derived from the profile goal when the plan has none.
+TRAINING_GOAL_BY_PROFILE_GOAL: dict[str, str] = {
+    "muscle_gain": "hypertrophy",
+    "cutting": "cutting",
+    "maintenance": "maintenance",
+    "recomposition": "hypertrophy",
+    "wellness": "endurance",
+}
+TRAINING_GOAL_DEFAULT = "hypertrophy"
+# Recommended (reps_min, reps_max) per training goal.
+TRAINING_GOAL_REP_RANGES: dict[str, tuple[int, int]] = {
+    "strength": (3, 6),
+    "hypertrophy": (8, 12),
+    "endurance": (13, 20),
+    "maintenance": (6, 12),
+    "cutting": (8, 12),
+}
+# Goals that keep the weight and deload only when the athlete fails (never raise the load).
+PROGRESSION_HOLD_GOALS = frozenset({"maintenance", "cutting"})
+# Share of the current weight added when every set reached the top of the range, before the
+# experience / age / lifestyle / body-weight factors below. The result is rounded to the plate
+# step, is at least one step and at most PROGRESSION_MAX_STEP_PCT of the weight (or one step).
+PROGRESSION_STEP_PCT_BY_GOAL: dict[str, float] = {
+    "strength": 0.05,
+    "hypertrophy": 0.04,
+    "endurance": 0.025,
+    "maintenance": 0.0,
+    "cutting": 0.0,
+}
+PROGRESSION_MAX_STEP_PCT = 0.10
+PROGRESSION_EXPERIENCE_FACTOR: dict[str, float] = {
+    "beginner": 1.25,
+    "intermediate": 1.0,
+    "advanced": 0.6,
+}
+# (exclusive upper age in years, factor); the last row has no upper bound.
+PROGRESSION_AGE_FACTORS: tuple[tuple[float, float], ...] = (
+    (40, 1.0),
+    (50, 0.85),
+    (60, 0.7),
+    (float("inf"), 0.55),
+)
+PROGRESSION_LIFESTYLE_FACTOR: dict[str, float] = {
+    "sedentary": 0.85,
+    "lightly_active": 1.0,
+    "active": 1.0,
+    "very_active": 1.1,
+}
+# (exclusive upper body weight in kg, factor): lighter athletes take smaller jumps.
+PROGRESSION_BODY_WEIGHT_FACTORS: tuple[tuple[float, float], ...] = (
+    (60, 0.85),
+    (100, 1.0),
+    (float("inf"), 1.1),
+)
+
 # F11 timed / cardio: duration grows by this share when every set was completed.
 TIMED_PROGRESSION_FACTOR = 0.10
 # F11 duration rounding (seconds): 5 s for holds, 1 min for cardio (equipment cardio_machine).

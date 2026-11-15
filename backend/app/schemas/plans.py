@@ -91,6 +91,24 @@ class MealDay(ResponseModel):
     edited_by: UserRef | None
 
 
+TrainingGoal = Literal["strength", "hypertrophy", "endurance", "maintenance", "cutting"]
+
+
+class RepRange(ResponseModel):
+    reps_min: int
+    reps_max: int
+
+
+class RepRanges(ResponseModel):
+    """Recommended rep range per training goal (D107)."""
+
+    strength: RepRange
+    hypertrophy: RepRange
+    endurance: RepRange
+    maintenance: RepRange
+    cutting: RepRange
+
+
 class Plan(ResponseModel):
     id: uuid.UUID
     athlete_id: uuid.UUID
@@ -101,6 +119,8 @@ class Plan(ResponseModel):
     revision: int
     name: str | None
     start_date: dt.date | None
+    training_goal: TrainingGoal
+    rep_ranges: RepRanges
     created_by: UserRef | None
     created_at: dt.datetime
     updated_at: dt.datetime
@@ -188,6 +208,9 @@ class TrainingDayInput(RequestModel):
 
 class TrainingPlanUpdate(RequestModel):
     revision: Annotated[int, Field(ge=0)]
+    # D107: omitted keeps the plan's goal; the exercises are saved as sent (the client applies a
+    # recommended range to them if the athlete asked for it).
+    training_goal: TrainingGoal | None = None
     training_days: Annotated[list[TrainingDayInput], Field(max_length=7)]
 
 
@@ -221,6 +244,8 @@ class CreatePlanRequest(RequestModel):
     start_date: dt.date | None = None
     start_from: Literal["empty", "generated"] = "empty"
     scope: Literal["all", "training", "meals"] = "all"
+    # D107: omitted = the default derived from the profile goal.
+    training_goal: TrainingGoal | None = None
 
     @field_validator("name")
     @classmethod

@@ -1,6 +1,7 @@
 import type { Exercise } from "../../api/onboarding";
 import type { PlannedExercise, ProgressionRule, TrainingDay, TrainingPlanUpdate, Weekday } from "../../api/plan";
 import { kgToLb, lbToKg, parseDecimal, parseWhole, type UnitSystem } from "../../lib/units";
+import type { RepRange, TrainingGoal } from "./trainingGoal";
 
 type ExerciseType = Exercise["type"];
 
@@ -64,8 +65,8 @@ export function draftFromPlan(days: TrainingDay[], units: UnitSystem): DraftDay[
   }));
 }
 
-/** A new exercise with sensible defaults for its type; the server rejects what does not fit. */
-export function newDraftExercise(exercise: Exercise, units: UnitSystem): DraftExercise {
+/** A new exercise with sensible defaults for its type; the server rejects what does not fit. Reps start at the recommended range of the plan's goal (D107). */
+export function newDraftExercise(exercise: Exercise, units: UnitSystem, range?: RepRange): DraftExercise {
   const timed = exercise.type === "timed";
   return {
     uid: newUid(),
@@ -73,15 +74,25 @@ export function newDraftExercise(exercise: Exercise, units: UnitSystem): DraftEx
     name: exercise.name,
     type: exercise.type,
     sets: "3",
-    repsMin: timed ? "" : "8",
-    repsMax: "",
+    repsMin: timed ? "" : String(range?.reps_min ?? 8),
+    repsMax: timed || !range ? "" : String(range.reps_max),
     weight: "",
     seconds: timed ? "30" : "",
     rest: "90",
-    rule: "linear",
+    rule: "double", // the rule is no longer edited in the app (D107)
     increment: show(exercise.increment_kg, units),
     deload: true,
   };
+}
+
+/** Every rep-based exercise gets the recommended range (D107); timed exercises are left alone. */
+export function applyRepRange(days: DraftDay[], range: RepRange): DraftDay[] {
+  return days.map((day) => ({
+    ...day,
+    exercises: day.exercises.map((e) =>
+      e.type === "timed" ? e : { ...e, repsMin: String(range.reps_min), repsMax: String(range.reps_max) },
+    ),
+  }));
 }
 
 export function newDraftDay(weekday: Weekday, name: string): DraftDay {
@@ -126,7 +137,8 @@ function whole(value: string, min: number, max: number): number | null {
   return n !== null && n >= min && n <= max ? n : null;
 }
 
-export function buildTrainingUpdate(days: DraftDay[], revision: number, units: UnitSystem): BuildResult {
+/** `goal` is sent only when given: the editor passes it when the athlete changed it (D107). */
+export function buildTrainingUpdate(days: DraftDay[], revision: number, units: UnitSystem, goal?: TrainingGoal): BuildResult {
   const errors: Record<string, LocalError> = {};
   const toKg = (value: string) => {
     const n = parseDecimal(value);
@@ -134,6 +146,7 @@ export function buildTrainingUpdate(days: DraftDay[], revision: number, units: U
   };
   const body: TrainingPlanUpdate = {
     revision,
+    ...(goal ? { training_goal: goal } : {}),
     training_days: days.map((day, d) => {
       if (day.name.trim() === "") errors[dayPath(d, "name")] = "nameRequired";
       return {

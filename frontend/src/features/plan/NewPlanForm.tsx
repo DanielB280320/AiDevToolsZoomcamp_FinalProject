@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useAthleteProfile } from "../../api/athlete";
 import { isApiError } from "../../api/errors";
 import {
   type CreatePlanRequest,
@@ -10,6 +11,8 @@ import {
 import { PlusCircleIcon } from "../../components/icons";
 import { localDay } from "../../lib/today";
 import { BUTTON, DateInput, PRIMARY, SelectInput, TextInput } from "./fields";
+import { GoalSelect } from "./GoalSelect";
+import { defaultTrainingGoal, type TrainingGoal } from "./trainingGoal";
 
 type Scope = NonNullable<CreatePlanRequest["scope"]>;
 type StartFrom = NonNullable<CreatePlanRequest["start_from"]>;
@@ -40,6 +43,10 @@ export function NewPlanForm({
   const [start, setStart] = useState(today);
   const [from, setFrom] = useState<StartFrom>("empty");
   const [scope, setScope] = useState<Scope>("all");
+  // Until the athlete picks one, the goal follows the profile goal (D107).
+  const profile = useAthleteProfile(athleteId);
+  const [picked, setPicked] = useState<TrainingGoal | null>(null);
+  const goal = picked ?? defaultTrainingGoal(profile.data?.goal);
   const [local, setLocal] = useState<Partial<Record<string, LocalError>>>({});
   const [server, setServer] = useState<Record<string, string>>({});
   const create = useCreatePlan(athleteId);
@@ -70,6 +77,7 @@ export function NewPlanForm({
       start_date: start,
       start_from: from,
       scope: from === "generated" ? scope : "all",
+      training_goal: goal,
     };
     create.mutate(body, {
       onSuccess: (plan) => {
@@ -77,6 +85,7 @@ export function NewPlanForm({
         setStart(today);
         setFrom("empty");
         setScope("all");
+        setPicked(null);
         close();
         onCreated(plan);
       },
@@ -148,6 +157,7 @@ export function NewPlanForm({
             hint={t("plan.newPlan.startDateHint")}
             error={error(START)}
           />
+          <GoalSelect id="new-plan-goal" value={goal} onChange={setPicked} />
           <fieldset>
             <legend className="font-semibold">
               {t("plan.newPlan.startFrom")}

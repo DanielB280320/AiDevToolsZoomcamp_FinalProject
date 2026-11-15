@@ -130,6 +130,10 @@ def _fmt_w(kg: float, imperial: bool, equipment: str) -> str:
     return f"{round(kg, 2):g} kg"
 
 
+round_step = _round_step  # shared with the goal-driven engine (D107)
+format_weight = _fmt_w
+
+
 def _inputs(p: ProgressionInput) -> dict[str, Any]:
     return {
         "exercise_type": p.exercise_type,

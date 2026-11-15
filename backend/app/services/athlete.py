@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.engines import exercise_kcal as kcal_engine
 from app.engines import targets as targets_engine
 from app.engines.meal_plan import GeneratedMealPlan
+from app.engines.progression_goal import default_training_goal
 from app.engines.training_plan import CatalogExercise, GeneratedPlan, PlanRequest, generate_plan
 from app.errors import ProblemError
 from app.models import AthleteProfile, BodyMetric, Exercise, Plan, Targets, TrainingDay, User
@@ -575,6 +576,7 @@ def onboard(
         days=new_days,
         now=now,
         meal_days=new_meal_days(generated_meals),
+        training_goal=default_training_goal(profile_in.goal),
     )
     try:
         session.commit()

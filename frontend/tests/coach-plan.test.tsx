@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { components } from "../src/api/schema";
 import { meFixture, meOk } from "./mocks/fixtures";
+import { PLAN_GOAL } from "./mocks/planGoal";
 import { apiUrl } from "./mocks/handlers";
 import { server } from "./mocks/server";
 import { renderApp } from "./renderApp";
@@ -24,6 +25,7 @@ function basePlan(): Schemas["Plan"] {
     revision: 3,
     name: null,
     start_date: null,
+    ...PLAN_GOAL,
     created_by: { id: ANA, display_name: "Alice", role: "athlete" },
     created_at: "2026-10-20T08:00:00Z",
     updated_at: "2026-10-20T08:00:00Z",
@@ -67,6 +69,7 @@ describe("plan editor in the coach context", () => {
       revision: 3,
       name: null,
       start_date: null,
+      ...PLAN_GOAL,
       created_by: { id: ANA, display_name: "Alice", role: "athlete" },
       created_at: "2026-10-20T08:00:00Z",
       updated_at: "2026-10-20T08:00:00Z",
@@ -142,6 +145,7 @@ describe("plan editor in the coach context", () => {
       active: n === 2,
       name: null,
       start_date: null,
+      ...PLAN_GOAL,
       created_by: who,
       created_at: at,
     });
