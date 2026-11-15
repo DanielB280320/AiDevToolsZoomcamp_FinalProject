@@ -292,7 +292,7 @@ def test_delete_set_removes_it_and_recomputes(athlete: Api) -> None:
 # ───────────── F10.2 completion ─────────────
 
 
-def test_completion_is_sum_of_min_actual_target_over_planned_sets(athlete: Api) -> None:
+def test_completion_is_the_average_set_share_over_planned_sets(athlete: Api) -> None:
     sid, ex, planned, timed = _ids(_session(athlete))
     _log(athlete, sid, exercise_id=ex, planned_exercise_id=planned, set_no=1, reps=8, weight_kg=50)
     _log(athlete, sid, exercise_id=ex, planned_exercise_id=planned, set_no=2, reps=4, weight_kg=50)
@@ -302,8 +302,8 @@ def test_completion_is_sum_of_min_actual_target_over_planned_sets(athlete: Api) 
     assert result.status_code == 200, result.text
     body = result.json()
     assert_matches_schema(body, "FinishSessionResult")
-    # (8 + 4 + 0 + 600) / (24 + 600)
-    assert body["session"]["completion"] == pytest.approx(612 / 624, abs=1e-4)
+    # Per set (D110): (8/8 + 4/8 + 0 + min(1200/600, 1)) / 4; the timed set weighs one set
+    assert body["session"]["completion"] == pytest.approx(2.5 / 4, abs=1e-4)
     strength = body["session"]["exercises"][0]
     assert strength["completion"] == pytest.approx(12 / 24, abs=1e-4)
     # Suggestions are covered by test_suggestions.py: one per performed exercise.
@@ -314,7 +314,7 @@ def test_unlogged_planned_sets_count_as_zero(athlete: Api) -> None:
     sid, ex, planned, _ = _ids(_session(athlete))
     _log(athlete, sid, exercise_id=ex, planned_exercise_id=planned, set_no=1, as_planned=True)
     body = _finish(athlete, sid).json()
-    assert body["session"]["completion"] == pytest.approx(8 / 624, abs=1e-4)
+    assert body["session"]["completion"] == pytest.approx(1 / 4, abs=1e-4)  # 1 of 4 planned sets
 
 
 # ───────────── finish, kcal, F13.2 ─────────────
@@ -527,7 +527,7 @@ def test_set_logs_keep_the_targets_they_were_performed_against(athlete: Api) -> 
         )
         db.commit()
     done = _finish(athlete, sid).json()["session"]["exercises"][0]
-    assert done["completion"] == pytest.approx((8 + 12 + 0) / (8 + 12 + 100), abs=1e-4)
+    assert done["completion"] == pytest.approx((8 / 8 + 12 / 12 + 0 / 100) / 3, abs=1e-4)
 
 
 # ───────────── F10.4 extra activities ─────────────

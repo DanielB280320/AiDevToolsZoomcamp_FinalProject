@@ -13,13 +13,16 @@ R = PlannedSetResult
     ("sets", "ratio"),
     [
         ([R(8, 8), R(8, 8), R(8, 8)], 1.0),
-        ([R(8, 8), R(8, 4), R(8, None)], 0.5),  # 12 / 24; a never-logged set counts as 0
+        ([R(8, 8), R(8, 4), R(8, None)], 0.5),  # (1 + 0.5 + 0) / 3; never-logged scores 0
         ([R(8, 0), R(8, 0)], 0.0),  # skipped sets are logged with no actual
         ([R(8, 12), R(8, 8)], 1.0),  # extra reps above target do not count
         ([R(8, 12), R(8, 0)], 0.5),  # ...and cannot make up for a missed set
         ([R(600, 300)], 0.5),  # timed: seconds
         ([R(8, 8), R(None, 5), R(0, 5)], 1.0),  # sets without a positive target are left out
         ([R(3, 1)], 0.3333),  # rounded to 4 decimals
+        # D110: sets weigh the same whatever their unit; one 600 s set never outweighs the reps
+        ([R(6, 6)] + [R(6, None)] * 4 + [R(10, None)] * 17 + [R(600, 600)], 0.087),  # 2 of 23
+        ([R(6, 3), R(600, 600)], 0.75),  # (0.5 + 1) / 2, not 603 / 606
     ],
 )
 def test_completion_table(sets: list[PlannedSetResult], ratio: float) -> None:
@@ -69,3 +72,14 @@ def test_more_work_never_lowers_completion(sets: list[PlannedSetResult]) -> None
     more = [R(s.target, (s.actual or 0) + 1) for s in sets]
     base = [R(s.target, s.actual) for s in sets]
     assert completion(more).ratio >= completion(base).ratio  # type: ignore[operator]
+
+
+@given(_sets)
+def test_ratio_is_the_share_of_sets_done_when_each_is_all_or_nothing(
+    sets: list[PlannedSetResult],
+) -> None:
+    """D110: with every set either done as planned or not at all, completion is done ÷ planned,
+    independent of the size or unit of the targets."""
+    binary = [R(s.target, s.target if (s.actual or 0) % 2 else None) for s in sets]
+    done = sum(1 for s in binary if s.actual is not None)
+    assert completion(binary).ratio == round(done / len(binary), 4)

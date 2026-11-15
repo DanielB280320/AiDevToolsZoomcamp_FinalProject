@@ -2390,7 +2390,7 @@ export interface components {
             finished_at: components["schemas"]["Timestamp"] | null;
             /** @description End of the edit window (day after the session date, athlete's time zone, in UTC). */
             editable_until: components["schemas"]["Timestamp"];
-            /** @description Σ min(actual, target) ÷ Σ target over planned working sets (F10.2); `null` until something is logged. */
+            /** @description Average over the planned working sets of min(actual ÷ target, 1), each set weighing the same (F10.2, D110); `null` until something is logged. */
             completion: components["schemas"]["Ratio"] | null;
             /** @description Estimated exercise kcal (F13.2); `null` until finished. */
             kcal: components["schemas"]["Kcal"] | null;
