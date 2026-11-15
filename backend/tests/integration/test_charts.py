@@ -583,3 +583,20 @@ def test_owner_ok_stranger_coach_and_anonymous_refused(api: Api, path: str) -> N
     anonymous = api.new_client().get(f"/api/v1/athletes/{seed.uid}/charts/{path}")
     assert anonymous.status_code == 401
     assert api.client.get(f"/api/v1/athletes/not-a-uuid/charts/{path}").status_code == 400
+
+
+def test_period_summary_today_follows_the_athlete_time_zone(seeded: tuple[Api, Seeded]) -> None:
+    """QA #243: the clock is 22 Oct 09:00 UTC, which is still 21 Oct in Honolulu, so the 22nd
+    is a future day there and contributes nothing."""
+    api, _ = seeded
+    assert get(api, "period-summary", **PERIOD).json()["series"][-1]["start"] == "2026-10-22"
+    with Session(api.app.state.engine) as db:
+        from app.models import User
+
+        user = db.query(User).one()
+        user.timezone = "Pacific/Honolulu"
+        db.commit()
+    body = ok(api, "period-summary", "PeriodSummary", **PERIOD)
+    assert [p["start"] for p in body["series"]][-1] == "2026-10-21"
+    assert len(body["series"]) == 6
+    assert body["current"]["sessions_planned"] == 2  # Fri 16 and Mon 19; Thu 22 is not yet
