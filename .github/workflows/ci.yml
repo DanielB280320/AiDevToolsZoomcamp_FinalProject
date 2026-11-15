@@ -41,8 +41,9 @@ jobs:
   backend-test:
     name: Backend tests (pytest, Postgres 16)
     runs-on: ubuntu-24.04
-    # Normal duration ~7 min with xdist (was ~13 min serial, see PR #181): 15 min is ~2x headroom.
-    timeout-minutes: 15
+    # 9-14 min with xdist on recent runs as the suite grew (was ~7 min at PR #181). 15 min cancelled
+    # the main run of 3f0a94c on a slow runner, so the limit is 25 min (D77 amendment 2026-11-15).
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
