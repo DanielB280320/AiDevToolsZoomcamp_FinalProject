@@ -8,31 +8,36 @@ import { ChartBox } from "./ChartBox";
 import { AUTO_DOMAIN, CHART_COLORS, displayWeight, hasValues, percent } from "./chartData";
 import { ChartState, EmptyState } from "./ChartState";
 
-/** The same numbers as a chart, as a table for screen readers (F15.9). */
+/**
+ * The same numbers as a chart, as a table for screen readers (F15.9). The table sits in a
+ * `sr-only` box: a table ignores the 1 px width of `sr-only` itself and would widen the page.
+ */
 function DataTable({ caption, head, rows }: { caption: string; head: string[]; rows: (string | number | null)[][] }) {
   const { t } = useTranslation();
   return (
-    <table className="sr-only">
-      <caption>{caption}</caption>
-      <thead>
-        <tr>
-          {head.map((h) => (
-            <th key={h} scope="col">
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={String(row[0])}>
-            {row.map((cell, i) => (
-              <td key={i}>{cell === null ? t("charts.none") : cell}</td>
+    <div className="sr-only">
+      <table>
+        <caption>{caption}</caption>
+        <thead>
+          <tr>
+            {head.map((h) => (
+              <th key={h} scope="col">
+                {h}
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={String(row[0])}>
+              {row.map((cell, i) => (
+                <td key={i}>{cell === null ? t("charts.none") : cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
