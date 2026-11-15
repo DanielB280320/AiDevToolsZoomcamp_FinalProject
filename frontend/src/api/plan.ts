@@ -175,6 +175,7 @@ export function useCreatePlan(athleteId: string) {
 /** Make a previous plan the current one; no version is written (D108). */
 export function useActivatePlan(athleteId: string) {
   const after = useAfterPlanChange(athleteId);
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (planNo: number) => {
       const { data, error, response } = await api.POST("/athletes/{athlete_id}/plans/{plan_no}/activate", {
@@ -183,7 +184,11 @@ export function useActivatePlan(athleteId: string) {
       if (data) return data;
       throw apiError(response, error);
     },
-    onSuccess: after,
+    onSuccess: (plan: Plan) => {
+      after(plan);
+      // The server rejects the pending suggestions of the plan that was current.
+      void queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+    },
   });
 }
 

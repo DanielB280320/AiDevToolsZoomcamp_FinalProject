@@ -23,7 +23,7 @@ from app.engines.meal_macros import Per100g, meal_macros
 from app.engines.nutrition_completion import nutrition_completion
 from app.errors import ProblemError
 from app.models import Food, MealDay, MealLog, MealLogItem, Plan, User
-from app.models.plan import WEEKDAYS, effective_at
+from app.models.plan import WEEKDAYS, plan_events
 from app.schemas import calendar as cal
 from app.schemas import plans as plan_out
 from app.schemas.foods import FoodSummary, Macros, MealItem
@@ -53,15 +53,17 @@ def planned_meals(
     weekday. A newer version never rewrites an earlier day (rule 7), and a version without meal
     days (a plan edit that did not carry them over) does not hide the meal plan."""
     end = utc_midnight_after(day, user.timezone)
+    events = plan_events()
     meal_day = db.scalar(
         select(MealDay)
         .join(Plan, Plan.id == MealDay.plan_id)
+        .join(events, events.c.plan_id == Plan.id)
         .where(
             Plan.athlete_id == user.id,
-            effective_at() < end,
+            events.c.at < end,
             MealDay.weekday == WEEKDAYS[day.weekday()],
         )
-        .order_by(effective_at().desc(), Plan.version.desc())
+        .order_by(events.c.at.desc(), Plan.version.desc())
         .limit(1)
         .options(selectinload(MealDay.meals))
     )
@@ -205,11 +207,13 @@ def range_totals(
     for log_view in _log_views(db, logs):
         if log_view.status != "skipped":
             eaten_parts.setdefault(log_view.date, []).append(log_view.totals)
+    events = plan_events()
     candidates = db.execute(
-        select(MealDay.id, MealDay.weekday, Plan.version, effective_at())
+        select(MealDay.id, MealDay.weekday, Plan.version, events.c.at)
         .join(Plan, Plan.id == MealDay.plan_id)
+        .join(events, events.c.plan_id == Plan.id)
         .where(Plan.athlete_id == user.id)
-        .order_by(effective_at().desc(), Plan.version.desc())
+        .order_by(events.c.at.desc(), Plan.version.desc())
     ).all()
     chosen: dict[dt.date, uuid.UUID] = {}
     for offset in range((end - start).days + 1):

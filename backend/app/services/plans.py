@@ -62,7 +62,8 @@ def plan_numbers(session: Session, athlete_id: uuid.UUID) -> dict[int, int]:
 
     A stored `plan_no` wins. A null (a row the previous release wrote) belongs to the plan of the
     preceding version, unless its change is `created_new`, which starts the next plan; the first
-    version is plan 1. Numbers never decrease with the version.
+    version is plan 1. Stored numbers need not increase with the version (a plan made current
+    again keeps writing its own, D108); only null rows are resolved by position.
     """
     rows = session.execute(
         select(Plan.id, Plan.version, Plan.plan_no)

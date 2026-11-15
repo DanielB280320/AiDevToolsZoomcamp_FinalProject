@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { QueryClient } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../src/api/schema";
 import { buildTrainingUpdate, draftFromPlan } from "../src/features/plan/trainingDraft";
@@ -1109,6 +1110,21 @@ describe("Plan editor: make current and delete a plan (D108)", () => {
     expect(await screen.findByText("Plan 1 is now the current plan.")).toBeInTheDocument();
     expect(called).toBe("1");
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("refetches the suggestions list after making a plan current", async () => {
+    server.use(
+      http.post(apiUrl("/athletes/:athleteId/plans/:planNo/activate"), () =>
+        HttpResponse.json(planFixture({ plan_no: 1, name: null, revision: 9 })),
+      ),
+    );
+    const { user, rows } = await openHistory();
+    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    await user.click(within(rows[1]).getByRole("button", { name: "Make Plan 1 the current plan" }));
+    await user.click(within(within(rows[1]).getByRole("alertdialog")).getByRole("button", { name: "Make current" }));
+    await screen.findByText("Plan 1 is now the current plan.");
+    expect(spy.mock.calls.map(([filters]) => filters?.queryKey)).toContainEqual(["suggestions"]);
+    spy.mockRestore();
   });
 
   it("deletes only after a confirmation that says it cannot be undone", async () => {

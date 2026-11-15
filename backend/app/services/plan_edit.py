@@ -35,6 +35,7 @@ from app.models import (
     MealDay,
     MealItem,
     Plan,
+    PlanActivation,
     PlanChange,
     PlannedExercise,
     SetLog,
@@ -915,7 +916,7 @@ def activate_plan(
         )
         db.flush()
         target.active = True
-        target.activated_at = now
+        db.add(PlanActivation(athlete_id=athlete_uuid, plan_id=target.id, activated_at=now))
         target.revision = (top or 0) + 1
         db.flush()
         _finish(

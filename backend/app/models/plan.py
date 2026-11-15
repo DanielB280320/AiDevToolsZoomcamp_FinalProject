@@ -24,8 +24,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
-    func,
+    select,
     true,
+    union_all,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -81,10 +82,6 @@ class Plan(Base):
     # version reads, kept for past days, set logs and rollback. Null for rows the previous release
     # writes.
     deleted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
-    # D108: when "make current" last made this version the active one. Together with `created_at`
-    # it says since when the version applies (`effective_at`), so a past day still resolves to the
-    # meal plan that applied then. Null for versions that never were re-activated.
-    activated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     training_days: Mapped[list["TrainingDay"]] = relationship(
         back_populates="plan", cascade="all, delete-orphan", order_by="TrainingDay.position"
@@ -94,9 +91,29 @@ class Plan(Base):
     )
 
 
-def effective_at() -> Any:
-    """SQL expression: since when a plan version applies (D108)."""
-    return func.coalesce(Plan.activated_at, Plan.created_at)
+class PlanActivation(Base):
+    """D108: append-only log of "make current". Together with the versions' `created_at` it says
+    which version was in force at any moment (`plan_events`)."""
+
+    __tablename__ = "plan_activation"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    athlete_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("plan.id", ondelete="CASCADE"), index=True
+    )
+    activated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+
+
+def plan_events() -> Any:
+    """Subquery `(plan_id, at)`: every moment a version came into force, either created (the
+    previous release writes these too) or made current again (D108). The latest event at or
+    before a moment names the version in force then, for any number of switches."""
+    created = select(Plan.id.label("plan_id"), Plan.created_at.label("at"))
+    switched = select(PlanActivation.plan_id, PlanActivation.activated_at)
+    return union_all(created, switched).subquery("plan_event")
 
 
 # At most one active version per athlete, enforced by the database.
