@@ -73,10 +73,10 @@ function AdherenceBody({ data, metric }: { data: AdherenceChart; metric: Metric 
       <p className="mt-2 text-step--1 text-slate">{t("charts.adherence.legend")}</p>
       <h3 className="mt-6 font-display text-step-1 font-semibold">{t("charts.adherence.weekly")}</h3>
       <ChartBox label={t("charts.adherence.weeklyLabel")} height={180}>
-        <BarChart data={weeks} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+        <BarChart data={weeks} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
           <XAxis dataKey="week" tickFormatter={(d: string) => formatDay(d, i18n.language, DAY_FORMAT.dayMonth)} minTickGap={16} />
-          <YAxis domain={[0, 100]} unit="%" width={48} />
+          <YAxis domain={[0, 100]} unit="%" width="auto" />
           <Legend />
           <Bar dataKey="value" name={t(`charts.adherence.${metric}`)} fill={CHART_COLORS.actual} {...anim} />
         </BarChart>

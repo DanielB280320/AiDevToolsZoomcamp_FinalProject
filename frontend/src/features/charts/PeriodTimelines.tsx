@@ -69,7 +69,7 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
   const tick = (iso: string) => formatDay(iso, i18n.language, DAY_FORMAT.dayMonth);
   const rowLabel = (iso: string) =>
     data.bucket === "day" ? tick(iso) : t("charts.timelines.weekOf", { date: tick(iso) });
-  const margin = { top: 8, right: 8, bottom: 0, left: -12 };
+  const margin = { top: 8, right: 8, bottom: 0, left: 0 };
   const hasVolume = rows.some((r) => r.sessions > 0 || (r.volume ?? 0) > 0);
   const hasCompletion = hasValues(rows, "training") || hasValues(rows, "nutrition");
   const hasBalance = hasValues(rows, "balance");
@@ -88,7 +88,7 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
             <ComposedChart data={rows} margin={margin}>
               <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
               <XAxis dataKey="start" tickFormatter={tick} minTickGap={24} />
-              <YAxis yAxisId="volume" width={48} />
+              <YAxis yAxisId="volume" width="auto" />
               <YAxis yAxisId="sessions" orientation="right" allowDecimals={false} width={32} />
               <Legend />
               <Bar yAxisId="volume" dataKey="volume" name={t("charts.timelines.volumeName", { unit })} fill={CHART_COLORS.actual} {...anim} />
@@ -112,7 +112,7 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
             <LineChart data={rows} margin={margin}>
               <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
               <XAxis dataKey="start" tickFormatter={tick} minTickGap={24} />
-              <YAxis domain={[0, 100]} unit="%" width={48} />
+              <YAxis domain={[0, 100]} unit="%" width="auto" />
               <Legend />
               <Line dataKey="training" name={t("charts.timelines.trainingName")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={{ r: 2 }} connectNulls {...anim} />
               <Line dataKey="nutrition" name={t("charts.timelines.nutritionName")} stroke={CHART_COLORS.accent} strokeWidth={2} strokeDasharray="5 4" dot={{ r: 2 }} connectNulls {...anim} />
@@ -135,7 +135,7 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
             <LineChart data={rows} margin={margin}>
               <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
               <XAxis dataKey="start" tickFormatter={tick} minTickGap={24} />
-              <YAxis domain={AUTO_DOMAIN} width={56} />
+              <YAxis domain={AUTO_DOMAIN} width="auto" />
               <Legend />
               <Line dataKey="balance" name={t("charts.timelines.balanceName")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={{ r: 2 }} connectNulls {...anim} />
               <Line dataKey="target" name={t("charts.timelines.targetName")} stroke={CHART_COLORS.target} strokeDasharray="5 4" dot={false} connectNulls {...anim} />

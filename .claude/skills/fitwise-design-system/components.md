@@ -158,7 +158,7 @@ Colours only from `CHART_COLORS` in `features/charts/chartData.ts` (hex copies o
 | `alert` | alert | A series whose rise is unwelcome (body fat) |
 | `line` | line | `CartesianGrid` (`vertical={false}`) |
 
-Every series spreads `{...anim}` from `useChartAnimation()` (`lib/motion.ts`: 400 ms ease-out, off under `prefers-reduced-motion`) and has a translated `name`; two lines on one chart differ by dash or dots as well as colour; a `<Legend />` is shown when there is more than one series; axis ticks use the default text colour and `minTickGap`. Units (kg/lb, %, kcal) appear on the axis or in the series name.
+Every `YAxis` on the left uses `width="auto"` and the chart's left margin is `0`, so labels such as `100%` or `102.5 kg` are never cut off; don't set a fixed width or a negative margin. Every series spreads `{...anim}` from `useChartAnimation()` (`lib/motion.ts`: 400 ms ease-out, off under `prefers-reduced-motion`) and has a translated `name`; two lines on one chart differ by dash or dots as well as colour; a `<Legend />` is shown when there is more than one series; axis ticks use the default text colour and `minTickGap`. Units (kg/lb, %, kcal) appear on the axis or in the series name.
 
 ## Icons and logo
 

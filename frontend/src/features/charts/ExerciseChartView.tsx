@@ -51,10 +51,10 @@ function ExerciseBody({ data, units }: { data: ExerciseChart; units: UnitSystem 
     <div className="mt-4 min-w-0">
       {hasWeights ? (
         <ChartBox label={t("charts.exercise.weightLabel", { name: data.exercise.name, unit })}>
-          <LineChart data={rows} margin={{ top: 12, right: 12, bottom: 0, left: -12 }}>
+          <LineChart data={rows} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
             <XAxis dataKey="date" tickFormatter={dayLabel} minTickGap={24} />
-            <YAxis domain={AUTO_DOMAIN} unit={` ${unit}`} width={56} />
+            <YAxis domain={AUTO_DOMAIN} unit={` ${unit}`} width="auto" />
             <Legend />
             <Line dataKey="target" name={t("charts.exercise.target")} stroke={CHART_COLORS.target} strokeDasharray="5 4" dot={false} connectNulls {...anim} />
             <Line dataKey="top" name={t("charts.exercise.topSet")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={<PrDot />} connectNulls {...anim} />
@@ -70,10 +70,10 @@ function ExerciseBody({ data, units }: { data: ExerciseChart; units: UnitSystem 
       )}
       <h3 className="mt-6 font-display text-step-1 font-semibold">{t("charts.exercise.volume", { unit })}</h3>
       <ChartBox label={t("charts.exercise.volumeLabel", { name: data.exercise.name, unit })} height={180}>
-        <BarChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+        <BarChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
           <XAxis dataKey="date" tickFormatter={dayLabel} minTickGap={24} />
-          <YAxis width={56} />
+          <YAxis width="auto" />
           <Bar dataKey="volume" name={t("charts.exercise.volumeName")} fill={CHART_COLORS.actual} {...anim} />
         </BarChart>
       </ChartBox>

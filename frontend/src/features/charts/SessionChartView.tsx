@@ -29,10 +29,10 @@ function SetsChart({ entry, units }: { entry: SessionChartExercise; units: UnitS
   return (
     <>
       <ChartBox label={t("charts.session.chartLabel", { name: entry.exercise.name })} height={180}>
-        <BarChart data={bars} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+        <BarChart data={bars} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
           <XAxis dataKey="set_no" tickFormatter={(n: number) => t("charts.session.setShort", { n })} />
-          <YAxis allowDecimals={false} />
+          <YAxis allowDecimals={false} width="auto" />
           <Legend />
           <Bar dataKey="target" name={t("charts.session.target")} fill={CHART_COLORS.target} {...anim} />
           <Bar dataKey="actual" name={t("charts.session.actual")} fill={CHART_COLORS.actual} {...anim} />

@@ -25,10 +25,10 @@ function BodyBody({ data, units }: { data: BodyChart; units: UnitSystem }) {
   return (
     <div className="min-w-0">
       <ChartBox label={t("charts.body.weightLabel", { unit })}>
-        <LineChart data={rows} margin={{ top: 12, right: 12, bottom: 0, left: -12 }}>
+        <LineChart data={rows} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
           <XAxis dataKey="date" tickFormatter={dayLabel} minTickGap={24} />
-          <YAxis domain={AUTO_DOMAIN} unit={` ${unit}`} width={56} />
+          <YAxis domain={AUTO_DOMAIN} unit={` ${unit}`} width="auto" />
           <Legend />
           <Line dataKey="weight" name={t("charts.body.weight")} stroke={CHART_COLORS.target} strokeWidth={0} dot={{ r: 3 }} connectNulls={false} {...anim} />
           <Line dataKey="avg" name={t("charts.body.avg")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={false} connectNulls {...anim} />
@@ -41,10 +41,10 @@ function BodyBody({ data, units }: { data: BodyChart; units: UnitSystem }) {
             <span className="rounded-sm bg-plate px-1.5 text-step--1 font-semibold">{t("charts.estimated")}</span>
           </h3>
           <ChartBox label={t("charts.body.fatLabel")} height={180}>
-            <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+            <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
               <XAxis dataKey="date" tickFormatter={dayLabel} minTickGap={24} />
-              <YAxis domain={AUTO_DOMAIN} unit="%" width={48} />
+              <YAxis domain={AUTO_DOMAIN} unit="%" width="auto" />
               <Line dataKey="fat" name={t("charts.body.fat")} stroke={CHART_COLORS.alert} strokeWidth={2} dot={{ r: 3 }} connectNulls {...anim} />
             </LineChart>
           </ChartBox>
