@@ -5,6 +5,7 @@ import { type PeriodSummary, usePeriodSummary } from "../../api/charts";
 import { DAY_FORMAT, formatDay } from "../../lib/calendarDates";
 import { weightUnit, type UnitSystem } from "../../lib/units";
 import { ChartBox } from "./ChartBox";
+import { ChartTooltip, TOOLTIP_UNIT } from "./ChartTooltip";
 import { AUTO_DOMAIN, CHART_COLORS, displayWeight, hasValues, percent } from "./chartData";
 import { ChartState, EmptyState } from "./ChartState";
 import { useChartAnimation } from "../../lib/motion";
@@ -90,6 +91,7 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
               <XAxis dataKey="start" tickFormatter={tick} minTickGap={24} />
               <YAxis yAxisId="volume" width="auto" />
               <YAxis yAxisId="sessions" orientation="right" allowDecimals={false} width={32} />
+              <ChartTooltip label={rowLabel} bars />
               <Legend />
               <Bar yAxisId="volume" dataKey="volume" name={t("charts.timelines.volumeName", { unit })} fill={CHART_COLORS.actual} {...anim} />
               <Line yAxisId="sessions" dataKey="sessions" name={t("charts.timelines.sessionsName")} stroke={CHART_COLORS.ink} strokeWidth={2} dot={{ r: 3 }} {...anim} />
@@ -113,6 +115,7 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
               <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
               <XAxis dataKey="start" tickFormatter={tick} minTickGap={24} />
               <YAxis domain={[0, 100]} unit="%" width="auto" />
+              <ChartTooltip label={rowLabel} unit={TOOLTIP_UNIT.percent} />
               <Legend />
               <Line dataKey="training" name={t("charts.timelines.trainingName")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={{ r: 2 }} connectNulls {...anim} />
               <Line dataKey="nutrition" name={t("charts.timelines.nutritionName")} stroke={CHART_COLORS.accent} strokeWidth={2} strokeDasharray="5 4" dot={{ r: 2 }} connectNulls {...anim} />
@@ -136,6 +139,7 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
               <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
               <XAxis dataKey="start" tickFormatter={tick} minTickGap={24} />
               <YAxis domain={AUTO_DOMAIN} width="auto" />
+              <ChartTooltip label={rowLabel} unit={TOOLTIP_UNIT.kcal} />
               <Legend />
               <Line dataKey="balance" name={t("charts.timelines.balanceName")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={{ r: 2 }} connectNulls {...anim} />
               <Line dataKey="target" name={t("charts.timelines.targetName")} stroke={CHART_COLORS.target} strokeDasharray="5 4" dot={false} connectNulls {...anim} />

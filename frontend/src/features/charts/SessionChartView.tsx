@@ -5,6 +5,7 @@ import { type SessionChart, type SessionChartExercise, useSessionChart } from ".
 import { DAY_FORMAT, formatDay } from "../../lib/calendarDates";
 import { weightUnit, type UnitSystem } from "../../lib/units";
 import { ChartBox } from "./ChartBox";
+import { ChartTooltip } from "./ChartTooltip";
 import { CHART_COLORS, displayWeight, percent, setBars, setMeasure, STATUS_MARKER } from "./chartData";
 import { ChartState } from "./ChartState";
 import { CARD } from "../../components/card";
@@ -33,6 +34,7 @@ function SetsChart({ entry, units }: { entry: SessionChartExercise; units: UnitS
           <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
           <XAxis dataKey="set_no" tickFormatter={(n: number) => t("charts.session.setShort", { n })} />
           <YAxis allowDecimals={false} width="auto" />
+          <ChartTooltip label={(n: number) => t("charts.session.setShort", { n })} bars />
           <Legend />
           <Bar dataKey="target" name={t("charts.session.target")} fill={CHART_COLORS.target} {...anim} />
           <Bar dataKey="actual" name={t("charts.session.actual")} fill={CHART_COLORS.actual} {...anim} />

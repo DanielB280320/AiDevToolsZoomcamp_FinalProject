@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, Legend, XAxis, YAxis } from "recharts";
 import { type AdherenceChart, type AdherenceDay, useAdherenceChart } from "../../api/charts";
 import { DAY_FORMAT, formatDay } from "../../lib/calendarDates";
 import { ChartBox } from "./ChartBox";
+import { ChartTooltip, TOOLTIP_UNIT } from "./ChartTooltip";
 import { CHART_COLORS, percent } from "./chartData";
 import { ChartState } from "./ChartState";
 import { useChartAnimation } from "../../lib/motion";
@@ -77,6 +78,7 @@ function AdherenceBody({ data, metric }: { data: AdherenceChart; metric: Metric 
           <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
           <XAxis dataKey="week" tickFormatter={(d: string) => formatDay(d, i18n.language, DAY_FORMAT.dayMonth)} minTickGap={16} />
           <YAxis domain={[0, 100]} unit="%" width="auto" />
+          <ChartTooltip label={(d: string) => formatDay(d, i18n.language, DAY_FORMAT.dayMonth)} unit={TOOLTIP_UNIT.percent} bars />
           <Legend />
           <Bar dataKey="value" name={t(`charts.adherence.${metric}`)} fill={CHART_COLORS.actual} {...anim} />
         </BarChart>

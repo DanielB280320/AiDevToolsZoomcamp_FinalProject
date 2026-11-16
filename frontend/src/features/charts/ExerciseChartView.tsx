@@ -7,6 +7,7 @@ import { useExerciseSearch } from "../../api/onboarding";
 import { DAY_FORMAT, formatDay } from "../../lib/calendarDates";
 import { weightUnit, type UnitSystem } from "../../lib/units";
 import { ChartBox } from "./ChartBox";
+import { ChartTooltip } from "./ChartTooltip";
 import { AUTO_DOMAIN, CHART_COLORS, displayWeight, hasValues } from "./chartData";
 import { ChartState } from "./ChartState";
 import { useChartAnimation } from "../../lib/motion";
@@ -55,6 +56,7 @@ function ExerciseBody({ data, units }: { data: ExerciseChart; units: UnitSystem 
             <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
             <XAxis dataKey="date" tickFormatter={dayLabel} minTickGap={24} />
             <YAxis domain={AUTO_DOMAIN} unit={` ${unit}`} width="auto" />
+            <ChartTooltip label={dayLabel} unit={` ${unit}`} />
             <Legend />
             <Line dataKey="target" name={t("charts.exercise.target")} stroke={CHART_COLORS.target} strokeDasharray="5 4" dot={false} connectNulls {...anim} />
             <Line dataKey="top" name={t("charts.exercise.topSet")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={<PrDot />} connectNulls {...anim} />
@@ -74,6 +76,7 @@ function ExerciseBody({ data, units }: { data: ExerciseChart; units: UnitSystem 
           <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
           <XAxis dataKey="date" tickFormatter={dayLabel} minTickGap={24} />
           <YAxis width="auto" />
+          <ChartTooltip label={dayLabel} unit={` ${unit}`} bars />
           <Bar dataKey="volume" name={t("charts.exercise.volumeName")} fill={CHART_COLORS.actual} {...anim} />
         </BarChart>
       </ChartBox>

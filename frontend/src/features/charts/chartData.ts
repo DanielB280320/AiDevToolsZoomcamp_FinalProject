@@ -9,6 +9,7 @@ export const CHART_COLORS = {
   alert: "#a3321f",
   line: "#d3d9d4",
   ink: "#1c2530", // iron
+  surface: "#ffffff", // card
 } as const;
 
 const round1 = (value: number): number => Math.round(value * 10) / 10;

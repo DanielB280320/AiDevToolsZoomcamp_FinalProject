@@ -5,6 +5,7 @@ import { type BodyChart, useBodyChartRange } from "../../api/charts";
 import { DAY_FORMAT, formatDay } from "../../lib/calendarDates";
 import { weightUnit, type UnitSystem } from "../../lib/units";
 import { ChartBox } from "./ChartBox";
+import { ChartTooltip, TOOLTIP_UNIT } from "./ChartTooltip";
 import { AUTO_DOMAIN, CHART_COLORS, displayWeight, hasValues } from "./chartData";
 import { ChartState } from "./ChartState";
 import { useChartAnimation } from "../../lib/motion";
@@ -29,6 +30,7 @@ function BodyBody({ data, units }: { data: BodyChart; units: UnitSystem }) {
           <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
           <XAxis dataKey="date" tickFormatter={dayLabel} minTickGap={24} />
           <YAxis domain={AUTO_DOMAIN} unit={` ${unit}`} width="auto" />
+          <ChartTooltip label={dayLabel} unit={` ${unit}`} />
           <Legend />
           <Line dataKey="weight" name={t("charts.body.weight")} stroke={CHART_COLORS.target} strokeWidth={0} dot={{ r: 3 }} connectNulls={false} {...anim} />
           <Line dataKey="avg" name={t("charts.body.avg")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={false} connectNulls {...anim} />
@@ -45,6 +47,7 @@ function BodyBody({ data, units }: { data: BodyChart; units: UnitSystem }) {
               <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
               <XAxis dataKey="date" tickFormatter={dayLabel} minTickGap={24} />
               <YAxis domain={AUTO_DOMAIN} unit="%" width="auto" />
+              <ChartTooltip label={dayLabel} unit={TOOLTIP_UNIT.percent} />
               <Line dataKey="fat" name={t("charts.body.fat")} stroke={CHART_COLORS.alert} strokeWidth={2} dot={{ r: 3 }} connectNulls {...anim} />
             </LineChart>
           </ChartBox>
