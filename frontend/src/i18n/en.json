@@ -927,6 +927,13 @@
       "empty": "No data for this period yet.",
       "cellValue": "{{date}}: {{value}}%",
       "cellNeutral": "{{date}}: no value ({{status}})",
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month",
+      "tipTraining": "Training: {{value}}",
+      "tipNutrition": "Nutrition: {{value}}",
+      "tipPercent": "{{value}}%",
+      "tipPercentStatus": "{{value}}% ({{status}})",
+      "tipNone": "no value",
       "trainingStatus": {
         "rest": "rest day",
         "planned": "planned",
