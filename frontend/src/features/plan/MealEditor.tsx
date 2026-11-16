@@ -20,11 +20,12 @@ import { DayRow } from "./DayRow";
 import { DuplicateDay } from "./DuplicateDay";
 import { MealPicker, SLOTS } from "./MealPicker";
 import { MealSwaps } from "./MealSwaps";
-import { buildMealUpdate, draftFromLibraryMeal, draftFromSwap, duplicateMealDay, mealDraftFromPlan, mealPath, requestIndex, type DraftMeal, type DraftMealDay } from "./mealDraft";
+import { buildMealUpdate, draftFromLibraryMeal, mealKcal, draftFromSwap, duplicateMealDay, mealDraftFromPlan, mealPath, requestIndex, type DraftMeal, type DraftMealDay } from "./mealDraft";
 import { FIELD, type LocalError } from "./trainingDraft";
 import { SaveBar } from "./SaveBar";
 import type { EditorProps } from "./TrainingEditor";
-import { ITEM } from "../../components/card";
+import { ChevronDownIcon } from "../../components/icons";
+import { Collapse, ITEM } from "../../components/card";
 
 const DEFAULT_SLOT: MealSlot = "lunch";
 const pickerSlot = (day: DraftMealDay, replace: string | null): MealSlot =>
@@ -47,6 +48,14 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
   const [swapping, setSwapping] = useState<string | null>(null);
   // Days are collapsed by default; a day opens when it has an error or content was copied into it (D105).
   const [open, setOpen] = useState<ReadonlySet<Weekday>>(() => new Set());
+  // Foods and grams of a meal are folded away by default; a meal opens when one of its grams has an error.
+  const [openMeals, setOpenMeals] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleMeal = (uid: string) =>
+    setOpenMeals((was) => {
+      const next = new Set(was);
+      if (!next.delete(uid)) next.add(uid);
+      return next;
+    });
   const save = useSaveMeals(athleteId);
   const dirty = JSON.stringify(days) !== initial;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
@@ -56,7 +65,12 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
   const openWithErrors = (
     draft: DraftMealDay[],
     errors: Record<string, unknown>,
-  ) =>
+  ) => {
+    const withGrams = draft.flatMap((day) => {
+      const i = requestIndex(draft, day.weekday);
+      return day.meals.filter((_, j) => Object.keys(errors).some((path) => path.startsWith(`${mealPath(i, j)}.items`))).map((m) => m.uid);
+    });
+    if (withGrams.length > 0) setOpenMeals((was) => new Set([...was, ...withGrams]));
     openDays(
       draft
         .filter(
@@ -68,6 +82,7 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
         )
         .map((day) => day.weekday),
     );
+  };
   const error = (path: string): string | undefined =>
     local[path] ? t(`plan.errors.${local[path]}`) : server[path];
   const edit = (next: DraftMealDay[]) => {
@@ -122,6 +137,7 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
         {days.map((day) => {
           const d = requestIndex(days, day.weekday);
           const title = `meal-day-${day.weekday}`;
+          const hintId = `${title}-hint`;
           const pick = picker?.weekday === day.weekday ? picker : null;
           const warning = plan.meal_days.find(
             (m: MealDay) => m.weekday === day.weekday,
@@ -156,61 +172,90 @@ export function MealEditor({ plan, athleteId, baseRevision, conflict, blocked, o
               }
             >
               {warning && <p className="text-step--1 text-slate">{warning}</p>}
+              {day.meals.length > 0 && (
+                <p id={hintId} className="text-step--1 text-slate">
+                  {t("plan.meals.portionHint")}
+                </p>
+              )}
               {day.meals.length === 0 && <p className="text-slate">{t("plan.meals.empty")}</p>}
               <ul className="mt-2 flex flex-col gap-3">
                 {day.meals.map((meal, j) => {
                   const id = (f: string) => `meal-${meal.uid}-${f}`;
+                  const summary = t("plan.meals.foodsSummary", { count: meal.foods.length, kcal: mealKcal(meal.foods) });
                   return (
                     <li key={meal.uid} className={ITEM}>
-                      <div className="flex items-start justify-between gap-2">
-                        <h4 className="min-w-0 break-words font-display text-step-1 font-semibold">{meal.mealName}</h4>
+                      <div className="flex flex-wrap items-end gap-x-2 gap-y-2" data-testid="meal-row">
+                        <h4 className="min-w-0 flex-1 basis-full break-words font-display text-step-1 font-semibold sm:basis-0">{meal.mealName}</h4>
+                        <div className="w-32 shrink-0 grow sm:w-36 sm:grow-0">
+                          <SelectInput compact describedBy={hintId} id={id("slot")} label={t("plan.meals.slot")} value={meal.slot} onChange={(slot) => patchMeal(day.weekday, meal.uid, { slot: slot as DraftMeal["slot"] })} options={SLOTS.map((s) => ({ value: s, label: t(`plan.slot.${s}`) }))} error={error(mealPath(d, j, FIELD.slot))} />
+                        </div>
+                        <div className="w-24 shrink-0">
+                          <TextInput
+                            compact
+                            describedBy={hintId}
+                            id={id("portion")}
+                            label={t("plan.meals.portion")}
+                            value={meal.gramsEdited ? "1" : meal.portion}
+                            disabled={meal.gramsEdited}
+                            inputMode="decimal"
+                            onChange={(portion) => patchMeal(day.weekday, meal.uid, { portion })}
+                            error={error(mealPath(d, j, FIELD.portion))}
+                          />
+                        </div>
                         <button type="button" className={ICON_BUTTON} onClick={() => edit(days.map((x) => (x.weekday === day.weekday ? { ...x, meals: x.meals.filter((m) => m.uid !== meal.uid) } : x)))} aria-label={t("plan.meals.remove", { name: meal.mealName })}>
                           <span aria-hidden="true">×</span>
                         </button>
                       </div>
-                      <div className="mt-2 grid grid-cols-2 gap-3">
-                        <SelectInput id={id("slot")} label={t("plan.meals.slot")} value={meal.slot} onChange={(slot) => patchMeal(day.weekday, meal.uid, { slot: slot as DraftMeal["slot"] })} options={SLOTS.map((s) => ({ value: s, label: t(`plan.slot.${s}`) }))} error={error(mealPath(d, j, FIELD.slot))} />
-                        <TextInput
-                          id={id("portion")}
-                          label={t("plan.meals.portion")}
-                          value={meal.gramsEdited ? "1" : meal.portion}
-                          disabled={meal.gramsEdited}
-                          inputMode="decimal"
-                          onChange={(portion) => patchMeal(day.weekday, meal.uid, { portion })}
-                          error={error(mealPath(d, j, FIELD.portion))}
-                          hint={meal.gramsEdited ? t("plan.meals.portionLocked") : t("plan.meals.portionHint")}
-                        />
-                      </div>
+                      {meal.gramsEdited && <p className="mt-1 text-step--1 text-slate">{t("plan.meals.portionLocked")}</p>}
                       {error(mealPath(d, j)) && <FieldError id={id("error")}>{error(mealPath(d, j))}</FieldError>}
-                      <ul className="mt-2 flex flex-col gap-2">
-                        {meal.foods.map((food, k) => (
-                          <li key={food.foodId} className="grid grid-cols-[1fr_7rem] items-end gap-3">
-                            <span className="break-words">{food.name}</span>
-                            <TextInput
-                              id={id(`grams-${k}`)}
-                              label={t("plan.meals.gramsOf", { name: food.name })}
-                              value={food.grams}
-                              inputMode="decimal"
-                              onChange={(grams) => patchMeal(day.weekday, meal.uid, { gramsEdited: true, foods: meal.foods.map((f, i) => (i === k ? { ...f, grams } : f)) })}
-                              error={error(mealPath(d, j, `items[${k}].grams`))}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="mt-3 flex flex-wrap gap-3">
-                        <button type="button" className={BUTTON} onClick={() => setPicker({ weekday: day.weekday, replace: meal.uid })} aria-label={t("plan.meals.replace", { name: meal.mealName })}>
-                          {t("plan.meals.replaceButton")}
-                        </button>
-                        {meal.mealKey && (
-                          <button type="button" className={BUTTON} disabled={dirty || blocked || save.isPending} aria-expanded={swapping === meal.uid} onClick={() => setSwapping(swapping === meal.uid ? null : meal.uid)} aria-label={t("plan.meals.swap.open", { name: meal.mealName })}>
-                            {t("plan.meals.swap.button")}
+                      <button
+                        type="button"
+                        id={id("toggle")}
+                        aria-expanded={openMeals.has(meal.uid)}
+                        aria-controls={id("content")}
+                        aria-label={t("plan.meals.foodsToggle", { name: meal.mealName, summary })}
+                        onClick={() => toggleMeal(meal.uid)}
+                        className="mt-1 flex min-h-11 items-center gap-2 text-left text-step--1 font-semibold text-spruce hover:underline"
+                      >
+                        <ChevronDownIcon className={`size-5 transition-transform ${openMeals.has(meal.uid) ? "rotate-180" : ""}`} />
+                        <span>{summary}</span>
+                      </button>
+                      <Collapse id={id("content")} open={openMeals.has(meal.uid)}>
+                        <ul className="mt-1 flex flex-col">
+                          {meal.foods.map((food, k) => (
+                            <li key={food.foodId} className="flex items-start justify-between gap-3 border-b border-line py-1">
+                              <span className="min-w-0 flex-1 break-words pt-2">{food.name}</span>
+                              <div className="w-28 shrink-0">
+                                <TextInput
+                                  compact
+                                  labelHidden
+                                  id={id(`grams-${k}`)}
+                                  label={t("plan.meals.gramsOf", { name: food.name })}
+                                  value={food.grams}
+                                  inputMode="decimal"
+                                  onChange={(grams) => patchMeal(day.weekday, meal.uid, { gramsEdited: true, foods: meal.foods.map((f, i) => (i === k ? { ...f, grams } : f)) })}
+                                  error={error(mealPath(d, j, `items[${k}].grams`))}
+                                />
+                              </div>
+                              <span aria-hidden="true" className="w-3 shrink-0 pt-2 text-step--1 text-slate">{t("plan.meals.unitG")}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button type="button" className={BUTTON} onClick={() => setPicker({ weekday: day.weekday, replace: meal.uid })} aria-label={t("plan.meals.replace", { name: meal.mealName })}>
+                            {t("plan.meals.replaceButton")}
                           </button>
+                          {meal.mealKey && (
+                            <button type="button" className={BUTTON} disabled={dirty || blocked || save.isPending} aria-expanded={swapping === meal.uid} onClick={() => setSwapping(swapping === meal.uid ? null : meal.uid)} aria-label={t("plan.meals.swap.open", { name: meal.mealName })}>
+                              {t("plan.meals.swap.button")}
+                            </button>
+                          )}
+                        </div>
+                        {meal.mealKey && dirty && <p className="mt-1 text-step--1 text-slate">{t("plan.meals.swap.saveFirst")}</p>}
+                        {meal.mealKey && swapping === meal.uid && !dirty && (
+                          <MealSwaps athleteId={athleteId} mealKey={meal.mealKey} mealName={meal.mealName} pending={save.isPending} onPick={(swap) => applySwap(day.weekday, meal.uid, swap)} onClose={() => setSwapping(null)} />
                         )}
-                      </div>
-                      {meal.mealKey && dirty && <p className="mt-1 text-step--1 text-slate">{t("plan.meals.swap.saveFirst")}</p>}
-                      {meal.mealKey && swapping === meal.uid && !dirty && (
-                        <MealSwaps athleteId={athleteId} mealKey={meal.mealKey} mealName={meal.mealName} pending={save.isPending} onPick={(swap) => applySwap(day.weekday, meal.uid, swap)} onClose={() => setSwapping(null)} />
-                      )}
+                      </Collapse>
                     </li>
                   );
                 })}

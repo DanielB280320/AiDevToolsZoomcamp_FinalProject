@@ -204,6 +204,13 @@ test("coach context fits a 360 px screen with 44 px tap targets", async ({ page,
       await page.waitForLoadState("networkidle");
       expect(await noPageScroll(), `no horizontal scroll at ${tail || "/"}`).toBe(true);
     }
+    // D112: an opened training day shows each exercise as a wrapping row of fields, still inside 360 px.
+    await page.goto(`/coach/clients/${alice.id}/plan`);
+    await page.getByRole("heading", { level: 3, name: /\d+ exercises?$/ }).first().getByRole("button").click();
+    await expect(page.getByTestId("exercise-fields").first()).toBeVisible();
+    expect(await noPageScroll(), "no horizontal scroll with an opened training day").toBe(true);
+    const sets = await page.getByLabel("Sets").first().boundingBox();
+    expect(sets!.height, "compact fields keep a 44 px target").toBeGreaterThanOrEqual(44);
     await tallEnough([
       page.getByRole("link", { name: "Back to clients" }),
       page.getByRole("navigation", { name: "Client views" }).getByRole("link", { name: "Today", exact: true }),

@@ -8,6 +8,7 @@ Every shipped visual pattern, where it lives and its exact classes. Paths are re
 - [Headings](#headings)
 - [Buttons and links](#buttons-and-links)
 - [Form fields](#form-fields)
+- [Compact editor rows](#compact-editor-rows)
 - [Tabs](#tabs)
 - [Badges and tags](#badges-and-tags)
 - [Sections, cards and callouts](#sections-cards-and-callouts)
@@ -64,7 +65,7 @@ Use the components; don't hand-roll a label + input.
 |---|---|---|
 | `TextField`, `SelectField`, `ChoiceField`, `CheckboxField`, `FormAlert`, `SubmitButton` | `components/form/fields.tsx` | Auth, account and onboarding forms. |
 | Wizard fields | `components/form/wizardFields.tsx` | Onboarding steps. |
-| `TextInput` and friends, `FieldError` | `features/plan/fields.tsx` | Editors with many compact fields (`inputMode` decimal/numeric). |
+| `TextInput` and friends, `FieldError` | `features/plan/fields.tsx` | Editors with many compact fields (`inputMode` decimal/numeric). Add `compact` for a field in a row (small slate label, 44 px control), `labelHidden` when the row already names it, `describedBy` for a shared hint line (see Compact editor rows). |
 
 Anatomy, top to bottom: label `block font-semibold` → hint `mt-1 text-step--1 text-slate` → control → error `mt-1.5 text-step--1 font-semibold text-alert`. Hint and error ids go in `aria-describedby`; an invalid control has `aria-invalid`.
 
@@ -73,6 +74,14 @@ Anatomy, top to bottom: label `block font-semibold` → hint `mt-1 text-step--1 
 - Segmented choice (`ChoiceField`): native radios hidden with `sr-only` inside labels in `grid grid-cols-2 gap-2`; each label `min-h-14 rounded-control border bg-card px-3 py-2` with the control border, selected `has-[:checked]:border-iron has-[:checked]:bg-iron has-[:checked]:text-chalk`; option title `font-display text-step-1 font-semibold leading-tight`, detail `text-step--1 opacity-80`.
 - Checkbox: `size-6 accent-spruce`, label beside it in `flex items-start gap-3`.
 - Form-level error (`FormAlert`): `role="alert"`, `border-l-[3px] border-alert bg-card px-4 py-3 font-semibold text-alert`, focused when shown.
+
+## Compact editor rows
+
+The plan editors (D112) keep each item to one or two lines. Three shipped patterns:
+
+- **Compact exercise field row** (`ExerciseCard` in `features/plan/TrainingEditor.tsx`): the item (`ITEM`) is the name (`font-display text-step-1 font-semibold`), the type in `text-step--1 text-slate` and the move/remove `ICON_BUTTON`s, then `grid grid-cols-2 gap-2 sm:grid-cols-4` of `TextInput compact` fields (sets, reps min, reps max, weight, rest; a timed exercise has sets, seconds, rest). Two rows of two on a 360 px phone, one row from `sm:`. A `compact` field is a `text-step--1 font-semibold text-slate` label over a `min-h-11` control with `px-2` (`TextInput`/`SelectInput` in `features/plan/fields.tsx`). Hints that apply to every item are **one** `text-step--1 text-slate` line at the top of the group (`data-testid="day-hint"`), referenced from each field with `describedBy={hintId}`; do not repeat them under each item. A per-item warning (out of range) stays under the item's row as an `border-l-[3px] border-alert pl-3` callout with `role="status"`.
+- **One-row meal with disclosure** (`MealEditor`): the item is `flex flex-wrap items-end gap-x-2 gap-y-2` with the name (`basis-full` on a phone, flexible from `sm:`), a `compact` slot select (`w-32 sm:w-36`), a `compact` portion input (`w-24`) and the remove `ICON_BUTTON`. Below it, a disclosure button `min-h-11 text-step--1 font-semibold text-spruce` with a `ChevronDownIcon` (rotates when open) and the summary ("N foods, X kcal"), with `aria-expanded` and `aria-controls` pointing at a `Collapse`. In the `Collapse`: one `border-b border-line py-1` row per food (name, then a `compact labelHidden` grams input `w-28` plus a "g" suffix; the label stays the accessible name) and then the secondary actions (Replace, Swap) as `BUTTON`s. Open it by script when something inside has an error, so the error is never hidden.
+- **Thin search result row** (`RESULT_ROW` in `components/card.tsx`): `flex min-h-11 w-full items-center justify-between gap-3 border-b border-line px-1 py-1 text-left hover:bg-line`, the name `font-semibold` left (`min-w-0 break-words`), a `text-step--1 text-slate` detail (kcal per 100 g, kcal, type) right (`shrink-0`). The `ul` has no gap and no border boxes. Used by the exercise, meal, food and Open Food Facts searches. The button keeps its `aria-label` where it had one.
 
 ## Tabs
 
@@ -113,7 +122,8 @@ All from `components/card.tsx` unless noted.
 | Highlight callout | `border-l-[3px] border-plate pl-3`, or `border-l-[3px] border-plate bg-card p-4` when it must stand out | A prompt asking for a decision (recalculation, banner) |
 | Error callout | `border-l-[3px] border-alert pl-3` + `role="alert"`, text `text-alert` or `font-semibold` | Inline failure |
 | Quiet aside | `border-l-[3px] border-line pl-4` | Disclaimer, secondary info |
-| `Collapse` | `<Collapse id open>` renders `div#id[hidden]` with the `expand-in` animation | Expanding content (exercise sets, plan day, progression help); content stays in the DOM |
+| `RESULT_ROW` | see Compact editor rows | A thin search-result button row |
+| `Collapse` | `<Collapse id open>` renders `div#id[hidden]` with the `expand-in` animation | Expanding content (exercise sets, plan day, the foods of a meal, progression help); content stays in the DOM |
 
 Rule: **no card inside a card**. Decide per screen which is the card: a titled section is a `CARD` and what it holds is a `TILE`, an `ITEM`, a row or a chart; a figure or chart that sits outside any section card is a `CARD`. Callouts are never cards, and `bg-card` on a callout is only for one that must stand off the page.
 

@@ -30,6 +30,13 @@ export const TILE = "min-w-0 rounded-card bg-well p-3";
 export const ITEM = "rounded-control border border-line p-3";
 
 /**
+ * A thin search-result row (D112): the whole row is the button, the name on the left and a short detail
+ * (kcal, type) on the right, 44 px high, hairline below. Put the rows in a `ul` with no gap.
+ */
+export const RESULT_ROW =
+  "flex min-h-11 w-full items-center justify-between gap-3 border-b border-line px-1 py-1 text-left hover:bg-line disabled:opacity-60";
+
+/**
  * Expanding content: always in the DOM (hidden only while closed), so keyboard users and tests never
  * wait on the animation; it fades and grows in when it opens.
  */

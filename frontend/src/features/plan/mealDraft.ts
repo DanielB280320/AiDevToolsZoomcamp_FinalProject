@@ -8,6 +8,8 @@ export interface DraftFood {
   foodId: string;
   name: string;
   grams: string;
+  /** Energy per 100 g, for the "N foods, X kcal" summary only; never sent. */
+  kcalPer100: number;
 }
 
 export interface DraftMeal {
@@ -33,6 +35,14 @@ export interface DraftMealDay {
   meals: DraftMeal[];
 }
 
+const per100 = (item: { kcal: number; grams: number }): number =>
+  item.grams > 0 && Number.isFinite(item.kcal) ? (item.kcal / item.grams) * 100 : 0;
+
+/** Energy of a meal's foods at the grams shown, rounded to whole kcal. */
+export function mealKcal(foods: DraftFood[]): number {
+  return Math.round(foods.reduce((sum, f) => sum + (f.kcalPer100 * (parseDecimal(f.grams) ?? 0)) / 100, 0));
+}
+
 const gramsText = (grams: number): string => String(Math.round(grams * 10) / 10);
 
 const fromPlanned = (m: PlannedMeal): DraftMeal => ({
@@ -43,7 +53,7 @@ const fromPlanned = (m: PlannedMeal): DraftMeal => ({
   mealId: m.meal.id,
   mealName: m.meal.name,
   portion: String(m.portion_factor),
-  foods: m.items.map((i) => ({ foodId: i.food.id, name: i.food.name, grams: gramsText(i.grams) })),
+  foods: m.items.map((i) => ({ foodId: i.food.id, name: i.food.name, grams: gramsText(i.grams), kcalPer100: per100(i) })),
   gramsEdited: false,
 });
 
@@ -70,7 +80,7 @@ export function draftFromLibraryMeal(meal: Meal, slot: MealSlot, portion: string
     mealId: meal.id,
     mealName: meal.name,
     portion,
-    foods: meal.items.map((i) => ({ foodId: i.food.id, name: i.food.name, grams: gramsText(i.grams * factor) })),
+    foods: meal.items.map((i) => ({ foodId: i.food.id, name: i.food.name, grams: gramsText(i.grams * factor), kcalPer100: per100(i) })),
     gramsEdited: false,
   };
 }
@@ -83,7 +93,7 @@ export function draftFromSwap(swap: MealSwap, slot: MealSlot): DraftMeal {
     mealId: swap.meal_id,
     mealName: swap.name,
     portion: String(swap.portion_factor),
-    foods: swap.items.map((i) => ({ foodId: i.food.id, name: i.food.name, grams: gramsText(i.grams) })),
+    foods: swap.items.map((i) => ({ foodId: i.food.id, name: i.food.name, grams: gramsText(i.grams), kcalPer100: per100(i) })),
     gramsEdited: false,
   };
 }
