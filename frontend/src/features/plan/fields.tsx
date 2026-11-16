@@ -5,6 +5,13 @@ export const PRIMARY = "min-h-12 rounded-control bg-spruce px-4 font-semibold te
 export const ICON_BUTTON = "min-h-12 min-w-12 rounded-control border border-edge hover:border-slate px-2 font-semibold hover:bg-line disabled:opacity-40";
 const CONTROL =
   "mt-1 block min-h-12 w-full rounded-control border border-edge bg-card px-3 py-2 hover:border-slate aria-[invalid=true]:border-alert";
+/** Compact field (D112): a small label over a 44 px control, for rows of several fields. */
+const COMPACT_CONTROL =
+  "mt-0.5 block min-h-11 w-full rounded-control border border-edge bg-card px-2 py-1 hover:border-slate aria-[invalid=true]:border-alert";
+const LABEL = "block font-semibold";
+const COMPACT_LABEL = "block text-step--1 font-semibold text-slate";
+/** Label kept for assistive technology only, when the row already shows what the field is. */
+const HIDDEN_LABEL = "sr-only";
 
 export function FieldError({ id, children }: { id: string; children: ReactNode }) {
   return (
@@ -19,7 +26,16 @@ interface BaseProps {
   label: string;
   error?: string | undefined;
   hint?: string;
+  /** Small label and a tighter control, for a row of fields (D112). */
+  compact?: boolean;
+  /** Visually hide the label (it stays the accessible name). */
+  labelHidden?: boolean;
+  /** Id of a shared hint line the field is described by, in addition to its own hint and error. */
+  describedBy?: string;
 }
+
+const labelClass = (compact?: boolean, hidden?: boolean) => (hidden ? HIDDEN_LABEL : compact ? COMPACT_LABEL : LABEL);
+const joinIds = (...ids: (string | undefined | false)[]) => ids.filter(Boolean).join(" ") || undefined;
 
 export function TextInput({
   id,
@@ -31,6 +47,9 @@ export function TextInput({
   inputMode,
   maxLength,
   disabled,
+  compact,
+  labelHidden,
+  describedBy: sharedHint,
 }: BaseProps & {
   value: string;
   onChange: (value: string) => void;
@@ -38,10 +57,10 @@ export function TextInput({
   maxLength?: number;
   disabled?: boolean;
 }) {
-  const describedBy = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(" ") || undefined;
+  const describedBy = joinIds(hint && `${id}-hint`, error && `${id}-error`, sharedHint);
   return (
     <div className="min-w-0">
-      <label htmlFor={id} className="block font-semibold">
+      <label htmlFor={id} className={labelClass(compact, labelHidden)}>
         {label}
       </label>
       <input
@@ -54,7 +73,7 @@ export function TextInput({
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={CONTROL}
+        className={compact ? COMPACT_CONTROL : CONTROL}
       />
       {hint && (
         <p id={`${id}-hint`} className="mt-1 text-step--1 text-slate">
@@ -74,17 +93,18 @@ export function SelectInput({
   options,
   error,
   hint,
+  compact,
+  labelHidden,
+  describedBy: sharedHint,
 }: BaseProps & {
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
 }) {
-  const describedBy =
-    [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(" ") ||
-    undefined;
+  const describedBy = joinIds(hint && `${id}-hint`, error && `${id}-error`, sharedHint);
   return (
     <div className="min-w-0">
-      <label htmlFor={id} className="block font-semibold">
+      <label htmlFor={id} className={labelClass(compact, labelHidden)}>
         {label}
       </label>
       <select
@@ -93,7 +113,7 @@ export function SelectInput({
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={CONTROL}
+        className={compact ? COMPACT_CONTROL : CONTROL}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

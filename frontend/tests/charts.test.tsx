@@ -344,6 +344,61 @@ describe("Adherence", () => {
     expect(cells.find((c) => c.textContent === "30")!.getAttribute("data-value")).toBe("none");
   });
 
+  it("shows the day's training and nutrition when a day is pointed at or focused (D113)", async () => {
+    serveAll();
+    const user = userEvent.setup();
+    renderApp("/progress");
+    const cells = await screen.findAllByTestId("heat-cell");
+    const by = (n: string) => cells.find((c) => c.textContent === n)!;
+    expect(screen.queryByTestId("heat-detail")).not.toBeInTheDocument();
+    await user.hover(by("28"));
+    const detail = screen.getByRole("tooltip");
+    expect(within(detail).getByText("Monday, September 28")).toBeInTheDocument();
+    expect(within(detail).getByText("Training: 100% (done)")).toBeInTheDocument();
+    expect(within(detail).getByText("Nutrition: 90%")).toBeInTheDocument();
+    expect(by("28")).toHaveAccessibleDescription(/Training: 100% \(done\)/);
+    await user.unhover(by("28"));
+    expect(screen.queryByTestId("heat-detail")).not.toBeInTheDocument();
+    // Keyboard: focus opens it, Escape closes it; a day without values names its status.
+    by("29").focus();
+    expect(within(await screen.findByRole("tooltip")).getByText("Training: rest day")).toBeInTheDocument();
+    expect(within(screen.getByRole("tooltip")).getByText("Nutrition: no value")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("heat-detail")).not.toBeInTheDocument();
+  });
+
+  it("shows a period of up to 31 days as one grid without month buttons (D113)", async () => {
+    serveAll();
+    renderApp("/progress");
+    await screen.findAllByTestId("heat-cell");
+    expect(screen.queryByRole("button", { name: "Previous month" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("heat-month")).not.toBeInTheDocument();
+  });
+
+  it("pages a longer period by month, opening on the latest one (D113)", async () => {
+    // 2026-09-20 .. 2026-11-10: 52 days over three months.
+    const days = Array.from({ length: 52 }, (_, i) => day(new Date(Date.UTC(2026, 8, 20 + i)).toISOString().slice(0, 10)));
+    serveAll({ adherence: { ...adherence(), from: "2026-09-20", to: "2026-11-10", days } });
+    const user = userEvent.setup();
+    renderApp("/progress");
+    await screen.findAllByTestId("heat-cell");
+    const month = screen.getByTestId("heat-month");
+    const prev = screen.getByRole("button", { name: "Previous month" });
+    const next = screen.getByRole("button", { name: "Next month" });
+    expect(month).toHaveTextContent("November 2026");
+    expect(screen.getAllByTestId("heat-cell")).toHaveLength(10);
+    expect(next).toBeDisabled();
+    await user.click(prev);
+    expect(month).toHaveTextContent("October 2026");
+    expect(screen.getAllByTestId("heat-cell")).toHaveLength(31);
+    await user.click(prev);
+    expect(month).toHaveTextContent("September 2026");
+    expect(screen.getAllByTestId("heat-cell")).toHaveLength(11);
+    expect(prev).toBeDisabled();
+    await user.click(next);
+    expect(month).toHaveTextContent("October 2026");
+  });
+
   it("shows an empty state without days", async () => {
     serveAll({ adherence: { ...adherence(), days: [], weeks: [] } });
     renderApp("/progress");

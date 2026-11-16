@@ -8,6 +8,7 @@ Every shipped visual pattern, where it lives and its exact classes. Paths are re
 - [Headings](#headings)
 - [Buttons and links](#buttons-and-links)
 - [Form fields](#form-fields)
+- [Compact editor rows](#compact-editor-rows)
 - [Tabs](#tabs)
 - [Badges and tags](#badges-and-tags)
 - [Sections, cards and callouts](#sections-cards-and-callouts)
@@ -64,7 +65,7 @@ Use the components; don't hand-roll a label + input.
 |---|---|---|
 | `TextField`, `SelectField`, `ChoiceField`, `CheckboxField`, `FormAlert`, `SubmitButton` | `components/form/fields.tsx` | Auth, account and onboarding forms. |
 | Wizard fields | `components/form/wizardFields.tsx` | Onboarding steps. |
-| `TextInput` and friends, `FieldError` | `features/plan/fields.tsx` | Editors with many compact fields (`inputMode` decimal/numeric). |
+| `TextInput` and friends, `FieldError` | `features/plan/fields.tsx` | Editors with many compact fields (`inputMode` decimal/numeric). Add `compact` for a field in a row (small slate label, 44 px control), `labelHidden` when the row already names it, `describedBy` for a shared hint line (see Compact editor rows). |
 
 Anatomy, top to bottom: label `block font-semibold` → hint `mt-1 text-step--1 text-slate` → control → error `mt-1.5 text-step--1 font-semibold text-alert`. Hint and error ids go in `aria-describedby`; an invalid control has `aria-invalid`.
 
@@ -74,12 +75,20 @@ Anatomy, top to bottom: label `block font-semibold` → hint `mt-1 text-step--1 
 - Checkbox: `size-6 accent-spruce`, label beside it in `flex items-start gap-3`.
 - Form-level error (`FormAlert`): `role="alert"`, `border-l-[3px] border-alert bg-card px-4 py-3 font-semibold text-alert`, focused when shown.
 
+## Compact editor rows
+
+The plan editors (D112) keep each item to one or two lines. Three shipped patterns:
+
+- **Compact exercise field row** (`ExerciseCard` in `features/plan/TrainingEditor.tsx`): the item (`ITEM`) is the name (`font-display text-step-1 font-semibold`), the type in `text-step--1 text-slate` and the move/remove `ICON_BUTTON`s, then `grid grid-cols-2 gap-2 sm:grid-cols-4` of `TextInput compact` fields (sets, reps min, reps max, weight, rest; a timed exercise has sets, seconds, rest). Two rows of two on a 360 px phone, one row from `sm:`. A `compact` field is a `text-step--1 font-semibold text-slate` label over a `min-h-11` control with `px-2` (`TextInput`/`SelectInput` in `features/plan/fields.tsx`). Hints that apply to every item are **one** `text-step--1 text-slate` line at the top of the group (`data-testid="day-hint"`), referenced from each field with `describedBy={hintId}`; do not repeat them under each item. A per-item warning (out of range) stays under the item's row as an `border-l-[3px] border-alert pl-3` callout with `role="status"`.
+- **One-row meal with disclosure** (`MealEditor`): the item is `flex flex-wrap items-end gap-x-2 gap-y-2` with the name (`basis-full` on a phone, flexible from `sm:`), a `compact` slot select (`w-32 sm:w-36`), a `compact` portion input (`w-24`) and the remove `ICON_BUTTON`. Below it, a disclosure button `min-h-11 text-step--1 font-semibold text-spruce` with a `ChevronDownIcon` (rotates when open) and the summary ("N foods, X kcal"), with `aria-expanded` and `aria-controls` pointing at a `Collapse`. In the `Collapse`: one `border-b border-line py-1` row per food (name, then a `compact labelHidden` grams input `w-28` plus a "g" suffix; the label stays the accessible name) and then the secondary actions (Replace, Swap) as `BUTTON`s. Open it by script when something inside has an error, so the error is never hidden.
+- **Thin search result row** (`RESULT_ROW` in `components/card.tsx`): `flex min-h-11 w-full items-center justify-between gap-3 border-b border-line px-1 py-1 text-left hover:bg-line`, the name `font-semibold` left (`min-w-0 break-words`), a `text-step--1 text-slate` detail (kcal per 100 g, kcal, type) right (`shrink-0`). The `ul` has no gap and no border boxes. Used by the exercise, meal, food and Open Food Facts searches. The button keeps its `aria-label` where it had one.
+
 ## Tabs
 
 | Pattern | Where | Classes |
 |---|---|---|
 | Main tab strip | `features/calendar/CalendarNav.tsx` (same shape: `features/coach/ClientNav.tsx`, `CoachNav.tsx`, the Plan editor's tablist) | `<nav aria-label>` → `ul` with `TAB_STRIP` (`flex border-b border-line`, plus `no-scrollbar overflow-x-auto` where it scrolls) → `li` `flex-1 shrink-0` → `NavLink` with `tabClass(isActive, extra)` from `components/tabs.ts`: `press flex min-h-12 items-center justify-center border-b-[3px] font-display text-step-1 font-semibold no-underline`; active `border-spruce text-spruce`, rest `border-transparent text-iron hover:bg-line/50 hover:text-spruce`. Padding comes through `extra` (`px-3`). `useActiveTabInView` (`lib/`) keeps the active tab visible on a phone. |
-| Period / range switch | `features/charts/PeriodSelector.tsx`, `features/calendar/RangeControls.tsx` | Preset buttons plus previous/next; reuse for any date-range control. |
+| Period / range switch | `features/charts/PeriodSelector.tsx`, `features/calendar/RangeControls.tsx` | Preset buttons plus previous/next; reuse for any date-range control. The previous/next pair is `‹ label ›`: two step buttons (`min-h-11 min-w-11 rounded-control border border-edge hover:border-slate font-semibold hover:bg-line disabled:cursor-not-allowed disabled:opacity-40`, glyphs from `charts.period.prevGlyph`/`nextGlyph`, each with an `aria-label`) around a `min-w-0 flex-1 text-center font-semibold` label with `aria-live="polite"`; a step that cannot move is `disabled`. The month pager of the adherence heat map (D113) is the same pair. |
 
 The active tab is spruce text with a 3 px spruce underline (not colour alone: the underline is the second cue), and `NavLink` sets `aria-current` (a button tablist sets `aria-selected`).
 
@@ -113,7 +122,8 @@ All from `components/card.tsx` unless noted.
 | Highlight callout | `border-l-[3px] border-plate pl-3`, or `border-l-[3px] border-plate bg-card p-4` when it must stand out | A prompt asking for a decision (recalculation, banner) |
 | Error callout | `border-l-[3px] border-alert pl-3` + `role="alert"`, text `text-alert` or `font-semibold` | Inline failure |
 | Quiet aside | `border-l-[3px] border-line pl-4` | Disclaimer, secondary info |
-| `Collapse` | `<Collapse id open>` renders `div#id[hidden]` with the `expand-in` animation | Expanding content (exercise sets, plan day, progression help); content stays in the DOM |
+| `RESULT_ROW` | see Compact editor rows | A thin search-result button row |
+| `Collapse` | `<Collapse id open>` renders `div#id[hidden]` with the `expand-in` animation | Expanding content (exercise sets, plan day, the foods of a meal, progression help); content stays in the DOM |
 
 Rule: **no card inside a card**. Decide per screen which is the card: a titled section is a `CARD` and what it holds is a `TILE`, an `ITEM`, a row or a chart; a figure or chart that sits outside any section card is a `CARD`. Callouts are never cards, and `bg-card` on a callout is only for one that must stand off the page.
 
@@ -139,7 +149,7 @@ No skeletons or spinners anywhere; keep it that way.
 | `DeltaLine` | `features/charts/DeltaLine.tsx` | Arrow glyph + screen-reader direction + signed value. `tone="higherIsBetter"`: up `text-spruce`, down `text-alert`; `tone="neutral"` (weight, energy): always `text-slate`. No data: slate sentence. |
 
 | Progress bar | `features/calendar/EnergySummary.tsx`, `TodayView.tsx` | Track `h-2 overflow-hidden rounded-full bg-line`, fill in spruce with `transition-[width]`, with the figures in text beside it. |
-| Floating popover | `features/calendar/MonthView.tsx` | `absolute z-20 w-48 rounded-control border border-line bg-card p-2 text-step--1 shadow-lg`, shown on hover and on keyboard focus. The only shadow besides the cards' `shadow-card`. |
+| Floating popover | `features/calendar/MonthView.tsx`, day detail in `features/charts/AdherenceView.tsx` (D113) | `absolute z-20 rounded-control border border-line bg-card p-2 text-left text-step--1 text-iron shadow-lg` (`w-48`, or `w-max max-w-[13rem]`), `pointer-events-none`, shown on hover and on keyboard focus (and on tap where the cell is a button); `role="tooltip"` linked with `aria-describedby`, Escape closes it. First line `font-semibold` (the date), then one line per figure. In a grid it opens inwards on the outer columns (`left-0` / `right-0`, centred otherwise) so it never causes sideways scroll at 360 px. `shadow-lg` is the only shadow besides the cards' `shadow-card`. |
 
 Figures that change in place or line up in columns use `tabular-nums` (rest timer, set values). Energy figures carry the "estimated" tag or wording.
 
@@ -159,6 +169,8 @@ Colours only from `CHART_COLORS` in `features/charts/chartData.ts` (hex copies o
 | `line` | line | `CartesianGrid` (`vertical={false}`) |
 
 Every chart has a `<ChartTooltip label={...} unit={...} />` (`features/charts/ChartTooltip.tsx`): hovering or tapping a point shows the x label, then each series' name and value with its unit, in a small white box with a hairline border (ink text, never the series colour; `bars` shades the hovered column instead of a guide line; leave `unit` out when the series names carry their units). Every `YAxis` on the left uses `width="auto"` and the chart's left margin is `0`, so labels such as `100%` or `102.5 kg` are never cut off; don't set a fixed width or a negative margin. Every series spreads `{...anim}` from `useChartAnimation()` (`lib/motion.ts`: 400 ms ease-out, off under `prefers-reduced-motion`) and has a translated `name`; two lines on one chart differ by dash or dots as well as colour; a `<Legend />` is shown when there is more than one series; axis ticks use the default text colour and `minTickGap`. Units (kg/lb, %, kcal) appear on the axis or in the series name.
+
+**Calendar heat map** (`AdherenceView`, D113): a centred block (`mx-auto max-w-[28rem]`, legend included) holding a `grid grid-cols-7 gap-1` `ol` that starts on Monday. Each day is a `button` (`aspect-square w-full rounded-sm text-step--1 font-semibold`, day number inside, the value in its `aria-label`): a value is a spruce fill whose opacity grows with the percentage (`text-chalk` from 60 %, below that `text-iron` with a `border-alert/40` outline); no value (rest, not yet due, no plan) is `border border-dashed border-line bg-page text-slate` with no number, never 0 %. A period over 31 days shows one calendar month at a time with the `‹ Month Year ›` step pair above the grid (see Period / range switch), opening on the latest month; up to 31 days it is one block without the pair. Never let a calendar grow with the period: page it. Pointing at, focusing or tapping a day opens the Floating popover with the date and both metrics. A legend line (`text-step--1 text-slate`) explains the dashed days.
 
 ## Icons and logo
 

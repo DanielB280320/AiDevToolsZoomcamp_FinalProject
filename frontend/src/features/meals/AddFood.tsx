@@ -11,6 +11,7 @@ import {
   useLogMeal,
   useOffSearch,
 } from "../../api/meals";
+import { RESULT_ROW } from "../../components/card";
 
 const SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
 const INPUT =
@@ -281,12 +282,10 @@ export function AddFood({
             <button
               type="button"
               onClick={() => pick({ id: food.id, name: food.name })}
-              className="min-h-12 w-full border-b border-line py-2 text-left font-semibold hover:bg-line"
+              className={RESULT_ROW}
             >
-              {food.name}
-              <span className="text-step--1 font-normal text-slate">
-                {" "}
-                ·{" "}
+              <span className="min-w-0 break-words font-semibold">{food.name}</span>
+              <span className="shrink-0 text-step--1 text-slate">
                 {t("meals.add.per100", {
                   count: Math.round(food.kcal_per_100g),
                 })}
@@ -331,12 +330,10 @@ export function AddFood({
                 type="button"
                 disabled={importFood.isPending}
                 onClick={() => addOnline(product)}
-                className="min-h-12 w-full border-b border-line py-2 text-left font-semibold hover:bg-line"
+                className={RESULT_ROW}
               >
-                {product.name}
-                <span className="text-step--1 font-normal text-slate">
-                  {" "}
-                  ·{" "}
+                <span className="min-w-0 break-words font-semibold">{product.name}</span>
+                <span className="shrink-0 text-step--1 text-slate">
                   {t("meals.add.per100", {
                     count: Math.round(product.kcal_per_100g),
                   })}

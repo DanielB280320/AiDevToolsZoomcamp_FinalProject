@@ -6,7 +6,7 @@ import { useFoodSearch, type MealSlot } from "../../api/meals";
 import { type Meal, useCreateMeal, useMealSearch } from "../../api/plan";
 import { CustomFoodForm } from "../meals/AddFood";
 import { BUTTON, PRIMARY, SelectInput, TextInput } from "./fields";
-import { CARD } from "../../components/card";
+import { CARD, RESULT_ROW } from "../../components/card";
 
 export const SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
 
@@ -86,11 +86,11 @@ function CreateMealForm({ slot, onCreated }: { slot: MealSlot; onCreated: (meal:
       </ul>
       <TextInput id={`${uid}-food`} label={t("plan.meals.create.searchFood")} value={text} onChange={setText} />
       {search.data && search.data.length > 0 && (
-        <ul className="mt-1 flex flex-col gap-2">
+        <ul className="mt-1">
           {search.data.map((food) => (
             <li key={food.id}>
-              <button type="button" className={`${BUTTON} w-full text-left`} onClick={() => add(food)} aria-label={t("plan.meals.create.addFood", { name: food.name })}>
-                {food.name}
+              <button type="button" className={RESULT_ROW} onClick={() => add(food)} aria-label={t("plan.meals.create.addFood", { name: food.name })}>
+                <span className="min-w-0 break-words font-semibold">{food.name}</span>
               </button>
             </li>
           ))}
@@ -140,12 +140,12 @@ export function MealPicker({
       <TextInput id={`${uid}-q`} label={t("plan.meals.picker.search")} value={text} onChange={setText} />
       {search.isSuccess && search.data.length === 0 && <p className="mt-1 text-step--1 text-slate">{t("plan.noResults")}</p>}
       {search.isError && <p role="alert" className="mt-1 text-step--1 font-semibold text-alert">{t("plan.meals.picker.failed")}</p>}
-      <ul className="mt-2 flex flex-col gap-2">
+      <ul className="mt-2">
         {(search.data ?? []).map((meal) => (
           <li key={meal.id}>
-            <button type="button" className={`${BUTTON} w-full text-left`} onClick={() => onPick(meal, slot)} aria-label={t("plan.meals.picker.choose", { name: meal.name })}>
-              {meal.name}
-              <span className="block text-step--1 font-normal text-slate">{t("plan.meals.kcal", { kcal: meal.totals.kcal })}</span>
+            <button type="button" className={RESULT_ROW} onClick={() => onPick(meal, slot)} aria-label={t("plan.meals.picker.choose", { name: meal.name })}>
+              <span className="min-w-0 break-words font-semibold">{meal.name}</span>
+              <span className="shrink-0 text-step--1 text-slate">{t("plan.meals.kcal", { kcal: meal.totals.kcal })}</span>
             </button>
           </li>
         ))}

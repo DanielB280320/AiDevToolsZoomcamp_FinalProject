@@ -7,7 +7,7 @@ description: FitWise's own visual design system - the colour, type and spacing t
 
 FitWise already has a look. This skill records it so that every new screen reads as part of the same app. The generic `frontend-design` skill is about finding a direction; here the direction is already chosen, so use that skill only for craft inside these rules (hierarchy, composition, copy), not to pick new palettes or fonts.
 
-The look in one sentence: **light, calm and modern** - a near-white page, white cards with a hairline border, soft 8 px controls, condensed semibold headings, one green for actions and one yellow used sparingly, and short, quiet feedback when you press things (D111).
+The look in one sentence: **light, calm and modern** - a white page, white cards with a hairline border, soft 8 px controls, condensed semibold headings, one green for actions and one yellow used sparingly, and short, quiet feedback when you press things (D111).
 
 Source of truth is the code: tokens in `frontend/src/index.css` (`@theme`), patterns in `frontend/src/components/` and `frontend/src/features/`. If this skill and the code disagree, the code is right and this skill needs fixing in the same PR.
 
@@ -56,6 +56,8 @@ Emphasis in body text is `font-semibold`. Small all-caps labels are `text-step--
 - A **card** is `CARD` (components/card.tsx): `rounded-card border border-line bg-card shadow-card p-4`. Every titled section and every standalone chart block is one. `shadow-card` (a token in `index.css`) is the only resting shadow and belongs to cards alone: wells, items, buttons and callouts stay flat. The one stronger shadow is on a layer that floats over content (the Month day popover, `shadow-lg`). No gradient, no blur.
 - **No card inside a card.** A section card holds its figures and charts directly. A KPI figure inside a section is a `TILE` (a soft `bg-well` fill, no border); a repeated item inside a section (an exercise or meal inside a plan-day card) is an `ITEM` (hairline outline only). A figure, chart or row that is *not* inside a section card is a card itself.
 - **Callouts are not cards.** A note, a decision prompt or an error keeps a 3 px coloured side line (`border-l-[3px] pl-3`): `border-iron` note, `border-alert` error, `border-plate` highlight, `border-line` quiet aside. Text or `role="alert"` says what it is, not the colour.
+- Editors stay compact (D112): one row of small labelled fields per item, hints once per group, secondary content behind a disclosure, thin result rows; see "Compact editor rows" in components.md.
+- Calendars and heat maps stay a fixed size (D113): a long period is paged by month with a `‹ label ›` step pair, the grid is centred in its card, and a day's figures appear in a floating popover on hover, focus or tap; see Charts in components.md.
 - Rows in a list are separated by `border-b border-line` / `divide-y divide-line`; rows that open something are `CARD_LINK` cards.
 - Tab strips sit on a 1 px `line` rule (see Tabs in components.md). `border-b-4 border-plate` under the header is the only heavy rule left.
 - `rounded-control` for buttons and fields, `rounded-card` for cards, `rounded-sm` for badges and tags; `rounded-full` only for a true circle or a thin progress bar.

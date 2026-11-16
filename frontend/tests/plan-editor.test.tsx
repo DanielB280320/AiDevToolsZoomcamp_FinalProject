@@ -190,6 +190,13 @@ async function openPlan(user = userEvent.setup()) {
   return user;
 }
 
+/** Opens the "N foods, X kcal" disclosure of a meal (closed by default) and returns its button. */
+async function openFoods(user: ReturnType<typeof userEvent.setup>, meal: string) {
+  const toggle = screen.getByRole("button", { name: new RegExp(`^Foods of ${meal}:`) });
+  if (toggle.getAttribute("aria-expanded") === "false") await user.click(toggle);
+  return toggle;
+}
+
 const field = (label: string | RegExp) => screen.getByLabelText(label) as HTMLInputElement;
 
 describe("Plan editor: training", () => {
@@ -298,10 +305,10 @@ describe("Plan editor: training", () => {
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     const reps = await screen.findByText("Set the target reps.");
-    expect(field("Reps (min)")).toHaveAttribute("aria-describedby", reps.id);
+    expect(field("Reps (min)")).toHaveAttribute("aria-describedby", expect.stringContaining(reps.id));
     expect(field("Reps (min)")).toBeInvalid();
     const seconds = screen.getByText("A timed exercise needs seconds.");
-    expect(field("Seconds")).toHaveAttribute("aria-describedby", seconds.id);
+    expect(field("Seconds")).toHaveAttribute("aria-describedby", expect.stringContaining(seconds.id));
     expect(screen.getByText("A timed exercise has seconds only.")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Some plan fields need fixing");
     // The draft is still there.
@@ -327,6 +334,28 @@ describe("Plan editor: training", () => {
   });
 });
 
+describe("Plan editor: compact exercise rows", () => {
+  it("shows each exercise as one row of labelled fields and the three hints once per day", async () => {
+    fakePlan();
+    await openPlan();
+    const rows = screen.getAllByTestId("exercise-fields");
+    expect(rows).toHaveLength(2);
+    for (const label of ["Sets", "Reps (min)", "Max reps", "Weight (kg)", "Rest (seconds)"]) {
+      expect(within(rows[0]!).getByLabelText(label)).toBeInTheDocument();
+    }
+    // A timed exercise has sets, seconds and rest.
+    for (const label of ["Sets", "Seconds", "Rest (seconds)"]) {
+      expect(within(rows[1]!).getByLabelText(label)).toBeInTheDocument();
+    }
+    const hint = screen.getByTestId("day-hint");
+    expect(screen.getAllByTestId("day-hint")).toHaveLength(1);
+    expect(hint).toHaveTextContent(/Leave max reps empty for a fixed number of reps/);
+    expect(hint).toHaveTextContent(/Leave weight empty to choose it at the first session/);
+    expect(field("Reps (min)")).toHaveAccessibleDescription(/Recommended for this goal/);
+    expect(screen.queryByText("Top of the range. Leave empty for a fixed number of reps.")).not.toBeInTheDocument();
+  });
+});
+
 describe("Plan editor: meals", () => {
   async function openMeals() {
     const user = await openPlan();
@@ -336,6 +365,47 @@ describe("Plan editor: meals", () => {
   }
   const saveMeals = (user: ReturnType<typeof userEvent.setup>) =>
     user.click(within(screen.getByRole("region", { name: "Meals" })).getByRole("button", { name: "Save changes" }));
+
+  it("folds foods behind an \"N foods, X kcal\" disclosure: closed by default, opens to foods, grams, Replace and Swap", async () => {
+    fakePlan();
+    const user = await openMeals();
+    const toggle = screen.getByRole("button", { name: "Foods of Chicken rice: 1 food, 600 kcal" });
+    expect(toggle).toHaveTextContent("1 food, 600 kcal");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // One row per meal: name, slot, portion and remove are visible; foods and actions are not.
+    expect(screen.getByRole("button", { name: "Remove Chicken rice" })).toBeVisible();
+    expect(screen.getAllByLabelText("Meal")[1]).toHaveValue("lunch");
+    expect(screen.queryByRole("button", { name: "Replace Chicken rice" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Swap Chicken rice" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Grams of Rice")).not.toBeVisible();
+
+    // The keyboard opens it too.
+    toggle.focus();
+    await user.keyboard("{Enter}");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAttribute("aria-controls", expect.stringMatching(/-content$/));
+    expect(screen.getByLabelText("Grams of Rice")).toBeVisible();
+    expect(screen.getByLabelText("Grams of Rice")).toHaveValue("150");
+    expect(screen.getByRole("button", { name: "Replace Chicken rice" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Swap Chicken rice" })).toBeVisible();
+    // The Oat bowl stays closed.
+    expect(screen.getByRole("button", { name: /^Foods of Oat bowl:/ })).toHaveAttribute("aria-expanded", "false");
+
+    await user.keyboard(" ");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens the foods of a meal whose grams have an error", async () => {
+    fakePlan();
+    const user = await openMeals();
+    await openFoods(user, "Chicken rice");
+    await user.clear(screen.getByLabelText("Grams of Rice"));
+    await user.type(screen.getByLabelText("Grams of Rice"), "0");
+    await user.click(screen.getByRole("button", { name: /^Foods of Chicken rice:/ })); // fold it
+    await saveMeals(user);
+    expect(await screen.findByRole("button", { name: /^Foods of Chicken rice:/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Grams of Rice")).toBeInvalid();
+  });
 
   it("keeps the id of an edited meal and sends the portion", async () => {
     const { calls } = fakePlan();
@@ -363,6 +433,7 @@ describe("Plan editor: meals", () => {
   it("sends edited grams as final amounts with portion 1", async () => {
     const { calls } = fakePlan();
     const user = await openMeals();
+    await openFoods(user, "Chicken rice");
     const grams = screen.getByLabelText("Grams of Rice");
     expect(grams).toHaveValue("150");
     await user.clear(grams);
@@ -381,6 +452,7 @@ describe("Plan editor: meals", () => {
   it("replaces a meal but keeps its id, adds a new one without id and removes one", async () => {
     const { calls } = fakePlan();
     const user = await openMeals();
+    await openFoods(user, "Oat bowl");
     await user.click(screen.getByRole("button", { name: "Replace Oat bowl" }));
     await user.click(await screen.findByRole("button", { name: "Choose Lentil stew" }));
     expect(screen.queryByText("Oat bowl")).not.toBeInTheDocument();
@@ -830,20 +902,22 @@ describe("Plan editor: goal-driven progression (D107)", () => {
     const user = await openPlan();
     expect(screen.getByLabelText("Training goal")).toHaveValue("strength");
     expect(screen.getByTestId("goal-detail")).toHaveTextContent("Heavy loads, few reps.");
-    const note = screen.getAllByTestId("rep-range")[0]!;
-    expect(note).toHaveTextContent("Recommended for this goal: 3 to 6 reps.");
-    // Bench is 8 to 10 reps: outside 3 to 6, but saving stays possible.
-    expect(within(note).getByRole("status")).toHaveTextContent("8 to 10 reps is outside the recommended 3 to 6");
+    // The recommended range is one line at the top of the day, not repeated per exercise.
+    expect(screen.getAllByTestId("day-hint")).toHaveLength(1);
+    expect(screen.getByTestId("day-hint")).toHaveTextContent("Recommended for this goal: 3 to 6 reps.");
+    // Bench is 8 to 10 reps: outside 3 to 6, but saving stays possible. The warning stays on the exercise.
+    const note = screen.getAllByTestId("range-warning")[0]!;
+    expect(note).toHaveTextContent("8 to 10 reps is outside the recommended 3 to 6");
     await user.click(within(note).getByRole("button", { name: "Use 3 to 6 reps" }));
     expect(screen.getAllByLabelText("Reps (min)")[0]).toHaveValue("3");
     expect(screen.getAllByLabelText("Max reps")[0]).toHaveValue("6");
-    expect(within(screen.getAllByTestId("rep-range")[0]!).queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("range-warning")).not.toBeInTheDocument();
   });
 
   it("does not block saving a plan that is outside the range", async () => {
     const { calls } = fakePlan({ plan: planFixture({ training_goal: "strength" }) });
     const user = await openPlan();
-    expect(within(screen.getAllByTestId("rep-range")[0]!).getByRole("status")).toBeInTheDocument();
+    expect(screen.getAllByTestId("range-warning")[0]!).toBeInTheDocument();
     await user.clear(screen.getAllByLabelText("Sets")[0]!);
     await user.type(screen.getAllByLabelText("Sets")[0]!, "4");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -1338,6 +1412,7 @@ describe("Plan editor: swap a meal (D86)", () => {
     const { calls } = fakePlan();
     const asked = swaps(swapList([toast]));
     const user = await openMeals();
+    await openFoods(user, "Chicken rice");
     await user.click(mealsRegion().getByRole("button", { name: "Swap Chicken rice" }));
     expect(await screen.findByText("Eggs on toast")).toBeInTheDocument();
     expect(screen.getByText("590 kcal at 1.2x")).toBeInTheDocument();
@@ -1356,6 +1431,7 @@ describe("Plan editor: swap a meal (D86)", () => {
     const { calls } = fakePlan();
     swaps(swapList([]));
     const user = await openMeals();
+    await openFoods(user, "Oat bowl");
     await user.click(mealsRegion().getByRole("button", { name: "Swap Oat bowl" }));
     expect(await screen.findByText(/No similar meals fit/)).toBeInTheDocument();
     expect(calls.meals).toHaveLength(0);
@@ -1365,6 +1441,7 @@ describe("Plan editor: swap a meal (D86)", () => {
     fakePlan();
     swaps(swapList([toast]));
     const user = await openMeals();
+    await openFoods(user, "Chicken rice");
     await user.click(mealsRegion().getByRole("button", { name: "Remove Oat bowl" }));
     expect(mealsRegion().getByRole("button", { name: "Swap Chicken rice" })).toBeDisabled();
     expect(mealsRegion().getAllByText("Save your changes to see swaps.").length).toBeGreaterThan(0);
@@ -1374,6 +1451,7 @@ describe("Plan editor: swap a meal (D86)", () => {
     fakePlan();
     server.use(http.get(apiUrl("/athletes/:athleteId/plan/meals/:mealKey/swaps"), () => problem(422, "past_day")));
     const user = await openMeals();
+    await openFoods(user, "Oat bowl");
     await user.click(mealsRegion().getByRole("button", { name: "Swap Oat bowl" }));
     expect(await screen.findByText("Couldn't load alternatives. Try again.")).toBeInTheDocument();
   });
