@@ -19,7 +19,7 @@ Use only these, through their Tailwind utilities (`bg-page`, `text-iron`, `borde
 
 | Token | Value | Role |
 |---|---|---|
-| `page` | `#f8f9f8` | Page background; the soft fill of a quiet callout and of the sticky save bar |
+| `page` | `#fcfdfc` | Page background; the soft fill of a quiet callout and of the sticky save bar |
 | `well` | `#eef1ee` | Fill of a figure well (`TILE`) inside a white card: a step darker than the page so it is visible on white |
 | `card` | `#ffffff` | Card surface and the fill of form controls |
 | `chalk` | `#f2f4f1` | Text on dark (iron, spruce, alert) fills only; never a surface |

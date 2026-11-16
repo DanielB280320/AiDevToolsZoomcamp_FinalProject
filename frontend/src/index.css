@@ -6,7 +6,7 @@
  * the wordmark and headings, Barlow for reading text. Type scale: 1.25 ratio from 16 px.
  */
 @theme {
-  --color-page: #f8f9f8;
+  --color-page: #fcfdfc;
   --color-card: #ffffff;
   /* Fill of a figure well inside a white card: a step darker than the page so it reads on white. */
   --color-well: #eef1ee;
