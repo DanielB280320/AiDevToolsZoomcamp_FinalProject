@@ -19,7 +19,8 @@ Use only these, through their Tailwind utilities (`bg-page`, `text-iron`, `borde
 
 | Token | Value | Role |
 |---|---|---|
-| `page` | `#f8f9f8` | Page background; the soft fill of a figure well, of a quiet callout and of the sticky save bar |
+| `page` | `#f8f9f8` | Page background; the soft fill of a quiet callout and of the sticky save bar |
+| `well` | `#eef1ee` | Fill of a figure well (`TILE`) inside a white card: a step darker than the page so it is visible on white |
 | `card` | `#ffffff` | Card surface and the fill of form controls |
 | `chalk` | `#f2f4f1` | Text on dark (iron, spruce, alert) fills only; never a surface |
 | `iron` | `#1c2530` | Text, the header, selected segmented choices, note side lines |
@@ -53,7 +54,7 @@ Emphasis in body text is `font-semibold`. Small all-caps labels are `text-step--
 **Shape and depth.** Structure comes from white cards on the near-white page, separated by space, not from heavy rules or shadows:
 
 - A **card** is `CARD` (components/card.tsx): `rounded-card border border-line bg-card p-4`. Every titled section and every standalone chart block is one. No shadow, no gradient, no blur; the only shadow is on a layer that floats over content (the Month day popover, `shadow-lg`).
-- **No card inside a card.** A section card holds its figures and charts directly. A KPI figure inside a section is a `TILE` (a soft `bg-page` well, no border); a repeated item inside a section (an exercise or meal inside a plan-day card) is an `ITEM` (hairline outline only). A figure, chart or row that is *not* inside a section card is a card itself.
+- **No card inside a card.** A section card holds its figures and charts directly. A KPI figure inside a section is a `TILE` (a soft `bg-well` fill, no border); a repeated item inside a section (an exercise or meal inside a plan-day card) is an `ITEM` (hairline outline only). A figure, chart or row that is *not* inside a section card is a card itself.
 - **Callouts are not cards.** A note, a decision prompt or an error keeps a 3 px coloured side line (`border-l-[3px] pl-3`): `border-iron` note, `border-alert` error, `border-plate` highlight, `border-line` quiet aside. Text or `role="alert"` says what it is, not the colour.
 - Rows in a list are separated by `border-b border-line` / `divide-y divide-line`; rows that open something are `CARD_LINK` cards.
 - Tab strips sit on a 1 px `line` rule (see Tabs in components.md). `border-b-4 border-plate` under the header is the only heavy rule left.

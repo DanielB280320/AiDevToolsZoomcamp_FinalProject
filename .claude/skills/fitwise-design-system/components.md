@@ -35,6 +35,7 @@ Every shipped visual pattern, where it lives and its exact classes. Paths are re
 | Sub-section `h3` | `font-display text-step-1 font-semibold`, usually `mt-4` or `mt-6` |
 | Row title | `font-semibold` (plain Barlow) |
 | KPI label | `text-step--1 font-semibold uppercase tracking-wide text-slate` |
+| Page or section description (the sentence under an `h1`/`h2`) | `text-step--1 text-slate`, `mt-2` under an `h1` and `mt-1` under an `h2`; the same on every tab |
 
 An `h1` focused after navigation gets `tabIndex={-1}` and `focus:outline-none`.
 
@@ -105,7 +106,7 @@ All from `components/card.tsx` unless noted.
 | `CARD_FLUSH` | `CARD` without padding | A card that sets its own padding (the Month grid at `p-2`, a notification row) |
 | `CARD_LINK` | `CARD_FLUSH card-link` | A card or row that opens something (notification, client row on a phone): border darkens on hover, fill on press. Never on a card that does nothing |
 | `CARD` emphasised | `CARD` plus `border-spruce!` | The block holding the view's main result or action (finish summary, finish button) |
-| `TILE` | `min-w-0 rounded-card bg-page p-3` | A KPI figure inside a section card (`Kpi`, `Tile`): a soft well, no border |
+| `TILE` | `min-w-0 rounded-card bg-well p-3` | A KPI figure inside a section card (`Kpi`, `Tile`): a soft well, no border |
 | `ITEM` | `rounded-control border border-line p-3` | A repeated item inside a section card (a training exercise or meal inside a plan-day card, the duplicate-day panel); the plan day itself and a plan version are `CARD`s |
 | List row | `border-b border-line py-3`, or `divide-y divide-line` on the list | Suggestions, checklist, meal rows |
 | Note callout | `border-l-[3px] border-iron pl-3` (prose: `max-w-[52ch]`) | Coach note, explanation, reason |

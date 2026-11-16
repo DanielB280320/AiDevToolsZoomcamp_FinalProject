@@ -16,10 +16,11 @@ export const CARD = `${CARD_FLUSH} p-4`;
 export const CARD_LINK = `${CARD_FLUSH} card-link`;
 
 /**
- * A figure inside a section card: a soft well on the page tint, not a second bordered card
+ * A figure inside a section card: a soft `well` fill (a step darker than the page, so it reads on
+ * the white card), not a second bordered card
  * (no card inside a card).
  */
-export const TILE = "min-w-0 rounded-card bg-page p-3";
+export const TILE = "min-w-0 rounded-card bg-well p-3";
 
 /**
  * A repeated item inside a section card (an exercise, a meal, a version): a hairline outline only, so
