@@ -6,6 +6,7 @@ import { usePendingSuggestions } from "../../api/suggestions";
 import { ChecklistIcon, TargetIcon } from "../../components/icons";
 import type { UnitSystem } from "../../lib/units";
 import { ProgressKpis } from "./ProgressKpis";
+import { CARD } from "../../components/card";
 
 export const MEALS_SECTION_ID = "today-meals";
 export const TRAINING_SECTION_ID = "today-training";
@@ -80,8 +81,8 @@ export function DayChecklist({
   const complete = open === 0;
 
   return (
-    <section aria-labelledby="today-checklist" className="mt-6" data-testid="day-checklist">
-      <h2 id="today-checklist" className="flex items-center gap-2 font-display text-step-2 font-bold">
+    <section aria-labelledby="today-checklist" className={`mt-6 ${CARD}`} data-testid="day-checklist">
+      <h2 id="today-checklist" className="flex items-center gap-2 font-display text-step-1 font-semibold">
         <ChecklistIcon className="size-7 text-spruce" />
         {t("calendar.today.checklist.title")}
       </h2>
@@ -93,17 +94,17 @@ export function DayChecklist({
           <TargetIcon className="mt-0.5 size-6 text-spruce" />
           <span>
             <span className="text-step--1 font-semibold uppercase text-slate">{t(`calendar.today.checklist.goal.${who}`)}</span>{" "}
-            <span className="block font-display text-step-1 font-bold leading-tight">{t(`onboarding.goal.${goal}`)}</span>
+            <span className="block font-display text-step-1 font-semibold leading-tight">{t(`onboarding.goal.${goal}`)}</span>
             <span className="block text-step--1 text-slate">{t(`calendar.today.checklist.goal.detail.${goal}`)}</span>
           </span>
         </p>
       )}
       <ProgressKpis day={day} athleteId={athleteId} units={units} progressLink={progressLink} />
-      <h3 className="mt-4 font-display text-step-1 font-bold">{t("calendar.today.checklist.pendingTitle")}</h3>
+      <h3 className="mt-4 font-display text-step-1 font-semibold">{t("calendar.today.checklist.pendingTitle")}</h3>
       <p
         data-testid="day-summary"
         data-complete={complete}
-        className={`mt-2 border-l-4 px-3 py-2 font-semibold ${complete ? "border-spruce bg-spruce text-chalk" : "border-plate bg-white"}`}
+        className={`mt-2 border-l-[3px] px-3 py-2 font-semibold ${complete ? "border-spruce bg-spruce text-chalk" : "border-plate bg-page"}`}
       >
         <span aria-hidden="true">{complete ? GLYPH.done : GLYPH.pending}</span>{" "}
         {complete ? t("calendar.today.checklist.complete") : t("calendar.today.checklist.open", { count: open, total: items.length })}
@@ -118,7 +119,7 @@ export function DayChecklist({
           >
             <span
               className={`inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-step--1 font-semibold leading-none ${
-                item.done ? "bg-spruce text-chalk" : "border-2 border-iron bg-chalk text-iron"
+                item.done ? "bg-spruce text-chalk" : "border border-iron bg-card text-iron"
               }`}
             >
               <span aria-hidden="true">{item.done ? GLYPH.done : GLYPH.pending}</span>

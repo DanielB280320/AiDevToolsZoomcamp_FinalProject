@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { WEEKDAYS, type Weekday } from "../../api/plan";
 import { BUTTON, PRIMARY, SelectInput } from "./fields";
+import { ITEM } from "../../components/card";
 
 /**
  * "Duplicate day" (F8, D87): pick one target weekday; a target that already has content is replaced only
@@ -42,7 +43,7 @@ export function DuplicateDay({
     );
   }
   return (
-    <div className="mt-3 border-2 border-iron/30 p-3">
+    <div className={`mt-3 ${ITEM}`}>
       <SelectInput
         id={`${idPrefix}-target`}
         label={t("plan.duplicate.target")}
@@ -54,7 +55,7 @@ export function DuplicateDay({
         options={targets.map((w) => ({ value: w, label: t(`plan.weekdayLong.${w}`) }))}
       />
       {confirming ? (
-        <div role="alertdialog" aria-labelledby={`${idPrefix}-confirm-title`} className="mt-3 border-2 border-iron p-3">
+        <div role="alertdialog" aria-labelledby={`${idPrefix}-confirm-title`} className={`mt-3 ${ITEM} border-edge!`}>
           <p id={`${idPrefix}-confirm-title`} className="font-semibold">
             {t("plan.duplicate.confirmTitle", { weekday: day })}
           </p>

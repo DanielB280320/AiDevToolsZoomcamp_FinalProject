@@ -17,9 +17,9 @@ import {
 } from "./period";
 
 const CHOICE =
-  "flex min-h-11 cursor-pointer items-center rounded-md border-2 border-iron px-3 font-semibold has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2";
+  "flex min-h-11 cursor-pointer items-center rounded-control border border-edge hover:border-slate px-3 font-semibold has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2";
 const STEP =
-  "min-h-11 min-w-11 rounded-md border-2 border-iron font-bold hover:bg-line disabled:cursor-not-allowed disabled:opacity-40";
+  "min-h-11 min-w-11 rounded-control border border-edge hover:border-slate font-semibold hover:bg-line disabled:cursor-not-allowed disabled:opacity-40";
 
 interface Draft {
   from: string;
@@ -64,7 +64,7 @@ function CustomRange({ period, today, onChange }: { period: Period; today: strin
               onChange={(e) => set(e.target.value)}
               aria-invalid={shown.error !== null}
               aria-describedby={shown.error ? errorId : undefined}
-              className="mt-1 block min-h-12 w-full min-w-0 rounded-md border-2 border-iron bg-chalk px-3 font-normal"
+              className="mt-1 block min-h-12 w-full min-w-0 rounded-control border border-edge hover:border-slate bg-card px-3 font-normal"
             />
           </label>
         ))}

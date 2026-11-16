@@ -4,6 +4,7 @@ import { useDay } from "../../api/calendar";
 import { useSessionChart } from "../../api/charts";
 import { useCachedMe } from "../../api/session";
 import { exerciseNotes, NoteThread, sessionNotes } from "./NoteThread";
+import { CARD } from "../../components/card";
 
 /**
  * Coach notes of one session in the session view: the note on the session, then the notes on each
@@ -18,8 +19,8 @@ export function SessionNotes({ athleteId, sessionId }: { athleteId: string; sess
   if (!chart.data || !day.data) return null;
   const notes = day.data.notes;
   return (
-    <section aria-labelledby="session-notes" className="mt-6">
-      <h2 id="session-notes" className="font-display text-step-2 font-bold">
+    <section aria-labelledby="session-notes" className={`mt-6 ${CARD}`}>
+      <h2 id="session-notes" className="font-display text-step-1 font-semibold">
         {t("notes.sessionTitle")}
       </h2>
       <NoteThread

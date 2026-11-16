@@ -4,10 +4,11 @@ import { useTranslation } from "react-i18next";
 import { type CoachLink, useCoachLinkAction, useCoachLinks, useCoachProfile, useUpdateCoachProfile } from "../../api/coach";
 import { QueryState } from "../calendar/QueryState";
 import { linkErrorKey } from "./linkErrors";
+import { CARD } from "../../components/card";
 
 const BIO_MAX = 500;
-const button = "min-h-12 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark aria-disabled:opacity-75";
-const outline = "min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line aria-disabled:opacity-75";
+const button = "min-h-12 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark aria-disabled:opacity-75";
+const outline = "min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line aria-disabled:opacity-75";
 
 /** Coach side of F16: profile form, incoming requests, linked athletes. */
 export function CoachPanel() {
@@ -39,8 +40,8 @@ function ProfileFields({ initial, title }: { initial: { bio: string; discoverabl
     if (!update.isPending) update.mutate({ bio, discoverable });
   };
   return (
-    <section aria-labelledby="coach-profile-heading" className="mt-6">
-      <h2 id="coach-profile-heading" className="font-display text-step-2 font-bold">
+    <section aria-labelledby="coach-profile-heading" className={`mt-6 ${CARD}`}>
+      <h2 id="coach-profile-heading" className="font-display text-step-1 font-semibold">
         {title}
       </h2>
       <form onSubmit={onSubmit} className="mt-3 flex flex-col gap-4">
@@ -58,7 +59,7 @@ function ProfileFields({ initial, title }: { initial: { bio: string; discoverabl
             maxLength={BIO_MAX}
             onChange={(event) => setBio(event.target.value)}
             aria-describedby="coach-bio-hint"
-            className="mt-1.5 block w-full rounded-md border-2 border-iron/35 bg-white px-3 py-2 text-iron"
+            className="mt-1.5 block w-full rounded-control border border-edge bg-card px-3 py-2 text-iron"
           />
         </div>
         <div className="flex items-start gap-3">
@@ -79,7 +80,7 @@ function ProfileFields({ initial, title }: { initial: { bio: string; discoverabl
           </p>
         )}
         {update.isSuccess && (
-          <p role="status" className="border-l-4 border-spruce pl-3 font-semibold">
+          <p role="status" className="border-l-[3px] border-spruce pl-3 font-semibold">
             {t("coach.coach.saved")}
           </p>
         )}
@@ -109,12 +110,12 @@ function Links() {
   return (
     <>
       {act.isError && (
-        <p role="alert" className="mt-6 border-l-4 border-alert pl-3 font-semibold text-alert">
+        <p role="alert" className="mt-6 border-l-[3px] border-alert pl-3 font-semibold text-alert">
           {t(`coach.errors.${linkErrorKey(act.error)}`)}
         </p>
       )}
-      <section aria-labelledby="incoming-heading" className="mt-8">
-        <h2 id="incoming-heading" className="font-display text-step-2 font-bold">
+      <section aria-labelledby="incoming-heading" className={`mt-8 ${CARD}`}>
+        <h2 id="incoming-heading" className="font-display text-step-1 font-semibold">
           {t("coach.coach.incomingTitle")}
         </h2>
         {incoming.length === 0 ? (
@@ -137,8 +138,8 @@ function Links() {
           </ul>
         )}
       </section>
-      <section aria-labelledby="athletes-heading" className="mt-8">
-        <h2 id="athletes-heading" className="font-display text-step-2 font-bold">
+      <section aria-labelledby="athletes-heading" className={`mt-8 ${CARD}`}>
+        <h2 id="athletes-heading" className="font-display text-step-1 font-semibold">
           {t("coach.coach.athletesTitle")}
         </h2>
         {active.length === 0 ? (

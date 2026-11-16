@@ -22,7 +22,7 @@ function SignOutButton() {
         onClick={onClick}
         aria-disabled={signOut.isPending || undefined}
         aria-describedby={signOut.isError ? "sign-out-error" : undefined}
-        className="min-h-11 rounded-md border-2 border-chalk/60 px-4 py-2 font-semibold text-chalk hover:border-chalk aria-disabled:opacity-75"
+        className="min-h-11 rounded-control border-2 border-chalk/60 px-4 py-2 font-semibold text-chalk hover:border-chalk aria-disabled:opacity-75"
       >
         {signOut.isPending ? t("nav.signingOut") : t("nav.signOut")}
       </button>
@@ -45,7 +45,7 @@ export function Header() {
         <Link
           to={me ? paths.today : paths.home}
           aria-label={t("app.homeLink")}
-          className="flex items-center gap-2 font-display text-step-3 font-bold leading-none tracking-tight text-chalk no-underline"
+          className="flex items-center gap-2 font-display text-step-3 font-semibold leading-none tracking-tight text-chalk no-underline"
         >
           <LogoMark />
           {t("app.name")}

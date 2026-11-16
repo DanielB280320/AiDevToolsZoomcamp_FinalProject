@@ -15,6 +15,7 @@ import { QueryState } from "./QueryState";
 import { StatusBadge } from "./StatusBadge";
 import { badgeKind, statusReason } from "./status";
 import { CompletionRing, toPercent } from "./TodayView";
+import { CARD } from "../../components/card";
 
 const ICON = "size-6 text-spruce";
 const LINK = "inline-flex min-h-11 items-center font-semibold text-spruce underline underline-offset-4";
@@ -22,7 +23,7 @@ const LINK = "inline-flex min-h-11 items-center font-semibold text-spruce underl
 function Part({ id, title, icon, children }: { id: string; title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <section aria-labelledby={id} className="mt-6">
-      <h3 id={id} className="flex items-center gap-2 font-display text-step-1 font-bold">
+      <h3 id={id} className="flex items-center gap-2 font-display text-step-1 font-semibold">
         {icon}
         {title}
       </h3>
@@ -103,8 +104,8 @@ export function MonthDayDetail({
   const reason = day.data ? statusReason(day.data.training_status, day.data.training_completion) : null;
   const records = session?.exercises.filter((e) => e.is_pr) ?? [];
   return (
-    <section ref={ref} aria-labelledby="month-day" className="mt-6 scroll-mt-4 border-t-4 border-iron pt-3" data-testid="month-day-detail">
-      <h2 id="month-day" className="font-display text-step-2 font-bold">
+    <section ref={ref} aria-labelledby="month-day" className={`mt-6 scroll-mt-4 ${CARD}`} data-testid="month-day-detail">
+      <h2 id="month-day" className="font-display text-step-1 font-semibold">
         {formatDay(date, i18n.language, DAY_FORMAT.weekdayDayMonthLong)}
       </h2>
       <p className="flex flex-wrap gap-x-4">

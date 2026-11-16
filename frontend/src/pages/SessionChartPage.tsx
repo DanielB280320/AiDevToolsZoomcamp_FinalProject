@@ -17,7 +17,7 @@ export function SessionChartPage() {
       <Link to={paths.progress} className="font-semibold text-spruce underline underline-offset-4">
         {t("charts.session.back")}
       </Link>
-      <h1 className="mt-3 font-display text-step-4 font-bold">{t("charts.session.title")}</h1>
+      <h1 className="mt-3 font-display text-step-4 font-semibold">{t("charts.session.title")}</h1>
       <div className="mt-4 min-w-0">
         <SessionChartView athleteId={me.id} sessionId={sessionId} units={me.units} />
       </div>

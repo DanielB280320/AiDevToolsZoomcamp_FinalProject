@@ -17,9 +17,9 @@ export function ProgressPage() {
   return (
     <article className="min-w-0 max-w-[40rem]">
       {me.role === "athlete" && <CalendarNav />}
-      <h1 className="font-display text-step-4 font-bold">{t("charts.title")}</h1>
+      <h1 className="font-display text-step-4 font-semibold">{t("charts.title")}</h1>
       {me.role === "coach" ? (
-        <p className="mt-6 border-l-4 border-iron pl-3">
+        <p className="mt-6 border-l-[3px] border-iron pl-3">
           {t("charts.coachNotice")}{" "}
           <Link to={paths.coachClients} className="font-semibold">
             {t("coach.clients.title")}

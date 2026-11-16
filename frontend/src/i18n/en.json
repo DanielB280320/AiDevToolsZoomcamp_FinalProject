@@ -250,7 +250,7 @@
         "completionHint": "Of finished workouts",
         "missed": "Workouts missed",
         "meals": "Planned meals eaten",
-        "kcal": "Average calories eaten",
+        "kcal": "Avg calories eaten",
         "kcalValue": "{{value}} kcal",
         "kcalHint_one": "Estimated, over {{count}} day with meals logged",
         "kcalHint_other": "Estimated, over {{count}} days with meals logged"

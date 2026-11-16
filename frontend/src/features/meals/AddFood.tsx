@@ -14,11 +14,11 @@ import {
 
 const SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
 const INPUT =
-  "mt-1 block min-h-12 w-full rounded-md border-2 border-iron/35 bg-white px-3";
+  "mt-1 block min-h-12 w-full rounded-control border border-edge bg-card px-3";
 const BUTTON =
-  "min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line disabled:opacity-60";
+  "min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line disabled:opacity-60";
 const PRIMARY =
-  "min-h-12 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark disabled:opacity-60";
+  "min-h-12 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark disabled:opacity-60";
 
 const FORM_FIELDS = [
   { key: "name", label: "meals.add.customName", type: "text" },
@@ -50,7 +50,7 @@ export function CustomFoodForm({ onCreated }: { onCreated: (food: Picked) => voi
     numbers.every((n) => n >= 0);
   return (
     <form
-      className="mt-2 border-l-4 border-plate pl-3"
+      className="mt-2 border-l-[3px] border-plate pl-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (!valid) return;
@@ -169,7 +169,7 @@ export function AddFood({
   return (
     <section
       aria-label={t("meals.add.open")}
-      className="mt-4 border-l-4 border-plate pl-3"
+      className="mt-4 border-l-[3px] border-plate pl-3"
     >
       {foods.length > 0 && (
         <form
@@ -218,7 +218,7 @@ export function AddFood({
                         ),
                       )
                     }
-                    className="min-h-12 w-24 rounded-md border-2 border-iron/35 bg-white px-3 text-right"
+                    className="min-h-12 w-24 rounded-control border border-edge bg-card px-3 text-right"
                   />
                   <span>{t("meals.unitG")}</span>
                   <button

@@ -15,6 +15,7 @@ import { NewPlanForm } from "./NewPlanForm";
 import { PlanSummary, type Viewer } from "./PlanSummary";
 import { TrainingEditor } from "./TrainingEditor";
 import { VersionHistory } from "./VersionHistory";
+import { TAB_STRIP, tabClass } from "../../components/tabs";
 
 /** Whose plan is edited: the signed-in athlete, or a client in the coach context (F8, F16). */
 export type PlanOwner = Pick<Me, "id" | "units" | "timezone">;
@@ -111,7 +112,7 @@ function Editor({
       <PlanSummary plan={plan} timezone={me.timezone} viewer={viewer} />
 
       {conflict && (
-        <div role="alert" className="mt-4 border-l-4 border-alert pl-3">
+        <div role="alert" className="mt-4 border-l-[3px] border-alert pl-3">
           <p className="font-semibold">{t("plan.conflict.title")}</p>
           <p>{t("plan.conflict.body")}</p>
           <button type="button" className={`${BUTTON} mt-2`} onClick={() => fresh(plan)}>
@@ -123,7 +124,7 @@ function Editor({
       <div
         role="tablist"
         aria-label={t("plan.tabs.label")}
-        className="mt-4 flex border-b-4 border-iron"
+        className={`mt-4 ${TAB_STRIP}`}
       >
         {TABS.map((id) => {
           const Icon = TAB_ICON[id];
@@ -136,7 +137,7 @@ function Editor({
               aria-selected={tab === id}
               aria-controls="plan-panel"
               onClick={() => setTab(id)}
-              className={`flex min-h-12 flex-1 items-center justify-center gap-2 px-2 font-display text-step-1 font-bold sm:flex-none sm:px-5 ${tab === id ? "bg-iron text-chalk" : "text-iron hover:bg-line"}`}
+              className={tabClass(tab === id, "flex-1 gap-2 px-2 sm:flex-none sm:px-5")}
             >
               <Icon className="size-5" />
               {t(`plan.tabs.${id}`)}

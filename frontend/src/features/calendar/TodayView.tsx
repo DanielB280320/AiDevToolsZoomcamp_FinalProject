@@ -20,6 +20,7 @@ import { MealsSection } from "../meals/MealsSection";
 import { TodayBanners } from "../notifications/TodayBanners";
 import { DecidedSuggestions } from "../suggestions/DecidedSuggestions";
 import { PendingSuggestions } from "../suggestions/PendingSuggestions";
+import { CARD } from "../../components/card";
 
 type SessionExercise = NonNullable<DayView["session"]>["exercises"][number];
 
@@ -110,21 +111,23 @@ function ExerciseRow({
                 aria-valuemax={100}
                 className="mt-1 ml-auto block h-2 w-28 overflow-hidden rounded-full bg-line"
               >
-                <span className="block h-full bg-spruce" style={{ width: `${percent}%` }} />
+                <span className="block h-full bg-spruce transition-[width] duration-(--duration-fill) ease-(--ease-soft)" style={{ width: `${percent}%` }} />
               </span>
             </span>
           )}
         </span>
       </div>
       {open && (
-        <div
-          id={chartId}
-          role="region"
-          aria-label={t("calendar.today.exerciseChartRegion", { name: exercise.exercise.name })}
-          className="mt-1 min-w-0"
-          data-testid="exercise-session-chart"
-        >
-          <SessionExerciseChart athleteId={athleteId} sessionId={sessionId} exerciseId={exercise.exercise.id} units={units} />
+        <div className="expand-in mt-1">
+          <div
+            id={chartId}
+            role="region"
+            aria-label={t("calendar.today.exerciseChartRegion", { name: exercise.exercise.name })}
+            className="min-w-0"
+            data-testid="exercise-session-chart"
+          >
+            <SessionExerciseChart athleteId={athleteId} sessionId={sessionId} exerciseId={exercise.exercise.id} units={units} />
+          </div>
         </div>
       )}
       <NoteThread
@@ -154,8 +157,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section aria-labelledby={id} className="mt-8 border-t-4 border-iron pt-3">
-      <h2 id={id} className="flex items-center gap-2 font-display text-step-2 font-bold">
+    <section aria-labelledby={id} className={`mt-8 ${CARD}`}>
+      <h2 id={id} className="flex items-center gap-2 font-display text-step-1 font-semibold">
         {icon}
         {title}
       </h2>
@@ -259,7 +262,7 @@ export function TodayView({
         {session && !readOnly && (
           <Link
             to={paths.workout(session.id)}
-            className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-md bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark sm:w-auto"
+            className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-control bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark sm:w-auto"
           >
             {t(session.status === "planned" ? "calendar.today.startWorkout" : session.status === "done" ? "calendar.today.viewWorkout" : "calendar.today.continueWorkout")}
           </Link>
@@ -294,7 +297,7 @@ export function TodayView({
         id={SUGGESTIONS_SECTION_ID}
         athleteId={me.id}
         units={me.units}
-        className="mt-8 border-t-4 border-plate pt-3"
+        className={`mt-8 ${CARD}`}
         icon={<LightbulbIcon className={SECTION_ICON} />}
         description={t("calendar.today.about.suggestions")}
       />
@@ -302,7 +305,7 @@ export function TodayView({
         athleteId={me.id}
         units={me.units}
         timezone={me.timezone}
-        className="mt-8 border-t-4 border-plate pt-3"
+        className={`mt-8 ${CARD}`}
         icon={<CheckCircleIcon className={SECTION_ICON} />}
         description={t("calendar.today.about.decisions")}
       />

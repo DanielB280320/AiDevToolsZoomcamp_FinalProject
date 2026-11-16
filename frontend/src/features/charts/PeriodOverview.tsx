@@ -9,8 +9,9 @@ import { DeltaLine, signed, TONE } from "./DeltaLine";
 
 type Tone = (typeof TONE)[keyof typeof TONE];
 import { ProgressRing } from "./ProgressRing";
+import { TILE } from "../../components/card";
 
-const VALUE = "font-display text-step-3 font-bold leading-none";
+const VALUE = "font-display text-step-3 font-semibold leading-none";
 
 function Ring({
   id,
@@ -59,7 +60,7 @@ function Kpi({
 }) {
   const { t } = useTranslation();
   return (
-    <section data-testid={`kpi-${id}`} className="min-w-0 border-t-4 border-iron bg-chalk pt-2">
+    <section data-testid={`kpi-${id}`} className={TILE}>
       <h3 className="flex flex-wrap items-baseline gap-x-2 text-step--1 font-semibold uppercase tracking-wide text-slate">
         {title}
         {tag && <span className="rounded-sm bg-plate px-1.5 text-iron normal-case">{tag}</span>}

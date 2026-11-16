@@ -8,6 +8,7 @@ import { formatLength, formatWeight, type UnitSystem } from "../../lib/units";
 import { QueryState } from "../calendar/QueryState";
 import { RecalcPrompt } from "./RecalcPrompt";
 import { WeighInForm } from "./WeighInForm";
+import { CARD } from "../../components/card";
 
 /**
  * Weigh-ins for one athlete: a description of what the tab is for and what is expected (D104),
@@ -45,19 +46,19 @@ export function BodyTracking({
         {t(`body.about.${canLog ? "athlete" : "coach"}`)}
       </p>
       {canLog ? (
-        <section aria-labelledby="weigh-in-heading" className="mt-6">
-          <h2 id="weigh-in-heading" className="font-display text-step-2 font-bold">
+        <section aria-labelledby="weigh-in-heading" className={`mt-6 ${CARD}`}>
+          <h2 id="weigh-in-heading" className="font-display text-step-1 font-semibold">
             {t("body.formTitle")}
           </h2>
           {outcome && (
-            <p role="status" className="mt-2 border-l-4 border-spruce pl-3 font-semibold">
+            <p role="status" className="mt-2 border-l-[3px] border-spruce pl-3 font-semibold">
               {outcome.replaced ? t("body.replaced", { date: dateLabel(outcome.metric.date) }) : t("body.created")}
             </p>
           )}
           <WeighInForm athleteId={athleteId} units={units} today={today} onLogged={(o) => { setOutcome(o); }} />
         </section>
       ) : (
-        <p className="mt-6 border-l-4 border-iron pl-3">{t("body.coachNotice")}</p>
+        <p className="mt-6 border-l-[3px] border-iron pl-3">{t("body.coachNotice")}</p>
       )}
 
       {prompt && (
@@ -74,8 +75,8 @@ export function BodyTracking({
         </p>
       )}
 
-      <section aria-labelledby="weigh-in-list-heading" className="mt-8 border-t-4 border-iron pt-3">
-        <h2 id="weigh-in-list-heading" className="font-display text-step-2 font-bold">
+      <section aria-labelledby="weigh-in-list-heading" className={`mt-8 ${CARD}`}>
+        <h2 id="weigh-in-list-heading" className="font-display text-step-1 font-semibold">
           {t("body.listTitle")}
         </h2>
         {!metrics.data ? (

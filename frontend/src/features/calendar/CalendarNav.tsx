@@ -3,6 +3,7 @@ import { NavLink } from "react-router";
 
 import { useActiveTabInView } from "../../lib/useActiveTabInView";
 import { paths } from "../../paths";
+import { TAB_STRIP, tabClass } from "../../components/tabs";
 
 const TABS = [
   { to: paths.today, key: "today" },
@@ -23,16 +24,12 @@ export function CalendarNav() {
   const strip = useActiveTabInView();
   return (
     <nav aria-label={t("calendar.nav.label")} className="mb-6">
-      <ul ref={strip} className="no-scrollbar flex overflow-x-auto border-b-4 border-iron">
+      <ul ref={strip} className={`no-scrollbar overflow-x-auto ${TAB_STRIP}`}>
         {TABS.map(({ to, key }) => (
           <li key={key} className="flex-1 shrink-0">
             <NavLink
               to={to}
-              className={({ isActive }) =>
-                `flex min-h-12 items-center justify-center whitespace-nowrap px-3 font-display text-step-1 font-bold no-underline ${
-                  isActive ? "bg-iron text-chalk" : "text-iron hover:bg-line"
-                }`
-              }
+              className={({ isActive }) => tabClass(isActive, "whitespace-nowrap px-3")}
             >
               {t(`calendar.nav.${key}`)}
             </NavLink>

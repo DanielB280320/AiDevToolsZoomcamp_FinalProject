@@ -19,14 +19,14 @@ export function RangeControls({
 }) {
   const { t } = useTranslation();
   const button =
-    "inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border-2 border-iron px-3 font-semibold text-iron no-underline hover:bg-line";
+    "inline-flex min-h-11 min-w-11 items-center justify-center rounded-control border border-edge hover:border-slate px-3 font-semibold text-iron no-underline hover:bg-line";
   return (
     <div className="mb-4 flex items-center justify-between gap-2">
       <Link to={prevTo} aria-label={prevLabel} className={button}>
         <span aria-hidden="true">‹</span>
       </Link>
       <div className="text-center">
-        <h1 className="font-display text-step-2 font-bold leading-tight">{title}</h1>
+        <h1 className="font-display text-step-2 font-semibold leading-tight">{title}</h1>
         <Link to={currentTo} className="text-step--1 font-semibold text-spruce underline underline-offset-4">
           {t("calendar.range.current")}
         </Link>

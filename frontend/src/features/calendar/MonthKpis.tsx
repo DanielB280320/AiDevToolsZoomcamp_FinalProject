@@ -4,6 +4,7 @@ import type { CalendarDay } from "../../api/calendar";
 import { percent } from "../charts/chartData";
 import { monthKpis } from "./monthKpis";
 import { Tile } from "./ProgressKpis";
+import { CARD } from "../../components/card";
 
 /**
  * The month in figures (D103): workouts done of planned, average completion, workouts missed,
@@ -19,8 +20,8 @@ export function MonthKpis({ days, today, title }: { days: CalendarDay[]; today: 
   const started = days.some((d) => d.date <= today);
   const inProgress = started && days.some((d) => d.date > today);
   return (
-    <section aria-labelledby="month-kpis" className="mb-6" data-testid="month-kpis">
-      <h2 id="month-kpis" className="font-display text-step-1 font-bold">
+    <section aria-labelledby="month-kpis" className={`mb-6 ${CARD}`} data-testid="month-kpis">
+      <h2 id="month-kpis" className="font-display text-step-1 font-semibold">
         {title}
       </h2>
       <p className="text-step--1 text-slate">

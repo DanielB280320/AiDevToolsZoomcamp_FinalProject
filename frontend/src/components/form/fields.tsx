@@ -28,8 +28,8 @@ function FieldError({ id, children }: { id: string; children: ReactNode }) {
 }
 
 const control =
-  "mt-1.5 block min-h-12 w-full rounded-md border-2 bg-white px-3 py-2 text-step-0 text-iron " +
-  "border-iron/35 hover:border-iron/60 aria-[invalid=true]:border-alert";
+  "mt-1.5 block min-h-12 w-full rounded-control border bg-card px-3 py-2 text-step-0 text-iron " +
+  "border-edge hover:border-slate aria-[invalid=true]:border-alert";
 
 interface TextFieldProps {
   id: string;
@@ -136,8 +136,8 @@ export function ChoiceField<V extends string>({ id, legend, value, onChange, cho
             key={choice.value}
             htmlFor={`${id}-${choice.value}`}
             className={
-              "flex min-h-14 cursor-pointer flex-col justify-center rounded-md border-2 bg-white px-3 py-2 " +
-              (error ? "border-alert " : "border-iron/35 hover:border-iron/60 ") +
+              "flex min-h-14 cursor-pointer flex-col justify-center rounded-control border bg-card px-3 py-2 " +
+              (error ? "border-alert " : "border-edge hover:border-slate ") +
               "has-[:checked]:border-iron has-[:checked]:bg-iron has-[:checked]:text-chalk " +
               "has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-offset-2 " +
               "has-[:focus-visible]:outline-spruce has-[:focus-visible]:outline-solid"
@@ -205,7 +205,7 @@ export function FormAlert({ id, children }: { id: string; children: ReactNode })
       id={id}
       role="alert"
       tabIndex={-1}
-      className="border-l-4 border-alert bg-white px-4 py-3 font-semibold text-alert focus:outline-none focus-visible:outline-[3px]"
+      className="border-l-[3px] border-alert bg-card px-4 py-3 font-semibold text-alert focus:outline-none focus-visible:outline-[3px]"
     >
       {children}
     </div>
@@ -218,8 +218,8 @@ export function SubmitButton({ children, pending }: { children: ReactNode; pendi
       type="submit"
       aria-disabled={pending || undefined}
       className={
-        "min-h-12 w-full rounded-md bg-spruce px-6 py-3 text-step-0 font-semibold text-chalk sm:w-auto " +
-        "hover:bg-spruce-dark aria-disabled:cursor-progress aria-disabled:opacity-75"
+        "min-h-12 w-full rounded-control bg-spruce px-6 py-3 text-step-0 font-semibold text-chalk sm:w-auto " +
+        "hover:bg-spruce-dark active:bg-spruce-dark aria-disabled:cursor-progress aria-disabled:opacity-75"
       }
     >
       {children}

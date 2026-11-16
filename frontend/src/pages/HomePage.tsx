@@ -30,7 +30,7 @@ export function HomePage() {
 
   return (
     <article className="max-w-[38rem]">
-      <h1 className="font-display text-step-4 font-bold text-balance sm:text-step-5">
+      <h1 className="font-display text-step-4 font-semibold text-balance sm:text-step-5">
         {t("home.title")}
       </h1>
       <p className="mt-4 text-step-1 text-slate">{t("home.lead")}</p>
@@ -38,7 +38,7 @@ export function HomePage() {
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
         <Link
           to={paths.signUp}
-          className="inline-flex min-h-12 items-center justify-center rounded-md bg-spruce px-6 py-3 font-semibold text-chalk no-underline hover:bg-spruce-dark"
+          className="inline-flex min-h-12 items-center justify-center rounded-control bg-spruce px-6 py-3 font-semibold text-chalk no-underline hover:bg-spruce-dark active:bg-spruce-dark"
         >
           {t("home.cta.signUp")}
         </Link>
@@ -50,7 +50,7 @@ export function HomePage() {
         </Link>
       </div>
 
-      <section aria-labelledby="service-status" className="mt-10 border-l-4 border-line pl-4">
+      <section aria-labelledby="service-status" className="mt-10 border-l-[3px] border-line pl-4">
         <h2 id="service-status" className="font-display text-step-1 font-semibold">
           {t("home.status.heading")}
         </h2>

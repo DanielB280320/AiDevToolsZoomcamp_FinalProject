@@ -63,7 +63,7 @@ export function SetEditor({ exercise, initial, units, pending, onSave, onCancel,
         submit();
       }}
       noValidate
-      className="mt-3 grid grid-cols-2 gap-3 border-l-4 border-plate pl-3"
+      className="mt-3 grid grid-cols-2 gap-3 border-l-[3px] border-plate pl-3"
     >
       {fields.map(({ field, required }) => {
         const id = `${baseId}-${field}`;
@@ -81,7 +81,7 @@ export function SetEditor({ exercise, initial, units, pending, onSave, onCancel,
               onChange={(event) => setDraft({ ...draft, [field]: event.target.value })}
               aria-invalid={invalid.includes(field) || undefined}
               aria-describedby={invalid.includes(field) ? `${id}-error` : undefined}
-              className="mt-1 block min-h-12 w-full rounded-md border-2 border-iron/35 bg-white px-3 text-step-0"
+              className="mt-1 block min-h-12 w-full rounded-control border border-edge bg-card px-3 text-step-0"
             />
             {invalid.includes(field) && (
               <p id={`${id}-error`} role="alert" className="mt-1 text-step--1 text-alert">
@@ -95,14 +95,14 @@ export function SetEditor({ exercise, initial, units, pending, onSave, onCancel,
         <button
           type="submit"
           aria-disabled={pending || undefined}
-          className="min-h-12 rounded-md bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark aria-disabled:opacity-75"
+          className="min-h-12 rounded-control bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark aria-disabled:opacity-75"
         >
           {t("workout.save")}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-12 rounded-md px-4 font-semibold text-spruce underline underline-offset-4"
+          className="min-h-12 rounded-control px-4 font-semibold text-spruce underline underline-offset-4"
         >
           {t("workout.cancel")}
         </button>
@@ -113,7 +113,7 @@ export function SetEditor({ exercise, initial, units, pending, onSave, onCancel,
             onClick={() => {
               if (!pending) onSkip();
             }}
-            className="min-h-12 rounded-md px-4 font-semibold text-spruce underline underline-offset-4"
+            className="min-h-12 rounded-control px-4 font-semibold text-spruce underline underline-offset-4"
           >
             {t("workout.skip")}
           </button>

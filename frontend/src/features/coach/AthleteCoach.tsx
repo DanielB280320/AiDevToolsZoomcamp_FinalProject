@@ -4,10 +4,11 @@ import { useTranslation } from "react-i18next";
 import { type CoachLink, useCoachLinkAction, useCoachLinks, useCoachSearch, useRequestCoachLink } from "../../api/coach";
 import { QueryState } from "../calendar/QueryState";
 import { linkErrorKey } from "./linkErrors";
+import { CARD } from "../../components/card";
 
 const MIN_QUERY = 3;
-const button = "min-h-12 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark aria-disabled:opacity-75";
-const outline = "min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line aria-disabled:opacity-75";
+const button = "min-h-12 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark aria-disabled:opacity-75";
+const outline = "min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line aria-disabled:opacity-75";
 
 /** Athlete side of F16 linking: the current coach or pending request, else search and request. */
 export function AthleteCoach() {
@@ -25,8 +26,8 @@ function CurrentCoach({ link }: { link: CoachLink }) {
   const pending = link.status === "pending";
   const name = link.coach.display_name;
   return (
-    <section aria-labelledby="current-coach-heading" className="mt-6 border-l-4 border-iron pl-4">
-      <h2 id="current-coach-heading" className="font-display text-step-2 font-bold">
+    <section aria-labelledby="current-coach-heading" className={`mt-6 ${CARD}`}>
+      <h2 id="current-coach-heading" className="font-display text-step-1 font-semibold">
         {t(pending ? "coach.athlete.pendingTitle" : "coach.athlete.currentTitle")}
       </h2>
       <p className="mt-1 font-semibold">{name}</p>
@@ -66,8 +67,8 @@ function FindCoach() {
   };
 
   return (
-    <section aria-labelledby="find-coach-heading" className="mt-6">
-      <h2 id="find-coach-heading" className="font-display text-step-2 font-bold">
+    <section aria-labelledby="find-coach-heading" className={`mt-6 ${CARD}`}>
+      <h2 id="find-coach-heading" className="font-display text-step-1 font-semibold">
         {t("coach.athlete.searchTitle")}
       </h2>
       <form onSubmit={onSubmit} noValidate className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -83,7 +84,7 @@ function FindCoach() {
             maxLength={254}
             aria-invalid={short || undefined}
             aria-describedby={short ? "coach-search-error" : "coach-search-hint"}
-            className="mt-1.5 block min-h-12 w-full rounded-md border-2 border-iron/35 bg-white px-3 py-2 text-iron aria-[invalid=true]:border-alert"
+            className="mt-1.5 block min-h-12 w-full rounded-control border border-edge bg-card px-3 py-2 text-iron aria-[invalid=true]:border-alert"
           />
           {short ? (
             <p id="coach-search-error" className="mt-1.5 text-step--1 font-semibold text-alert">
@@ -101,7 +102,7 @@ function FindCoach() {
       </form>
 
       {request.isError && (
-        <p role="alert" className="mt-4 border-l-4 border-alert pl-3 font-semibold text-alert">
+        <p role="alert" className="mt-4 border-l-[3px] border-alert pl-3 font-semibold text-alert">
           {t(`coach.errors.${linkErrorKey(request.error)}`)}
         </p>
       )}

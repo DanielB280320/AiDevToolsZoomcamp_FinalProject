@@ -29,7 +29,7 @@ function MacroBar({ label, eaten, target }: { label: string; eaten: number; targ
         aria-valuemax={Math.round(target)}
         className="mt-1 h-2 overflow-hidden rounded-full bg-line"
       >
-        <div className="h-full bg-spruce" style={{ width: `${Math.round(ratio * 100)}%` }} />
+        <div className="h-full bg-spruce transition-[width] duration-(--duration-fill) ease-(--ease-soft)" style={{ width: `${Math.round(ratio * 100)}%` }} />
       </div>
     </div>
   );
@@ -57,7 +57,7 @@ export function EnergySummary({ energy, compact }: { energy: Energy; compact: bo
               <FigureIcon className={`mx-auto mb-1 text-spruce ${compact ? "size-5" : "size-6"}`} />
               {label}
             </dt>
-            <dd className={`font-display font-bold ${compact ? "text-step-1" : "text-step-2"}`}>{value}</dd>
+            <dd className={`font-display font-semibold ${compact ? "text-step-1" : "text-step-2"}`}>{value}</dd>
           </div>
         ))}
       </dl>

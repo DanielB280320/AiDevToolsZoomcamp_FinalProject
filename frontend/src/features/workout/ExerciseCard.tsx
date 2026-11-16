@@ -8,6 +8,7 @@ import { PrBadge } from "../../components/PrBadge";
 import { NoteThread } from "../notes/NoteThread";
 import { SetEditor } from "./SetEditor";
 import { canLogAsPlanned, cardLines, describeCompact } from "./values";
+import { CARD, Collapse } from "../../components/card";
 
 export interface SetSaver {
   /** Logs one set; resolves `true` when the server accepted it. */
@@ -85,7 +86,7 @@ function SetCard({
   return (
     <li
       data-testid="set-card"
-      className={`flex min-w-[8.5rem] flex-1 basis-[8.5rem] flex-col gap-1 rounded-md border-2 p-2 ${
+      className={`flex min-w-[8.5rem] flex-1 basis-[8.5rem] flex-col gap-1 rounded-control border p-2 ${
         asPlanned ? "border-spruce" : "border-line"
       }`}
     >
@@ -119,11 +120,11 @@ function SetCard({
               if (needsEntry) onToggleEdit(true);
               else onCheck();
             }}
-            className={`inline-flex size-11 shrink-0 items-center justify-center rounded-md border-2 ${
-              asPlanned ? "border-spruce bg-spruce text-chalk" : "border-iron/60 bg-transparent text-iron hover:bg-line"
+            className={`inline-flex size-11 shrink-0 items-center justify-center rounded-control border ${
+              asPlanned ? "border-spruce bg-spruce text-chalk" : "border-edge bg-transparent text-iron hover:border-slate hover:bg-line"
             } aria-disabled:opacity-50`}
           >
-            <svg {...ICON}>
+            <svg {...ICON} className={asPlanned ? "check-pop" : undefined}>
               <path d="M4 12.5l5 5L20 6.5" />
             </svg>
             <span className="sr-only">
@@ -134,7 +135,7 @@ function SetCard({
             type="button"
             aria-expanded={editing}
             onClick={() => onToggleEdit()}
-            className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border-2 border-iron hover:bg-line"
+            className="inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-edge hover:border-slate hover:bg-line"
           >
             <svg {...ICON} strokeWidth={2}>
               <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />
@@ -172,8 +173,8 @@ export function ExerciseCard(props: Props & { defaultOpen?: boolean }) {
   };
 
   return (
-    <section aria-labelledby={`ex-${exercise.exercise.id}`} className="mt-6 border-t-4 border-iron pt-3">
-      <h2 id={`ex-${exercise.exercise.id}`} className="font-display text-step-2 font-bold">
+    <section aria-labelledby={`ex-${exercise.exercise.id}`} className={`mt-6 ${CARD}`}>
+      <h2 id={`ex-${exercise.exercise.id}`} className="font-display text-step-1 font-semibold">
         <button
           type="button"
           aria-expanded={open}
@@ -201,7 +202,7 @@ export function ExerciseCard(props: Props & { defaultOpen?: boolean }) {
           </span>
         </button>
       </h2>
-      <div id={panelId} hidden={!open}>
+      <Collapse id={panelId} open={open}>
         <p className="text-step--1 text-slate">{t("workout.restPlanned", { count: exercise.rest_seconds })}</p>
         {props.athleteId && (
           <NoteThread athleteId={props.athleteId} notes={props.notes ?? []} label={exercise.exercise.name} />
@@ -263,13 +264,13 @@ export function ExerciseCard(props: Props & { defaultOpen?: boolean }) {
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="mt-3 min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
+            className="mt-3 min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line"
           >
             {t("workout.addSet")}
             <span className="sr-only"> {exercise.exercise.name}</span>
           </button>
         )}
-      </div>
+      </Collapse>
     </section>
   );
 }

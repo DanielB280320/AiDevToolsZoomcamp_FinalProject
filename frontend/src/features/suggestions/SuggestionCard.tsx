@@ -114,12 +114,12 @@ export function SuggestionCard({ suggestion, units }: { suggestion: Suggestion; 
   return (
     <li className="border-b border-line py-3" data-testid="suggestion">
       <p className="font-semibold">{title}</p>
-      <p className="mt-1 font-display text-step-1 font-bold" aria-label={t("suggestions.change")}>
+      <p className="mt-1 font-display text-step-1 font-semibold" aria-label={t("suggestions.change")}>
         {change}
       </p>
       <p className="mt-1 text-step--1 text-slate">{suggestion.reason}</p>
       {error && (
-        <p role="alert" className="mt-2 border-l-4 border-alert pl-3 text-alert">
+        <p role="alert" className="mt-2 border-l-[3px] border-alert pl-3 text-alert">
           {t(`suggestions.errors.${errorKey(error)}`)}
         </p>
       )}
@@ -142,7 +142,7 @@ export function SuggestionCard({ suggestion, units }: { suggestion: Suggestion; 
                 value={draft[field]}
                 aria-invalid={invalid.includes(field) || undefined}
                 onChange={(event) => setDraft({ ...draft, [field]: event.target.value })}
-                className="min-h-12 w-28 rounded-md border-2 border-iron px-2"
+                className="min-h-12 w-28 rounded-control border border-edge hover:border-slate px-2"
               />
             </div>
           ))}
@@ -154,11 +154,11 @@ export function SuggestionCard({ suggestion, units }: { suggestion: Suggestion; 
           <button
             type="submit"
             aria-disabled={busy || undefined}
-            className="min-h-12 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark"
+            className="min-h-12 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark"
           >
             {t("suggestions.saveAccept")}
           </button>
-          <button type="button" onClick={() => setEditing(false)} className="min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line">
+          <button type="button" onClick={() => setEditing(false)} className="min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line">
             {t("suggestions.cancel")}
           </button>
         </form>
@@ -168,12 +168,12 @@ export function SuggestionCard({ suggestion, units }: { suggestion: Suggestion; 
             type="button"
             aria-disabled={busy || undefined}
             onClick={() => !busy && accept.mutate({ id: suggestion.id })}
-            className="min-h-12 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark"
+            className="min-h-12 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark"
           >
             {t("suggestions.accept")}
           </button>
           {editable && (
-            <button type="button" onClick={() => setEditing(true)} className="min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line">
+            <button type="button" onClick={() => setEditing(true)} className="min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line">
               {t("suggestions.edit")}
             </button>
           )}
@@ -181,7 +181,7 @@ export function SuggestionCard({ suggestion, units }: { suggestion: Suggestion; 
             type="button"
             aria-disabled={busy || undefined}
             onClick={() => !busy && reject.mutate(suggestion.id)}
-            className="min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
+            className="min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line"
           >
             {t("suggestions.reject")}
           </button>

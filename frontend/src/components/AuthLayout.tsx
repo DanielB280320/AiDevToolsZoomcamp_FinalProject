@@ -18,7 +18,7 @@ export function AuthLayout({ title, lead, switchPrompt, switchLink, switchTo, ch
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-16">
       <div className="lg:pt-2">
-        <h1 className="font-display text-step-4 font-bold text-balance sm:text-step-5">{title}</h1>
+        <h1 className="font-display text-step-4 font-semibold text-balance sm:text-step-5">{title}</h1>
         <p className="mt-3 max-w-[34ch] text-step-1 text-slate">{lead}</p>
       </div>
       <div>

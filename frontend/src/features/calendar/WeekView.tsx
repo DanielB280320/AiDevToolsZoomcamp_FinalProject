@@ -11,6 +11,7 @@ import { RangeControls } from "./RangeControls";
 import { StatusBadge } from "./StatusBadge";
 import { dayBadge, statusReason } from "./status";
 import { DumbbellIcon, UtensilsIcon } from "../../components/icons";
+import { CARD } from "../../components/card";
 
 /** The same icons as Today's training and meals sections, sized for a day row (D102). */
 const ROW_ICON = "size-5 text-spruce";
@@ -36,11 +37,11 @@ function DayRow({
   return (
     <li
       aria-current={day.is_today ? "date" : undefined}
-      className={`border-b border-line py-3 ${day.is_today ? "border-l-4 border-l-plate pl-3" : ""}`}
+      className={`mb-3 ${CARD} ${day.is_today ? "border-l-[3px] border-l-plate" : ""}`}
     >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-display text-step-1 font-bold leading-tight">
+          <p className="font-display text-step-1 font-semibold leading-tight">
             {weekday} <span className="font-semibold text-slate">{date}</span>
             {day.is_today && <span className="ml-2 text-step--1 text-spruce">{t("calendar.todayMarker")}</span>}
           </p>
@@ -131,7 +132,7 @@ export function WeekView({
       </p>
       <QueryState isPending={calendar.isPending} isError={calendar.isError} onRetry={() => void calendar.refetch()} />
       {calendar.data && (
-        <ol aria-label={t("calendar.week.listLabel")} className="border-t-4 border-iron">
+        <ol aria-label={t("calendar.week.listLabel")}>
           {days.map((day) => (
             <DayRow
               key={day.date}

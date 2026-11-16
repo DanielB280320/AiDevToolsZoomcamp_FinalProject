@@ -18,7 +18,7 @@ interface Props {
 export function SaveBar({ dirty, pending, conflict, blocked, failed, invalid = false, onSave, onDiscard }: Props) {
   const { t } = useTranslation();
   return (
-    <div className="sticky bottom-0 mt-6 border-t-4 border-iron bg-chalk py-3">
+    <div className="sticky bottom-0 mt-6 border-t border-line bg-page py-3">
       <div className="flex flex-wrap gap-3">
         <button type="button" onClick={onSave} disabled={!dirty || pending || blocked} className={PRIMARY}>
           {pending ? t("plan.saving") : conflict ? t("plan.saveOverLatest") : t("plan.save")}

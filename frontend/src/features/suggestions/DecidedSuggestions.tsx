@@ -51,7 +51,7 @@ export function DecidedSuggestions({
   const Heading = day === undefined ? "h2" : "h3";
   return (
     <section aria-labelledby={headingId} className={className}>
-      <Heading id={headingId} className={`flex items-center gap-2 font-display font-bold ${day === undefined ? "text-step-2" : "text-step-1"}`}>
+      <Heading id={headingId} className="flex items-center gap-2 font-display font-semibold text-step-1">
         {icon}
         {t(day === undefined ? "suggestions.decided.title" : "suggestions.decided.dayTitle")}
       </Heading>

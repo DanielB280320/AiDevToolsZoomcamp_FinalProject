@@ -14,7 +14,7 @@ export function CoachClientsPage() {
   return (
     <article className="min-w-0 max-w-5xl">
       <CoachNav />
-      <h1 className="font-display text-step-4 font-bold">{t("coach.clients.title")}</h1>
+      <h1 className="font-display text-step-4 font-semibold">{t("coach.clients.title")}</h1>
       <p className="mt-1 max-w-[60ch] text-slate">{t("coach.clients.lead")}</p>
       <ClientList />
     </article>

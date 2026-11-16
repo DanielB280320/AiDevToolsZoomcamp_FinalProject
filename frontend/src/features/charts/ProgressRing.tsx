@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 const RING_RADIUS = 30;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
@@ -18,6 +20,13 @@ export function ProgressRing({
   emptyText?: string;
 }) {
   const value = percent === null ? 0 : Math.min(100, Math.max(0, percent));
+  // Starts empty and fills to the value on the next frame (a CSS transition; off with reduced motion).
+  const [drawn, setDrawn] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setDrawn(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const shown = drawn ? value : 0;
   return (
     <div
       role="progressbar"
@@ -36,13 +45,13 @@ export function ProgressRing({
           r={RING_RADIUS}
           fill="none"
           strokeWidth="8"
-          strokeLinecap={value > 0 && value < 100 ? "round" : "butt"}
+          strokeLinecap={shown > 0 && shown < 100 ? "round" : "butt"}
           strokeDasharray={RING_LENGTH}
-          strokeDashoffset={RING_LENGTH * (1 - value / 100)}
-          className="stroke-spruce"
+          strokeDashoffset={RING_LENGTH * (1 - shown / 100)}
+          className="stroke-spruce transition-[stroke-dashoffset] duration-(--duration-fill) ease-(--ease-soft)"
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center font-display text-step-1 font-bold">
+      <span className="absolute inset-0 flex items-center justify-center font-display text-step-1 font-semibold">
         {percent === null ? emptyText : centre}
       </span>
     </div>

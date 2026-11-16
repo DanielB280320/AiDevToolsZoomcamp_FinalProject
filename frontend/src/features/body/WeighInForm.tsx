@@ -80,7 +80,7 @@ export function WeighInForm({
   return (
     <form onSubmit={(e) => void onSubmit(e)} noValidate className="mt-4 grid max-w-[28rem] gap-4">
       {formError && (
-        <p role="alert" className="border-l-4 border-alert pl-3 text-alert">
+        <p role="alert" className="border-l-[3px] border-alert pl-3 text-alert">
           {"key" in formError ? t(`body.errors.${formError.key}` as "body.errors.generic") : formError.message}
         </p>
       )}
@@ -93,7 +93,7 @@ export function WeighInForm({
       <button
         type="submit"
         aria-disabled={log.isPending || undefined}
-        className="min-h-12 rounded-md bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark"
+        className="min-h-12 rounded-control bg-spruce px-5 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark"
       >
         {log.isPending ? t("body.saving") : t("body.save")}
       </button>

@@ -41,8 +41,8 @@ export function RecalcPrompt({
     field === "kcal" ? t("body.recalc.kcalValue", { count: macros[field] }) : t("body.recalc.grams", { count: macros[field] });
 
   return (
-    <section aria-labelledby={headingId} className="mt-6 border-l-4 border-plate bg-white p-4" data-testid="recalc-prompt">
-      <h2 id={headingId} className="font-display text-step-2 font-bold">
+    <section aria-labelledby={headingId} className="mt-6 border-l-[3px] border-plate bg-card p-4" data-testid="recalc-prompt">
+      <h2 id={headingId} className="font-display text-step-1 font-semibold">
         {t("body.recalc.title")}
       </h2>
       <p className="mt-1">
@@ -81,7 +81,7 @@ export function RecalcPrompt({
       </table>
       <p className="mt-2 text-step--1 text-slate">{t("body.recalc.future")}</p>
       {error && (
-        <p role="alert" className="mt-2 border-l-4 border-alert pl-3 text-alert">
+        <p role="alert" className="mt-2 border-l-[3px] border-alert pl-3 text-alert">
           {t(alreadyDecided ? "body.recalc.errors.alreadyDecided" : "body.recalc.errors.generic")}
         </p>
       )}
@@ -93,7 +93,7 @@ export function RecalcPrompt({
             if (busy) return;
             accept.mutate({ id: suggestion.id }, { onSuccess: () => onDecided("accepted") });
           }}
-          className="min-h-12 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark"
+          className="min-h-12 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark"
         >
           {t("body.recalc.accept")}
         </button>
@@ -104,7 +104,7 @@ export function RecalcPrompt({
             if (busy) return;
             reject.mutate(suggestion.id, { onSuccess: () => onDecided("rejected") });
           }}
-          className="min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
+          className="min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line"
         >
           {t("body.recalc.reject")}
         </button>

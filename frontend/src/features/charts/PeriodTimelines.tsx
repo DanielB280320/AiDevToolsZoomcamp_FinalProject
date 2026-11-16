@@ -5,8 +5,10 @@ import { type PeriodSummary, usePeriodSummary } from "../../api/charts";
 import { DAY_FORMAT, formatDay } from "../../lib/calendarDates";
 import { weightUnit, type UnitSystem } from "../../lib/units";
 import { ChartBox } from "./ChartBox";
+import { ChartTooltip, TOOLTIP_UNIT } from "./ChartTooltip";
 import { AUTO_DOMAIN, CHART_COLORS, displayWeight, hasValues, percent } from "./chartData";
 import { ChartState, EmptyState } from "./ChartState";
+import { useChartAnimation } from "../../lib/motion";
 
 /**
  * The same numbers as a chart, as a table for screen readers (F15.9). The table sits in a
@@ -43,7 +45,7 @@ function DataTable({ caption, head, rows }: { caption: string; head: string[]; r
 
 function Heading({ children, estimated }: { children: string; estimated?: string }) {
   return (
-    <h3 className="mt-6 flex flex-wrap items-baseline gap-x-2 font-display text-step-1 font-bold first:mt-0">
+    <h3 className="mt-6 flex flex-wrap items-baseline gap-x-2 font-display text-step-1 font-semibold first:mt-0">
       {children}
       {estimated && <span className="rounded-sm bg-plate px-1.5 text-step--1 font-semibold">{estimated}</span>}
     </h3>
@@ -52,6 +54,7 @@ function Heading({ children, estimated }: { children: string; estimated?: string
 
 function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem }) {
   const { t, i18n } = useTranslation();
+  const anim = useChartAnimation();
   const unit = weightUnit(units);
   const bucket = t(data.bucket === "day" ? "charts.timelines.bucketDay" : "charts.timelines.bucketWeek");
   const target = data.current.target_daily_balance_kcal;
@@ -67,7 +70,7 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
   const tick = (iso: string) => formatDay(iso, i18n.language, DAY_FORMAT.dayMonth);
   const rowLabel = (iso: string) =>
     data.bucket === "day" ? tick(iso) : t("charts.timelines.weekOf", { date: tick(iso) });
-  const margin = { top: 8, right: 8, bottom: 0, left: -12 };
+  const margin = { top: 8, right: 8, bottom: 0, left: 0 };
   const hasVolume = rows.some((r) => r.sessions > 0 || (r.volume ?? 0) > 0);
   const hasCompletion = hasValues(rows, "training") || hasValues(rows, "nutrition");
   const hasBalance = hasValues(rows, "balance");
@@ -86,11 +89,12 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
             <ComposedChart data={rows} margin={margin}>
               <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
               <XAxis dataKey="start" tickFormatter={tick} minTickGap={24} />
-              <YAxis yAxisId="volume" width={48} />
+              <YAxis yAxisId="volume" width="auto" />
               <YAxis yAxisId="sessions" orientation="right" allowDecimals={false} width={32} />
+              <ChartTooltip label={rowLabel} bars />
               <Legend />
-              <Bar yAxisId="volume" dataKey="volume" name={t("charts.timelines.volumeName", { unit })} fill={CHART_COLORS.actual} isAnimationActive={false} />
-              <Line yAxisId="sessions" dataKey="sessions" name={t("charts.timelines.sessionsName")} stroke={CHART_COLORS.ink} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
+              <Bar yAxisId="volume" dataKey="volume" name={t("charts.timelines.volumeName", { unit })} fill={CHART_COLORS.actual} {...anim} />
+              <Line yAxisId="sessions" dataKey="sessions" name={t("charts.timelines.sessionsName")} stroke={CHART_COLORS.ink} strokeWidth={2} dot={{ r: 3 }} {...anim} />
             </ComposedChart>
           </ChartBox>
           <DataTable
@@ -110,10 +114,11 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
             <LineChart data={rows} margin={margin}>
               <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
               <XAxis dataKey="start" tickFormatter={tick} minTickGap={24} />
-              <YAxis domain={[0, 100]} unit="%" width={48} />
+              <YAxis domain={[0, 100]} unit="%" width="auto" />
+              <ChartTooltip label={rowLabel} unit={TOOLTIP_UNIT.percent} />
               <Legend />
-              <Line dataKey="training" name={t("charts.timelines.trainingName")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={{ r: 2 }} connectNulls isAnimationActive={false} />
-              <Line dataKey="nutrition" name={t("charts.timelines.nutritionName")} stroke={CHART_COLORS.accent} strokeWidth={2} strokeDasharray="5 4" dot={{ r: 2 }} connectNulls isAnimationActive={false} />
+              <Line dataKey="training" name={t("charts.timelines.trainingName")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={{ r: 2 }} connectNulls {...anim} />
+              <Line dataKey="nutrition" name={t("charts.timelines.nutritionName")} stroke={CHART_COLORS.accent} strokeWidth={2} strokeDasharray="5 4" dot={{ r: 2 }} connectNulls {...anim} />
             </LineChart>
           </ChartBox>
           <DataTable
@@ -133,10 +138,11 @@ function TimelinesBody({ data, units }: { data: PeriodSummary; units: UnitSystem
             <LineChart data={rows} margin={margin}>
               <CartesianGrid stroke={CHART_COLORS.line} vertical={false} />
               <XAxis dataKey="start" tickFormatter={tick} minTickGap={24} />
-              <YAxis domain={AUTO_DOMAIN} width={56} />
+              <YAxis domain={AUTO_DOMAIN} width="auto" />
+              <ChartTooltip label={rowLabel} unit={TOOLTIP_UNIT.kcal} />
               <Legend />
-              <Line dataKey="balance" name={t("charts.timelines.balanceName")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={{ r: 2 }} connectNulls isAnimationActive={false} />
-              <Line dataKey="target" name={t("charts.timelines.targetName")} stroke={CHART_COLORS.target} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />
+              <Line dataKey="balance" name={t("charts.timelines.balanceName")} stroke={CHART_COLORS.actual} strokeWidth={2} dot={{ r: 2 }} connectNulls {...anim} />
+              <Line dataKey="target" name={t("charts.timelines.targetName")} stroke={CHART_COLORS.target} strokeDasharray="5 4" dot={false} connectNulls {...anim} />
             </LineChart>
           </ChartBox>
           <DataTable

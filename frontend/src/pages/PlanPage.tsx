@@ -15,8 +15,8 @@ export function PlanPage() {
   return (
     <article className="max-w-[40rem]">
       {me.role === "athlete" && <CalendarNav />}
-      <h1 className="font-display text-step-4 font-bold">{t("plan.title")}</h1>
-      {me.role === "athlete" ? <PlanEditor me={me} /> : <p className="mt-6 border-l-4 border-iron pl-3">{t("plan.coachNotice")}</p>}
+      <h1 className="font-display text-step-4 font-semibold">{t("plan.title")}</h1>
+      {me.role === "athlete" ? <PlanEditor me={me} /> : <p className="mt-6 border-l-[3px] border-iron pl-3">{t("plan.coachNotice")}</p>}
     </article>
   );
 }

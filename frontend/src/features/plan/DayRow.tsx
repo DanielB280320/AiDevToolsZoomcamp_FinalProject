@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { ChevronDownIcon } from "../../components/icons";
+import { CARD, Collapse } from "../../components/card";
 
 /**
  * One plan day as a collapsible row (D105): the header is a button with the chevron, the day title and a
@@ -29,7 +30,7 @@ export function DayRow({
   return (
     <li
       aria-labelledby={`${id}-title`}
-      className="border-l-4 border-plate pl-3"
+      className={CARD}
     >
       <div className="flex items-start justify-between gap-2">
         <h3 id={`${id}-title`} className="min-w-0 flex-1">
@@ -45,7 +46,7 @@ export function DayRow({
               className={`mt-1 size-6 text-spruce transition-transform ${open ? "rotate-180" : ""}`}
             />
             <span className="min-w-0">
-              <span className="block break-words font-display text-step-2 font-bold">
+              <span className="block break-words font-display text-step-1 font-semibold">
                 {title}
               </span>{" "}
               <span className="block text-step--1 font-normal text-slate">
@@ -57,9 +58,9 @@ export function DayRow({
         {actions && <div className="flex shrink-0 gap-1">{actions}</div>}
       </div>
       {note}
-      <div id={`${id}-content`} hidden={!open}>
+      <Collapse id={`${id}-content`} open={open}>
         {children}
-      </div>
+      </Collapse>
     </li>
   );
 }

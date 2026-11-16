@@ -21,14 +21,14 @@ export function RestTimer({ timer }: { timer: Timer }) {
           <p className="text-step--1 font-semibold uppercase">
             {over ? t("workout.rest.over") : t("workout.rest.title")}
           </p>
-          <p role="timer" aria-live="off" className="font-display text-step-3 font-bold tabular-nums">
+          <p role="timer" aria-live="off" className="font-display text-step-3 font-semibold tabular-nums">
             {formatClock(active.remainingSeconds)}
           </p>
         </div>
         <button
           type="button"
           onClick={timer.stop}
-          className="min-h-12 rounded-md border-2 border-chalk px-4 font-semibold hover:bg-chalk hover:text-iron"
+          className="min-h-12 rounded-control border-2 border-chalk px-4 font-semibold hover:bg-chalk hover:text-iron"
         >
           {over ? t("workout.rest.dismiss") : t("workout.rest.skip")}
         </button>

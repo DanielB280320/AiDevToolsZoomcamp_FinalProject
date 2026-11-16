@@ -3,6 +3,7 @@ import { NavLink } from "react-router";
 
 import { useActiveTabInView } from "../../lib/useActiveTabInView";
 import { paths } from "../../paths";
+import { TAB_STRIP, tabClass } from "../../components/tabs";
 
 const TABS = [
   { tail: "", key: "today", end: true },
@@ -20,17 +21,13 @@ export function ClientNav({ athleteId }: { athleteId: string }) {
   const strip = useActiveTabInView();
   return (
     <nav aria-label={t("coach.client.navLabel")} className="mb-6">
-      <ul ref={strip} className="no-scrollbar flex overflow-x-auto border-b-4 border-iron">
+      <ul ref={strip} className={`no-scrollbar overflow-x-auto ${TAB_STRIP}`}>
         {TABS.map(({ tail, key, end }) => (
           <li key={key} className="flex-1 shrink-0">
             <NavLink
               to={paths.coachClient(athleteId, tail)}
               end={end}
-              className={({ isActive }) =>
-                `flex min-h-12 items-center justify-center whitespace-nowrap px-3 font-display text-step-1 font-bold no-underline ${
-                  isActive ? "bg-iron text-chalk" : "text-iron hover:bg-line"
-                }`
-              }
+              className={({ isActive }) => tabClass(isActive, "whitespace-nowrap px-3")}
             >
               {t(`coach.client.tabs.${key}`)}
             </NavLink>

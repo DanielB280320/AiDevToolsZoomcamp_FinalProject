@@ -14,7 +14,7 @@ function Attention({ client }: { client: CoachAthleteSummary }) {
   if (!client.needs_attention) return null;
   return (
     <span className="mt-1 flex flex-wrap items-center gap-1">
-      <span className="rounded-sm bg-alert px-2 py-0.5 text-step--1 font-bold text-chalk">{t("coach.clients.needsAttention")}</span>
+      <span className="rounded-sm bg-alert px-2 py-0.5 text-step--1 font-semibold text-chalk">{t("coach.clients.needsAttention")}</span>
       {client.attention_reasons.map((reason) => (
         <span key={reason} data-testid="attention-reason" className="rounded-sm border border-alert px-2 py-0.5 text-step--1 font-semibold text-alert">
           {t(`coach.clients.reasons.${reason}`)}
@@ -31,12 +31,12 @@ function Row({ client }: { client: CoachAthleteSummary }) {
     <tr
       data-testid="client-row"
       data-needs-attention={client.needs_attention}
-      className="mb-3 block border-2 border-iron/30 p-3 lg:mb-0 lg:table-row lg:border-0 lg:border-b lg:p-0"
+      className="card-link mb-3 block rounded-card border border-line bg-card p-3 lg:mb-0 lg:table-row lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:p-0 lg:hover:bg-card"
     >
       <td className={CELL} data-label={t("coach.clients.columns.client")}>
         <Link
           to={paths.coachClient(client.athlete.id)}
-          className="inline-flex min-h-11 items-center break-words font-display text-step-1 font-bold text-spruce underline underline-offset-4"
+          className="inline-flex min-h-11 items-center break-words font-display text-step-1 font-semibold text-spruce underline underline-offset-4"
         >
           {client.athlete.display_name}
         </Link>
@@ -68,7 +68,7 @@ export function ClientList() {
   }
   if (clients.data.length === 0) {
     return (
-      <div className="mt-6 max-w-[52ch] border-l-4 border-iron pl-3">
+      <div className="mt-6 max-w-[52ch] border-l-[3px] border-iron pl-3">
         <p className="font-semibold">{t("coach.clients.emptyTitle")}</p>
         <p className="mt-1">{t("coach.clients.emptyBody")}</p>
         <p className="mt-3">
@@ -83,9 +83,9 @@ export function ClientList() {
     <table className="mt-4 block w-full lg:table">
       <caption className="sr-only">{t("coach.clients.caption")}</caption>
       <thead className="hidden lg:table-header-group">
-        <tr className="border-b-4 border-iron text-left">
+        <tr className="border-b border-line text-left">
           {COLUMNS.map((key) => (
-            <th key={key} scope="col" className="px-3 py-2 font-display text-step-0 font-bold">
+            <th key={key} scope="col" className="px-3 py-2 font-display text-step-0 font-semibold">
               {t(`coach.clients.columns.${key}`)}
             </th>
           ))}

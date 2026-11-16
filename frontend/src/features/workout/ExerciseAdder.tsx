@@ -17,14 +17,14 @@ export function ExerciseAdder({ onPick }: { onPick: (exercise: ExerciseSummary) 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mt-6 min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
+        className="mt-6 min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line"
       >
         {t("workout.addExercise")}
       </button>
     );
   }
   return (
-    <div className="mt-6 border-l-4 border-plate pl-3">
+    <div className="mt-6 border-l-[3px] border-plate pl-3">
       <label htmlFor={id} className="block font-semibold">
         {t("workout.searchExercise")}
       </label>
@@ -35,7 +35,7 @@ export function ExerciseAdder({ onPick }: { onPick: (exercise: ExerciseSummary) 
         onChange={(event) => setText(event.target.value)}
         autoComplete="off"
         maxLength={100}
-        className="mt-1 block min-h-12 w-full rounded-md border-2 border-iron/35 bg-white px-3"
+        className="mt-1 block min-h-12 w-full rounded-control border border-edge bg-card px-3"
       />
       <ul className="mt-2">
         {(search.data ?? []).map((exercise) => (

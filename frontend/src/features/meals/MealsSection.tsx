@@ -10,9 +10,9 @@ const ADJUSTED = "adjusted" as const;
 type DayMeal = DayView["meals"][number];
 
 const BUTTON =
-  "min-h-12 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line disabled:opacity-60";
+  "min-h-12 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line disabled:opacity-60";
 const PRIMARY =
-  "min-h-12 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark disabled:opacity-60";
+  "min-h-12 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark disabled:opacity-60";
 
 /** Grams per planned food, editable (F12 "Adjust"). Saving logs the meal as `adjusted`. */
 function AdjustForm({
@@ -36,7 +36,7 @@ function AdjustForm({
   const valid = grams.every((g) => Number(g) > 0 && Number(g) <= 2000);
   return (
     <form
-      className="mt-2 border-l-4 border-plate pl-3"
+      className="mt-2 border-l-[3px] border-plate pl-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (valid)
@@ -68,7 +68,7 @@ function AdjustForm({
                   grams.map((g, j) => (j === i ? event.target.value : g)),
                 )
               }
-              className="min-h-12 w-24 rounded-md border-2 border-iron/35 bg-white px-3 text-right"
+              className="min-h-12 w-24 rounded-control border border-edge bg-card px-3 text-right"
             />
             <span>{t("meals.unitG")}</span>
           </span>

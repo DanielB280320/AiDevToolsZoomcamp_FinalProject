@@ -36,7 +36,7 @@ export function MoveSession({
           setTarget(targets[0] ?? "");
           setOpen(true);
         }}
-        className="min-h-11 rounded-md border-2 border-iron px-4 font-semibold hover:bg-line"
+        className="min-h-11 rounded-control border border-edge hover:border-slate px-4 font-semibold hover:bg-line"
       >
         {t("calendar.move.open")}
         <span className="sr-only"> {name}</span>
@@ -50,7 +50,7 @@ export function MoveSession({
   };
 
   return (
-    <div className="flex flex-col gap-2 border-l-4 border-plate pl-3">
+    <div className="flex flex-col gap-2 border-l-[3px] border-plate pl-3">
       <label htmlFor={selectId} className="text-step--1 font-semibold">
         {t("calendar.move.label", { name })}
       </label>
@@ -58,7 +58,7 @@ export function MoveSession({
         id={selectId}
         value={target}
         onChange={(e) => setTarget(e.target.value)}
-        className="min-h-11 rounded-md border-2 border-iron bg-chalk px-2"
+        className="min-h-11 rounded-control border border-edge hover:border-slate bg-card px-2"
       >
         {targets.map((date) => (
           <option key={date} value={date}>
@@ -71,7 +71,7 @@ export function MoveSession({
           type="button"
           onClick={submit}
           aria-disabled={move.isPending || undefined}
-          className="min-h-11 rounded-md bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark aria-disabled:opacity-75"
+          className="min-h-11 rounded-control bg-spruce px-4 font-semibold text-chalk hover:bg-spruce-dark active:bg-spruce-dark aria-disabled:opacity-75"
         >
           {move.isPending ? t("calendar.move.moving") : t("calendar.move.confirm")}
         </button>
@@ -81,7 +81,7 @@ export function MoveSession({
             move.reset();
             setOpen(false);
           }}
-          className="min-h-11 rounded-md px-4 font-semibold text-spruce underline underline-offset-4"
+          className="min-h-11 rounded-control px-4 font-semibold text-spruce underline underline-offset-4"
         >
           {t("calendar.move.cancel")}
         </button>

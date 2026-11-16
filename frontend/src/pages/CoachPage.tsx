@@ -16,7 +16,7 @@ export function CoachPage() {
   return (
     <article className="max-w-[40rem]">
       {me.role === "athlete" ? <CalendarNav /> : <CoachNav />}
-      <h1 className="font-display text-step-4 font-bold">{t("coach.title")}</h1>
+      <h1 className="font-display text-step-4 font-semibold">{t("coach.title")}</h1>
       {me.role === "athlete" ? <AthleteCoach /> : <CoachPanel />}
     </article>
   );

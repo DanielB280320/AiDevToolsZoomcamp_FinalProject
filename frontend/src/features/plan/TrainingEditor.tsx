@@ -33,6 +33,7 @@ import {
   newDraftDay,
   newDraftExercise,
 } from "./trainingDraft";
+import { ITEM } from "../../components/card";
 
 export interface EditorProps {
   plan: Plan;
@@ -115,10 +116,10 @@ function ExerciseCard({
   const own = error(exercisePath(d, x));
   const outside = !timed && outsideRange(exercise.repsMin, exercise.repsMax, range);
   return (
-    <li className="border-2 border-iron/30 p-3">
+    <li className={ITEM}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 className="break-words font-display text-step-1 font-bold">{exercise.name}</h4>
+          <h4 className="break-words font-display text-step-1 font-semibold">{exercise.name}</h4>
           <p className="text-step--1 text-slate">{t(`plan.training.type.${exercise.type}`)}</p>
         </div>
         <div className="flex shrink-0 gap-1">
@@ -146,7 +147,7 @@ function ExerciseCard({
             <div className="col-span-2" data-testid="rep-range">
               <p className="text-step--1 text-slate">{t("plan.goal.range", { min: range.reps_min, max: range.reps_max })}</p>
               {outside && (
-                <div role="status" className="mt-1 border-l-4 border-alert pl-3">
+                <div role="status" className="mt-1 border-l-[3px] border-alert pl-3">
                   <p className="text-step--1 font-semibold">
                     {t("plan.goal.outOfRange", { min: exercise.repsMin, max: exercise.repsMax || exercise.repsMin, low: range.reps_min, high: range.reps_max })}
                   </p>
@@ -252,7 +253,7 @@ export function TrainingEditor({ plan, athleteId, units, baseRevision, conflict,
           }}
         />
         {offerFor === goal && anyOutside && (
-          <div role="status" className="mt-2 border-l-4 border-iron pl-3" data-testid="goal-range-offer">
+          <div role="status" className="mt-2 border-l-[3px] border-iron pl-3" data-testid="goal-range-offer">
             <p className="text-step--1 font-semibold">
               {t("plan.goal.changed", { goal: t(`plan.goal.options.${goal}`), min: range.reps_min, max: range.reps_max })}
             </p>

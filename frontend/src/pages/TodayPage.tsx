@@ -28,7 +28,7 @@ export function TodayPage() {
     <article className="max-w-[40rem]">
       <CalendarNav />
       <p className="text-step-1 text-slate">{t("today.greeting", { name: me.display_name })}</p>
-      <h1 className="mt-2 font-display font-bold">
+      <h1 className="mt-2 font-display font-semibold">
         <time dateTime={today.isoDate} className="block">
           <span className="block text-step-5 leading-none sm:text-[4.768rem]">{today.weekday}</span>{" "}
           <span className="mt-1 block text-step-3 font-semibold leading-tight text-slate sm:text-step-4">

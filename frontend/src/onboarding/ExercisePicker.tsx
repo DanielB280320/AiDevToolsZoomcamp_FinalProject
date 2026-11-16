@@ -31,7 +31,7 @@ export function ExercisePicker({ selected, onChange }: Props) {
                 type="button"
                 onClick={() => onChange(selected.filter((item) => item.id !== exercise.id))}
                 aria-label={t("onboarding.training.avoid.remove", { name: exercise.name })}
-                className="min-h-12 rounded-md bg-iron px-3 py-2 font-semibold text-chalk"
+                className="min-h-12 rounded-control bg-iron px-3 py-2 font-semibold text-chalk"
               >
                 {exercise.name} <span aria-hidden="true">×</span>
               </button>
@@ -51,7 +51,7 @@ export function ExercisePicker({ selected, onChange }: Props) {
         aria-describedby="avoid-hint"
         autoComplete="off"
         maxLength={100}
-        className="mt-1.5 block min-h-12 w-full rounded-md border-2 border-iron/35 bg-white px-3 py-2 text-step-0 text-iron hover:border-iron/60"
+        className="mt-1.5 block min-h-12 w-full rounded-control border border-edge bg-card px-3 py-2 text-step-0 text-iron hover:border-slate"
       />
       <div aria-live="polite" className="mt-2">
         {search.isFetching && <p className="text-step--1 text-slate">{t("onboarding.training.avoid.searching")}</p>}
@@ -68,7 +68,7 @@ export function ExercisePicker({ selected, onChange }: Props) {
                 type="button"
                 onClick={() => onChange([...selected, { id: exercise.id, name: exercise.name }])}
                 aria-label={t("onboarding.training.avoid.add", { name: exercise.name })}
-                className="min-h-12 w-full rounded-md border-2 border-iron/35 bg-white px-3 py-2 text-left hover:border-iron/60"
+                className="min-h-12 w-full rounded-control border border-edge bg-card px-3 py-2 text-left hover:border-slate"
               >
                 {exercise.name}
               </button>
