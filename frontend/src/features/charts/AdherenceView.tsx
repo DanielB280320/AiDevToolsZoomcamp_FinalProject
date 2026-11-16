@@ -36,7 +36,7 @@ function DayDetail({ id, day, column, locale }: { id: string; day: AdherenceDay;
       id={id}
       role="tooltip"
       data-testid="heat-detail"
-      className={`pointer-events-none absolute bottom-full z-10 mb-1 w-max max-w-[13rem] rounded-control border border-line bg-card px-2.5 py-1.5 text-left text-step--1 text-iron shadow-[0_4px_12px_rgb(28_37_48/0.12)] ${tipAlign(column)}`}
+      className={`pointer-events-none absolute bottom-full z-20 mb-1 w-max max-w-[13rem] rounded-control border border-line bg-card p-2 text-left text-step--1 text-iron shadow-lg ${tipAlign(column)}`}
     >
       <p className="font-semibold">{formatDay(day.date, locale, DAY_FORMAT.weekdayDayMonthLong)}</p>
       <p>
