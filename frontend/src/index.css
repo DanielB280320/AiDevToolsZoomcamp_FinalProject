@@ -6,7 +6,7 @@
  * the wordmark and headings, Barlow for reading text. Type scale: 1.25 ratio from 16 px.
  */
 @theme {
-  --color-page: #fcfdfc;
+  --color-page: #ffffff;
   --color-card: #ffffff;
   /* Fill of a figure well inside a white card: a step darker than the page so it reads on white. */
   --color-well: #eef1ee;
@@ -20,6 +20,9 @@
   --color-alert: #a3321f;
   /* Border of an input or secondary button: 3.3:1 against white, so the control is identifiable. */
   --color-edge: #868f98;
+
+  /* The one resting shadow: lifts a section card off the white page. */
+  --shadow-card: 0 1px 2px rgb(28 37 48 / 0.05), 0 4px 12px rgb(28 37 48 / 0.06);
 
   --radius-card: 0.75rem;
   --radius-control: 0.5rem;
@@ -120,7 +123,7 @@
     border-color: var(--color-edge);
   }
   &:active {
-    background-color: var(--color-page);
+    background-color: var(--color-well);
     border-color: var(--color-slate);
   }
 }

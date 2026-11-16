@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 
 /**
- * The one card (D111): white surface, 1 px `line` border, 12 px radius, 16 px padding, no shadow.
+ * The one card (D111): white surface, 1 px `line` border, 12 px radius, 16 px padding and the light
+ * `shadow-card`, which is what separates it from the white page.
  * Every titled section and every standalone chart block is a card. Spacing between cards
  * (`mt-6`/`mt-8`) is added where it is used. `CARD_FLUSH` is the same card without padding, for a block
  * that sets its own (the month grid).
  */
-export const CARD_FLUSH = "min-w-0 rounded-card border border-line bg-card";
+export const CARD_FLUSH = "min-w-0 rounded-card border border-line bg-card shadow-card";
 export const CARD = `${CARD_FLUSH} p-4`;
 
 /**

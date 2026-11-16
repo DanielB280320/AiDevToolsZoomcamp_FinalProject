@@ -102,7 +102,7 @@ All from `components/card.tsx` unless noted.
 
 | Pattern | Classes | Used for |
 |---|---|---|
-| `CARD` | `min-w-0 rounded-card border border-line bg-card p-4`; add `mt-6`/`mt-8` between cards (`scroll-mt-4` if linked to) | Each titled section on a page (Today, Week days, Month, Body, Plan, Progress, Coach, Workout, Notifications, Account) and each standalone chart block |
+| `CARD` | `min-w-0 rounded-card border border-line bg-card shadow-card p-4`; add `mt-6`/`mt-8` between cards (`scroll-mt-4` if linked to) | Each titled section on a page (Today, Week days, Month, Body, Plan, Progress, Coach, Workout, Notifications, Account) and each standalone chart block |
 | `CARD_FLUSH` | `CARD` without padding | A card that sets its own padding (the Month grid at `p-2`, a notification row) |
 | `CARD_LINK` | `CARD_FLUSH card-link` | A card or row that opens something (notification, client row on a phone): border darkens on hover, fill on press. Never on a card that does nothing |
 | `CARD` emphasised | `CARD` plus `border-spruce!` | The block holding the view's main result or action (finish summary, finish button) |
@@ -139,7 +139,7 @@ No skeletons or spinners anywhere; keep it that way.
 | `DeltaLine` | `features/charts/DeltaLine.tsx` | Arrow glyph + screen-reader direction + signed value. `tone="higherIsBetter"`: up `text-spruce`, down `text-alert`; `tone="neutral"` (weight, energy): always `text-slate`. No data: slate sentence. |
 
 | Progress bar | `features/calendar/EnergySummary.tsx`, `TodayView.tsx` | Track `h-2 overflow-hidden rounded-full bg-line`, fill in spruce with `transition-[width]`, with the figures in text beside it. |
-| Floating popover | `features/calendar/MonthView.tsx` | `absolute z-20 w-48 rounded-control border border-line bg-card p-2 text-step--1 shadow-lg`, shown on hover and on keyboard focus. The only shadow in the app. |
+| Floating popover | `features/calendar/MonthView.tsx` | `absolute z-20 w-48 rounded-control border border-line bg-card p-2 text-step--1 shadow-lg`, shown on hover and on keyboard focus. The only shadow besides the cards' `shadow-card`. |
 
 Figures that change in place or line up in columns use `tabular-nums` (rest timer, set values). Energy figures carry the "estimated" tag or wording.
 
